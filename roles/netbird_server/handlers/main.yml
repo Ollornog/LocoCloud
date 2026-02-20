@@ -1,0 +1,8 @@
+---
+# roles/netbird_server/handlers/main.yml
+
+- name: restart netbird server
+  ansible.builtin.command:
+    cmd: docker compose restart
+    chdir: "{{ netbird_server_stack_path }}"
+  changed_when: true

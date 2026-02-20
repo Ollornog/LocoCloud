@@ -1,0 +1,31 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Netbird Server Stack
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  management:
+    image: {{ netbird_management_image }}
+    container_name: netbird-management
+    restart: unless-stopped
+    volumes:
+      - {{ netbird_server_stack_path }}/config:/etc/netbird
+      - {{ netbird_server_stack_path }}/management:/var/lib/netbird
+
+  signal:
+    image: {{ netbird_signal_image }}
+    container_name: netbird-signal
+    restart: unless-stopped
+
+  relay:
+    image: {{ netbird_relay_image }}
+    container_name: netbird-relay
+    restart: unless-stopped
+    environment:
+      - NB_AUTH_SECRET=${NB_AUTH_SECRET}
+
+  dashboard:
+    image: {{ netbird_dashboard_image }}
+    container_name: netbird-dashboard
+    restart: unless-stopped

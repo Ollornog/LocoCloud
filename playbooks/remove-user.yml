@@ -26,17 +26,17 @@
       ansible.builtin.slurp:
         src: "/opt/stacks/tinyauth/.env"
       register: tinyauth_env_raw
-      when: server_role in ['online', 'gateway', 'all_in_one']
+      when: "'customer_master' in server_roles"
 
     - name: Parse current whitelist
       ansible.builtin.set_fact:
         current_whitelist: "{{ (tinyauth_env_raw.content | b64decode).split('\n') | select('match', '^OAUTH_WHITELIST=') | first | regex_replace('^OAUTH_WHITELIST=', '') }}"
-      when: server_role in ['online', 'gateway', 'all_in_one']
+      when: "'customer_master' in server_roles"
 
     - name: Remove email from whitelist
       ansible.builtin.set_fact:
         updated_whitelist: "{{ current_whitelist.split(',') | reject('equalto', email) | join(',') }}"
-      when: server_role in ['online', 'gateway', 'all_in_one']
+      when: "'customer_master' in server_roles"
 
     - name: Update Tinyauth .env without user
       ansible.builtin.lineinfile:
@@ -56,7 +56,7 @@
         status_code: 200
       register: pid_users
       when:
-        - server_role in ['online', 'gateway', 'all_in_one']
+        - "'customer_master' in server_roles"
         - loco.pocketid.api_token | default('') | length > 0
 
     - name: Find user ID

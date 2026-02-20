@@ -1,0 +1,7 @@
+---
+# roles/netbird_server/tasks/main.yml
+# Deploy self-hosted Netbird Management + Relay + Signal
+
+- name: Include deploy tasks
+  ansible.builtin.include_tasks: deploy.yml
+  tags: [netbird_server]

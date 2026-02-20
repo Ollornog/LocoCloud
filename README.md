@@ -11,7 +11,7 @@ LocoCloud is a single Git repository that deploys, manages, and monitors complet
 - **One repo, many customers** — Monorepo with inventory-based separation per customer
 - **Full auth stack** — PocketID (OIDC) + Tinyauth (forward auth) per customer, SSO across all apps
 - **Automated app deployment** — Nextcloud, Paperless-NGX, Vaultwarden, and more as Ansible roles
-- **Three deployment variants** — Cloud-only (Hetzner), Hybrid (Hetzner + Proxmox), Local-only (Proxmox + Gateway)
+- **Flexible deployment** — Freely assign server roles (gateway, app_server, etc.) to any host. Cloud, on-premise, or hybrid
 - **Zero-trust networking** — Netbird VPN for admin/infrastructure, public access for end users via Caddy
 - **Automatic credential management** — All generated passwords stored in Vaultwarden
 - **Backup & monitoring** — Restic backups, Zabbix monitoring, Uptime Kuma (optional)
@@ -24,23 +24,22 @@ LocoCloud is a single Git repository that deploys, manages, and monitors complet
                     Internet
                        │
             ┌──────────▼──────────┐
-            │   Hetzner vServer   │
+            │   Gateway Server    │  ← server_roles: [gateway, customer_master]
             │   Caddy (Wildcard)  │
-            │   *.firma-abc.de    │
+            │   PocketID + Auth   │
+            │   *.customer.de     │
             └──────────┬──────────┘
                        │ Netbird VPN
             ┌──────────▼──────────┐
-            │   Customer Server   │
-            │   ├── PocketID      │  ← OIDC Provider
-            │   ├── Tinyauth      │  ← Forward Auth
-            │   ├── Nextcloud     │  ← Apps
+            │   App Server(s)     │  ← server_roles: [app_server]
+            │   ├── Nextcloud     │
             │   ├── Paperless     │
             │   ├── Vaultwarden   │
-            │   └── Caddy         │  ← Reverse Proxy
+            │   └── ...           │
             └─────────────────────┘
 
 ┌─────────────────────────────────┐
-│        Master Server            │
+│   Master Server                 │  ← server_roles: [master]
 │   ├── Ansible + Git repo        │
 │   ├── PocketID (admin)          │
 │   ├── Vaultwarden (admin)       │
@@ -79,7 +78,7 @@ cp config/lococloudd.yml.example config/lococloudd.yml
 ansible-playbook playbooks/setup-master.yml -i inventories/master/
 
 # 5. Create a customer
-bash scripts/new-customer.sh abc001 "Acme Corp" "acme-corp.com" cloud_only
+bash scripts/new-customer.sh abc001 "Acme Corp" "acme-corp.com"
 # Edit inventories/kunde-abc001/group_vars/all.yml
 # Edit + encrypt inventories/kunde-abc001/group_vars/vault.yml
 
@@ -166,30 +165,26 @@ LocoCloud/
 
 ---
 
-## Deployment Variants
+## Deployment Scenarios
 
-### Cloud-Only
+There are no fixed deployment variants. You freely assign server roles to hosts in each customer's inventory. Common scenarios:
 
-Customer has a Hetzner VPS. Everything runs on that server.
-
-```
-Internet → Hetzner VPS (Caddy + PocketID + Tinyauth + Apps)
-```
-
-### Hybrid
-
-Customer has a Hetzner VPS as entry-point + a local Proxmox server with LXCs for apps.
+### All-in-One (Single Cloud Server)
 
 ```
-Internet → Hetzner VPS (Caddy) → Netbird VPN → Proxmox LXCs (Apps)
+Internet → Cloud Server [gateway, customer_master, app_server]
 ```
 
-### Local-Only
-
-Everything runs on-premise on a Proxmox server. A Gateway-LXC handles public access.
+### Cloud Gateway + Local App Servers
 
 ```
-Internet → Router (Port-Forward) → Gateway-LXC (Caddy + Auth) → App-LXCs
+Internet → Cloud Server [gateway, customer_master] → Netbird VPN → Proxmox LXCs [app_server]
+```
+
+### Fully Local (On-Premise)
+
+```
+Internet → Router (Port-Forward) → Gateway-LXC [gateway, customer_master] → Netbird → App-LXCs [app_server]
 ```
 
 ---

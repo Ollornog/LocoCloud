@@ -4,8 +4,8 @@
 # Idempotent: safe to run multiple times.
 # Usage: ansible-playbook playbooks/site.yml -i inventories/kunde-abc/
 #
-# Handles all variants: cloud_only, hybrid, lokal_only.
-# For hybrid/lokal_only: LXCs must already exist (run onboard-customer.yml first).
+# Supports any combination of server_roles per host.
+# For hosts with proxmox LXCs: LXCs must already exist (run onboard-customer.yml first).
 
 - name: "Full Deploy — Base + Auth + Apps"
   hosts: all:!localhost:!*proxmox*
@@ -25,17 +25,17 @@
     # Netbird VPN
     - role: netbird_client
       vars:
-        netbird_setup_key: "{{ netbird_setup_keys.online | default(netbird_setup_keys.lokal | default('')) }}"
+        netbird_setup_key: "{{ netbird_setup_key | default('') }}"
         netbird_management_url: "{{ loco.netbird.manager_url }}"
       tags: [netbird]
 
-    # Auth stack (only on entry-point servers)
+    # Auth stack (only on hosts with customer_master role)
     - role: pocketid
       vars:
         pocketid_domain: "id.{{ kunde_domain }}"
         pocketid_api_token: "{{ loco.pocketid.api_token | default('') }}"
       tags: [pocketid]
-      when: server_role in ['online', 'gateway', 'all_in_one']
+      when: "'customer_master' in server_roles"
 
     - role: tinyauth
       vars:
@@ -44,7 +44,7 @@
         tinyauth_oauth_whitelist: "{{ [loco.operator.email] + (kunden_emails | default([])) }}"
         pocketid_api_token: "{{ loco.pocketid.api_token | default('') }}"
       tags: [tinyauth]
-      when: server_role in ['online', 'gateway', 'all_in_one']
+      when: "'customer_master' in server_roles"
 
     # Watchtower on all servers with Docker
     - role: watchtower
@@ -63,7 +63,7 @@
       when: backup.enabled | default(false)
 
   tasks:
-    # Deploy each enabled app
+    # Deploy each enabled app (on hosts with app_server role)
     - name: Deploy apps
       ansible.builtin.include_role:
         name: "apps/{{ item.name | lower | replace('-', '_') | replace(' ', '_') }}"
@@ -76,9 +76,7 @@
       loop: "{{ apps_enabled | default([]) }}"
       loop_control:
         label: "{{ item.name }}"
-      when: >
-        (item.target == 'online' and server_role in ['online', 'all_in_one'])
-        or (item.target == 'lokal' and server_role in ['app', 'apps', 'all_in_one'])
+      when: "'app_server' in server_roles"
       tags: [apps]
 
     # Regenerate Caddyfile after all apps are deployed
@@ -87,5 +85,5 @@
         name: caddy
       vars:
         caddy_mode: "customer"
-      when: server_role in ['online', 'gateway', 'all_in_one']
+      when: "'gateway' in server_roles"
       tags: [caddy]

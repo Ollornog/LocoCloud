@@ -64,6 +64,12 @@ bitwarden_cli:
 
 # --- Oeffentlicher Einstiegspunkt fuer Admin-Dienste ---
 admin_gateway:
-  # Hetzner-Server der *.admin.example.com via Caddy + Netbird an den Master-LXC weiterleitet
-  hetzner_ip: ""                               # z.B. "46.225.165.213"
+  # Server der *.admin.example.com via Caddy + Netbird an den Master weiterleitet
+  public_ip: ""                                # z.B. "203.0.113.10"
   # DNS: *.admin.example.com -> A-Record auf diese IP
+
+# --- Netbird Server (optional, fuer Self-Hosting) ---
+# netbird_server:
+#   self_hosted: false                          # true wenn eigener Netbird-Server
+#   domain: "netbird.example.com"              # Domain fuer Netbird Management UI
+#   relay_domain: "relay.example.com"          # Domain fuer Relay

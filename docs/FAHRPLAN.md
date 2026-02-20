@@ -129,12 +129,12 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 - [x] pre_tasks: globale Config laden
 - [x] Reihenfolge: base → netbird → pocketid → tinyauth → vaultwarden → credentials → semaphore → caddy
 
-### 2.9 Hetzner-Caddy-Konfiguration
+### 2.9 Admin-Gateway-Caddy-Konfiguration
 
-- [ ] Playbook/Rolle für den Caddy auf Daniels Hetzner (*.loco.ollornog.de → Netbird → Master)
-- [x] Oder: Dokumentation für manuelle Einrichtung (falls der Hetzner nicht von Ansible verwaltet wird)
+- [ ] Playbook/Rolle für den Caddy auf dem Admin-Gateway (*.admin.example.com → Netbird → Master)
+- [x] Oder: Dokumentation für manuelle Einrichtung (falls der Gateway nicht von Ansible verwaltet wird)
 
-**Ergebnis Phase 2:** `setup-master.yml` richtet den Master-LXC komplett ein. Alle Admin-Dienste erreichbar unter `*.loco.ollornog.de`.
+**Ergebnis Phase 2:** `setup-master.yml` richtet den Master komplett ein. Alle Admin-Dienste erreichbar unter `*.admin.example.com`.
 
 ---
 
@@ -153,8 +153,8 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 ### 3.2 Playbook: `onboard-customer.yml` (Cloud-Only)
 
 - [x] Netbird-Gruppe + Policies + Setup-Key (API)
-- [x] Base-Rolle auf Kunden-Hetzner
-- [x] Netbird-Client auf Kunden-Hetzner
+- [x] Base-Rolle auf Kunden-Gateway
+- [x] Netbird-Client auf Kunden-Gateway
 - [x] PocketID deployen (id.firma.de)
 - [x] Admin-User in PocketID anlegen (API)
 - [x] Tinyauth deployen (auth.firma.de)
@@ -251,7 +251,7 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 
 - [x] `onboard-customer.yml` um Proxmox-Logik erweitern
 - [x] Ablauf: Netbird-Setup → LXC erstellen → Bootstrap → Base → Apps
-- [x] Caddy auf Hetzner: Routen zu Netbird-IPs der lokalen LXCs
+- [x] Caddy auf Gateway: Routen zu Netbird-IPs der lokalen LXCs
 
 ### 5.3 Onboarding für Lokal-Only
 

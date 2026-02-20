@@ -32,9 +32,9 @@ docker_install: true
 # --- Unattended upgrades ---
 unattended_upgrades_enabled: true
 
-# --- Server role ---
-# Determines firewall rules: online, app, gateway, all_in_one, infra, proxmox
-server_role: "app"
+# --- Server roles ---
+# List of roles this host fulfills: master, gateway, customer_master, app_server, backup_server, proxmox
+server_roles: ["app_server"]
 
 # --- Netbird interface ---
 netbird_interface: "wt0"
