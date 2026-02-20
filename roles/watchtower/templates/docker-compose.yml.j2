@@ -1,0 +1,25 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Watchtower (Docker image auto-updater)
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  watchtower:
+    image: {{ watchtower_image }}
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_LABEL_ENABLE={{ watchtower_label_enable | lower }}
+      - WATCHTOWER_SCHEDULE={{ watchtower_schedule }}
+      - WATCHTOWER_CLEANUP={{ watchtower_cleanup | lower }}
+{% if watchtower_notifications_enabled %}
+      - WATCHTOWER_NOTIFICATIONS=email
+      - WATCHTOWER_NOTIFICATION_EMAIL_FROM={{ watchtower_smtp_from }}
+      - WATCHTOWER_NOTIFICATION_EMAIL_TO={{ watchtower_smtp_to }}
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER={{ watchtower_smtp_host }}
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PORT={{ watchtower_smtp_port }}
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_USER={{ watchtower_smtp_user }}
+{% endif %}

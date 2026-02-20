@@ -1,0 +1,6 @@
+---
+# roles/watchtower/tasks/main.yml
+
+- name: Deploy Watchtower
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [watchtower, deploy]

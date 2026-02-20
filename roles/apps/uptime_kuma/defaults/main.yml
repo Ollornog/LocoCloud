@@ -1,0 +1,24 @@
+---
+# roles/apps/uptime_kuma/defaults/main.yml
+# Uptime Kuma — Self-hosted status monitoring dashboard
+
+uptime_kuma_stack_path: "/opt/stacks/uptime-kuma"
+uptime_kuma_image: "louislam/uptime-kuma:1"
+uptime_kuma_port: 8229
+
+# Domain for Uptime Kuma
+uptime_kuma_domain: ""  # e.g. "status.firma-abc.de"
+
+# No OIDC — protected by Tinyauth forward-auth
+# No database — uses embedded SQLite
+
+# Public paths (status page can be public)
+uptime_kuma_public_paths: []
+#  - "/status/*"  # Enable if customer wants public status page
+
+# Backup paths
+uptime_kuma_backup_paths:
+  - "/opt/stacks/uptime-kuma"
+
+# Health check
+uptime_kuma_health_path: "/api/status-page/heartbeat"

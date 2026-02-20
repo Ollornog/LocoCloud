@@ -1,0 +1,78 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Kunde: {{ kunde_name }} ({{ kunde_domain }})
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+(public) {
+	header -Server
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+	header X-Content-Type-Options "nosniff"
+	header X-Frame-Options "SAMEORIGIN"
+	header Referrer-Policy "strict-origin-when-cross-origin"
+	header Permissions-Policy "camera=(), microphone=(), geolocation=()"
+}
+
+(auth) {
+	forward_auth 127.0.0.1:{{ tinyauth_port }} {
+		uri /api/auth/caddy
+	}
+}
+
+# --- PocketID (OIDC Provider) ---
+id.{{ kunde_domain }} {
+	import public
+	@blocked path /register*
+	handle @blocked {
+		respond "Access Denied" 403
+	}
+	@admin path /settings*
+	handle @admin {
+		import auth
+		reverse_proxy 127.0.0.1:{{ pocketid_port }}
+	}
+	handle {
+		reverse_proxy 127.0.0.1:{{ pocketid_port }}
+	}
+}
+
+# --- Tinyauth Login Portal ---
+auth.{{ kunde_domain }} {
+	import public
+	reverse_proxy 127.0.0.1:{{ tinyauth_port }}
+}
+
+# --- Apps ---
+{% for app in apps_enabled %}
+{{ app.subdomain }}.{{ kunde_domain }} {
+	import public
+
+{% if app.public_paths is defined and app.public_paths | length > 0 %}
+{% for path in app.public_paths %}
+	@pub_{{ app.subdomain }}_{{ loop.index }} path {{ path }}
+	handle @pub_{{ app.subdomain }}_{{ loop.index }} {
+{% if app.target == 'lokal' %}
+		reverse_proxy {{ app.netbird_ip }}:{{ app.port }}
+{% else %}
+		reverse_proxy 127.0.0.1:{{ app.port }}
+{% endif %}
+	}
+{% endfor %}
+{% endif %}
+
+	handle {
+		import auth
+{% if app.target == 'lokal' %}
+		reverse_proxy {{ app.netbird_ip }}:{{ app.port }}
+{% else %}
+		reverse_proxy 127.0.0.1:{{ app.port }}
+{% endif %}
+	}
+}
+
+{% endfor %}
+# --- Catch-All ---
+:80, :443 {
+	respond "Access Denied" 403
+	header -Server
+}

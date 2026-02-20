@@ -20,19 +20,21 @@ LocoCloud/
 │   ├── _template/
 │   └── kunde-*/
 ├── roles/
-│   ├── base/                    ← OS-Hardening, Docker, UFW, Fail2ban
-│   ├── caddy/                   ← Reverse Proxy
-│   ├── pocketid/                ← OIDC Provider
-│   ├── tinyauth/                ← Forward Auth
-│   ├── netbird-client/          ← VPN
-│   ├── monitoring/              ← Zabbix Agent
-│   ├── backup/                  ← Restic
-│   ├── credentials/             ← Vaultwarden API
-│   ├── lxc-create/              ← Proxmox LXC-Erstellung
+│   ├── base/                    ✓ OS-Hardening, Docker, UFW, Fail2ban
+│   ├── caddy/                   ✓ Reverse Proxy (master + customer Caddyfile)
+│   ├── pocketid/                ✓ OIDC Provider
+│   ├── tinyauth/                ✓ Forward Auth (+ OIDC-Registration)
+│   ├── netbird-client/          ✓ VPN (install + join)
+│   ├── credentials/             ✓ Vaultwarden API (store + folders)
+│   ├── monitoring/              ← Zabbix Agent (Phase 6)
+│   ├── backup/                  ← Restic (Phase 6)
+│   ├── lxc-create/              ← Proxmox LXC-Erstellung (Phase 5)
 │   └── apps/
 │       ├── _template/
-│       ├── nextcloud/
-│       ├── paperless/
+│       ├── vaultwarden/         ✓ Credential Manager
+│       ├── semaphore/           ✓ Ansible Web-UI
+│       ├── nextcloud/           ← Phase 4
+│       ├── paperless/           ← Phase 4
 │       └── ...
 ├── playbooks/
 │   ├── site.yml                 ← Full Deploy
@@ -40,9 +42,11 @@ LocoCloud/
 │   ├── onboard-customer.yml
 │   └── ...
 ├── scripts/
-│   └── vault-pass.sh            ← Ansible-Vault-Passwort aus Vaultwarden
+│   ├── vault-pass.sh            ← Ansible-Vault-Passwort aus Vaultwarden
+│   └── new-customer.sh          ← Kunden-Inventar aus Template generieren
 ├── docs/
-│   └── KONZEPT.md               ← DIE WAHRHEIT (Architektur-Referenz)
+│   ├── KONZEPT.md               ← DIE WAHRHEIT (Architektur-Referenz)
+│   └── FAHRPLAN.md              ← Implementierungs-Reihenfolge (7 Phasen)
 └── .claude/rules/               ← Detail-Regeln für Claude Code
 ```
 

@@ -1,0 +1,79 @@
+---
+# roles/monitoring/tasks/scripts.yml
+# Deploy custom monitoring scripts for Zabbix Agent
+
+- name: Create monitoring scripts directory
+  ansible.builtin.file:
+    path: /etc/zabbix/scripts
+    state: directory
+    mode: "0755"
+
+- name: Deploy Docker container check script
+  ansible.builtin.copy:
+    dest: /etc/zabbix/scripts/check_docker.sh
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      # Check Docker container status for Zabbix
+      # Usage: check_docker.sh <container_name>
+      CONTAINER="$1"
+      if [ -z "$CONTAINER" ]; then
+          echo "USAGE: $0 <container_name>"
+          exit 1
+      fi
+      STATUS=$(docker inspect --format='{{ '{{' }}.State.Status{{ '}}' }}' "$CONTAINER" 2>/dev/null)
+      if [ "$STATUS" = "running" ]; then
+          echo 1
+      else
+          echo 0
+      fi
+
+- name: Deploy Netbird status check script
+  ansible.builtin.copy:
+    dest: /etc/zabbix/scripts/check_netbird.sh
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      # Check Netbird connection status for Zabbix
+      STATUS=$(netbird status --json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status',''))" 2>/dev/null)
+      if [ "$STATUS" = "Connected" ]; then
+          echo 1
+      else
+          echo 0
+      fi
+
+- name: Deploy Restic backup check script
+  ansible.builtin.copy:
+    dest: /etc/zabbix/scripts/check_backup.sh
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      # Check last Restic backup age in hours for Zabbix
+      REPO="$1"
+      if [ -z "$REPO" ]; then
+          echo -1
+          exit 0
+      fi
+      LAST=$(restic -r "$REPO" snapshots --latest 1 --json 2>/dev/null | python3 -c "
+      import sys,json
+      from datetime import datetime, timezone
+      snaps = json.load(sys.stdin)
+      if not snaps:
+          print(-1)
+      else:
+          t = datetime.fromisoformat(snaps[0]['time'].replace('Z','+00:00'))
+          age = (datetime.now(timezone.utc) - t).total_seconds() / 3600
+          print(int(age))
+      " 2>/dev/null)
+      echo "${LAST:--1}"
+
+- name: Deploy Zabbix UserParameter config
+  ansible.builtin.copy:
+    dest: /etc/zabbix/zabbix_agent2.d/lococloudd.conf
+    mode: "0644"
+    content: |
+      # LocoCloud custom monitoring parameters
+      UserParameter=docker.container.status[*],/etc/zabbix/scripts/check_docker.sh $1
+      UserParameter=netbird.status,/etc/zabbix/scripts/check_netbird.sh
+      UserParameter=backup.age[*],/etc/zabbix/scripts/check_backup.sh $1
+  notify: restart zabbix agent

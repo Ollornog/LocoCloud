@@ -1,0 +1,18 @@
+---
+# roles/backup/tasks/init.yml
+# Initialize Restic repositories for each backup target
+
+- name: Initialize Restic repos
+  ansible.builtin.command: >
+    restic -r {{ item.type }}:{{ item.user }}@{{ item.host }}:{{ item.port | default(22) }}{{ item.path }}
+    init
+    --password-file {{ backup_script_path }}/.restic-password
+  environment:
+    RESTIC_REPOSITORY: "{{ item.type }}:{{ item.user }}@{{ item.host }}:{{ item.port | default(22) }}{{ item.path }}"
+    RESTIC_PASSWORD_FILE: "{{ backup_script_path }}/.restic-password"
+  loop: "{{ backup.targets | default([]) }}"
+  loop_control:
+    label: "{{ item.host }}:{{ item.path }}"
+  register: restic_init
+  failed_when: restic_init.rc != 0 and 'already initialized' not in restic_init.stderr
+  changed_when: restic_init.rc == 0 and 'created restic repository' in restic_init.stdout

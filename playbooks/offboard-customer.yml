@@ -1,0 +1,179 @@
+---
+# playbooks/offboard-customer.yml
+# Offboard a customer — staged process: archive, then optionally destroy.
+# Usage: ansible-playbook playbooks/offboard-customer.yml -i inventories/kunde-abc/ \
+#        [-e "destroy=true"]
+#
+# Default (destroy=false): Final backup, stop all services, archive data.
+# With destroy=true: Also removes LXCs and Netbird peers.
+
+# =====================================================
+# Play 1: Final backup
+# =====================================================
+- name: "Offboarding — Final Backup"
+  hosts: all:!localhost:!*proxmox*
+  become: true
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+  tasks:
+    - name: Run final backup
+      ansible.builtin.command: "{{ backup_script_path | default('/opt/scripts/backup') }}/backup.sh"
+      register: final_backup
+      changed_when: true
+      when: backup.enabled | default(false)
+      ignore_errors: true
+
+    - name: Verify backup
+      ansible.builtin.command: >
+        restic -r {{ (backup.targets | first).type }}:{{ (backup.targets | first).user }}@{{ (backup.targets | first).host }}:{{ (backup.targets | first).port | default(22) }}{{ (backup.targets | first).path }}
+        check
+        --password-file /opt/scripts/backup/.restic-password
+      changed_when: false
+      when: backup.enabled | default(false)
+      ignore_errors: true
+
+# =====================================================
+# Play 2: Stop all services
+# =====================================================
+- name: "Offboarding — Stop Services"
+  hosts: all:!localhost:!*proxmox*
+  become: true
+
+  tasks:
+    - name: Stop all Docker stacks
+      ansible.builtin.command: docker compose down
+      args:
+        chdir: "{{ item }}"
+      loop: "{{ lookup('fileglob', '/opt/stacks/*/docker-compose.yml', wantlist=True) | map('dirname') | list }}"
+      ignore_errors: true
+      changed_when: true
+
+    - name: Stop Zabbix Agent
+      ansible.builtin.systemd:
+        name: zabbix-agent2
+        state: stopped
+        enabled: false
+      ignore_errors: true
+
+    - name: Disable backup cron
+      ansible.builtin.cron:
+        name: "lococloudd-backup"
+        state: absent
+
+    - name: Services stopped
+      ansible.builtin.debug:
+        msg: "All services stopped on {{ inventory_hostname }}. Data is preserved."
+
+# =====================================================
+# Play 3: Remove Netbird peers (API)
+# =====================================================
+- name: "Offboarding — Netbird Cleanup"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+  tasks:
+    - name: Skip Netbird cleanup if not destroying
+      ansible.builtin.meta: end_play
+      when: not (destroy | default(false) | bool)
+
+    # List peers in customer group
+    - name: List Netbird peers
+      ansible.builtin.uri:
+        url: "{{ loco.netbird.manager_url }}/api/peers"
+        method: GET
+        headers:
+          Authorization: "Token {{ loco.netbird.api_token }}"
+        status_code: 200
+      register: nb_peers
+
+    - name: Find customer peers
+      ansible.builtin.set_fact:
+        customer_peers: "{{ nb_peers.json | selectattr('name', 'match', kunde_id ~ '-.*') | list }}"
+
+    - name: Remove customer peers from Netbird
+      ansible.builtin.uri:
+        url: "{{ loco.netbird.manager_url }}/api/peers/{{ item.id }}"
+        method: DELETE
+        headers:
+          Authorization: "Token {{ loco.netbird.api_token }}"
+        status_code: [200, 204, 404]
+      loop: "{{ customer_peers }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    # Remove customer group
+    - name: List groups
+      ansible.builtin.uri:
+        url: "{{ loco.netbird.manager_url }}/api/groups"
+        method: GET
+        headers:
+          Authorization: "Token {{ loco.netbird.api_token }}"
+        status_code: 200
+      register: nb_groups
+
+    - name: Find customer group
+      ansible.builtin.set_fact:
+        customer_group: "{{ nb_groups.json | selectattr('name', 'equalto', 'kunde-' ~ kunde_id) | list | first | default(None) }}"
+
+    - name: Remove customer group
+      ansible.builtin.uri:
+        url: "{{ loco.netbird.manager_url }}/api/groups/{{ customer_group.id }}"
+        method: DELETE
+        headers:
+          Authorization: "Token {{ loco.netbird.api_token }}"
+        status_code: [200, 204, 404]
+      when: customer_group != None
+
+    - name: Netbird cleanup complete
+      ansible.builtin.debug:
+        msg: "Removed {{ customer_peers | length }} Netbird peers and customer group for {{ kunde_id }}."
+
+# =====================================================
+# Play 4: Destroy LXCs on Proxmox (optional)
+# =====================================================
+- name: "Offboarding — Destroy LXCs"
+  hosts: "*proxmox*"
+  become: true
+  gather_facts: false
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+  tasks:
+    - name: Skip if not destroying
+      ansible.builtin.meta: end_play
+      when: not (destroy | default(false) | bool)
+
+    - name: Destroy customer LXCs
+      community.general.proxmox:
+        vmid: "{{ item.lxc_vmid }}"
+        node: "{{ proxmox_node }}"
+        api_host: "{{ proxmox_api_host }}"
+        api_user: "{{ proxmox_api_user }}"
+        api_token_id: "{{ proxmox_api_token_id }}"
+        api_token_secret: "{{ proxmox_api_token_secret }}"
+        state: absent
+        force: true
+      loop: "{{ apps_enabled | selectattr('lxc_vmid', 'defined') | list }}"
+      loop_control:
+        label: "{{ item.name }} (VMID {{ item.lxc_vmid }})"
+      ignore_errors: true
+
+    - name: LXCs destroyed
+      ansible.builtin.debug:
+        msg: "Customer LXCs destroyed on Proxmox. Offboarding complete."

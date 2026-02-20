@@ -1,0 +1,50 @@
+---
+# roles/apps/paperless/defaults/main.yml
+# Paperless-NGX — Document management system
+
+paperless_stack_path: "/opt/stacks/paperless"
+paperless_data_path: "/mnt/data/paperless"
+paperless_image: "ghcr.io/paperless-ngx/paperless-ngx:2"
+paperless_port: 8081
+
+# Domain for Paperless
+paperless_domain: ""  # e.g. "paper.firma-abc.de"
+
+# PostgreSQL
+paperless_db_image: "postgres:18"
+paperless_db_name: "paperless"
+paperless_db_user: "paperless"
+paperless_db_password: ""  # Generated if empty
+
+# Redis
+paperless_redis_image: "redis:7-alpine"
+
+# Gotenberg (PDF processing)
+paperless_gotenberg_image: "gotenberg/gotenberg:8"
+
+# Tika (OCR for Office docs)
+paperless_tika_image: "apache/tika:3"
+
+# Admin
+paperless_admin_user: "admin"
+paperless_admin_password: ""  # Generated if empty
+
+# Secret key
+paperless_secret_key: ""  # Generated if empty
+
+# OIDC via PocketID
+paperless_oidc_enabled: false
+paperless_oidc_client_id: ""
+paperless_oidc_client_secret: ""
+paperless_oidc_provider_url: ""  # e.g. "https://id.firma-abc.de"
+
+# Public paths (none by default — everything behind Tinyauth)
+paperless_public_paths: []
+
+# Backup paths
+paperless_backup_paths:
+  - "/mnt/data/paperless"
+  - "/opt/stacks/paperless"
+
+# Health check
+paperless_health_path: "/api/"

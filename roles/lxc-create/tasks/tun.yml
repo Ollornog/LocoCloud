@@ -1,0 +1,13 @@
+---
+# roles/lxc-create/tasks/tun.yml
+# Configure TUN device access for Netbird inside LXC
+# Must be done BEFORE the LXC is started
+
+- name: Add TUN device to LXC config
+  ansible.builtin.blockinfile:
+    path: "/etc/pve/lxc/{{ lxc_vmid }}.conf"
+    block: |
+      lxc.cgroup2.devices.allow: c 10:200 rwm
+      lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
+    marker: "# {mark} ANSIBLE MANAGED — TUN for Netbird"
+  delegate_to: "{{ proxmox_host }}"

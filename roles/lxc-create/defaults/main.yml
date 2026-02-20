@@ -1,0 +1,28 @@
+---
+# roles/lxc-create/defaults/main.yml
+# Create and bootstrap LXC containers on Proxmox
+
+# Proxmox connection (from inventory)
+proxmox_node: "pve"
+proxmox_api_host: ""          # Netbird-IP of Proxmox host
+proxmox_api_user: "root@pam"
+proxmox_api_token_id: ""      # e.g. "ansible@pam!loco"
+proxmox_api_token_secret: ""
+
+# LXC defaults
+lxc_template: "debian-13-standard_13.0-1_amd64.tar.zst"
+lxc_template_storage: "local"
+lxc_storage: "local-lvm"
+lxc_disk_size: 16             # GB
+lxc_cores: 2
+lxc_memory: 2048              # MB
+lxc_swap: 512                 # MB
+lxc_unprivileged: true
+lxc_nesting: true
+
+# Network
+lxc_bridge: "vmbr0"
+lxc_ip_config: "ip=dhcp"
+
+# Bootstrap
+master_ssh_pubkey: ""         # SSH public key to inject into LXC

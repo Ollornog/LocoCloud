@@ -1,0 +1,104 @@
+---
+# roles/netbird-client/tasks/api_policies.yml
+# Create Netbird policies for a customer via REST API
+# Required vars: netbird_api_url, netbird_api_token, nb_group_id, kunde_id
+# Optional vars: loco_admin_group_id, loco_backup_group_id, backup_enabled
+
+- name: List existing Netbird policies
+  ansible.builtin.uri:
+    url: "{{ netbird_api_url }}/api/policies"
+    method: GET
+    headers:
+      Authorization: "Token {{ netbird_api_token }}"
+    status_code: 200
+  register: nb_policies
+
+# Policy 1: Customer internal traffic
+- name: Check if internal policy exists
+  ansible.builtin.set_fact:
+    nb_internal_policy_exists: "{{ nb_policies.json | selectattr('name', 'equalto', 'kunde-' + kunde_id + '-internal') | list | length > 0 }}"
+
+- name: Create customer internal policy
+  ansible.builtin.uri:
+    url: "{{ netbird_api_url }}/api/policies"
+    method: POST
+    headers:
+      Authorization: "Token {{ netbird_api_token }}"
+    body_format: json
+    body:
+      name: "kunde-{{ kunde_id }}-internal"
+      enabled: true
+      rules:
+        - name: "Internal traffic"
+          enabled: true
+          sources:
+            - "{{ nb_group_id }}"
+          destinations:
+            - "{{ nb_group_id }}"
+          bidirectional: true
+          protocol: "all"
+          action: "accept"
+    status_code: 200
+  when: not nb_internal_policy_exists
+
+# Policy 2: Admin access to customer
+- name: Check if admin policy exists
+  ansible.builtin.set_fact:
+    nb_admin_policy_exists: "{{ nb_policies.json | selectattr('name', 'equalto', 'loco-admin-to-kunde-' + kunde_id) | list | length > 0 }}"
+
+- name: Create admin-to-customer policy
+  ansible.builtin.uri:
+    url: "{{ netbird_api_url }}/api/policies"
+    method: POST
+    headers:
+      Authorization: "Token {{ netbird_api_token }}"
+    body_format: json
+    body:
+      name: "loco-admin-to-kunde-{{ kunde_id }}"
+      enabled: true
+      rules:
+        - name: "Admin access"
+          enabled: true
+          sources:
+            - "{{ loco_admin_group_id }}"
+          destinations:
+            - "{{ nb_group_id }}"
+          bidirectional: true
+          protocol: "all"
+          action: "accept"
+    status_code: 200
+  when:
+    - not nb_admin_policy_exists
+    - loco_admin_group_id is defined and loco_admin_group_id | length > 0
+
+# Policy 3: Backup access to customer (optional)
+- name: Check if backup policy exists
+  ansible.builtin.set_fact:
+    nb_backup_policy_exists: "{{ nb_policies.json | selectattr('name', 'equalto', 'loco-backup-to-kunde-' + kunde_id) | list | length > 0 }}"
+  when: backup_enabled | default(false)
+
+- name: Create backup-to-customer policy
+  ansible.builtin.uri:
+    url: "{{ netbird_api_url }}/api/policies"
+    method: POST
+    headers:
+      Authorization: "Token {{ netbird_api_token }}"
+    body_format: json
+    body:
+      name: "loco-backup-to-kunde-{{ kunde_id }}"
+      enabled: true
+      rules:
+        - name: "Backup pull"
+          enabled: true
+          sources:
+            - "{{ loco_backup_group_id }}"
+          destinations:
+            - "{{ nb_group_id }}"
+          bidirectional: false
+          protocol: "all"
+          action: "accept"
+    status_code: 200
+  when:
+    - backup_enabled | default(false)
+    - not nb_backup_policy_exists | default(false)
+    - loco_backup_group_id is defined and loco_backup_group_id | length > 0

@@ -1,0 +1,24 @@
+---
+# roles/tinyauth/defaults/main.yml
+# Tinyauth forward-auth proxy — deployed as Docker container
+
+tinyauth_stack_path: "/opt/stacks/tinyauth"
+tinyauth_image: "ghcr.io/steveiliop56/tinyauth:latest"
+tinyauth_port: 9090
+
+# Domain where Tinyauth is reachable
+tinyauth_domain: ""  # e.g. "auth.firma.de"
+
+# Secret for session encryption (generated if empty)
+tinyauth_secret: ""
+
+# OIDC connection to PocketID
+tinyauth_oidc_client_id: ""
+tinyauth_oidc_client_secret: ""
+tinyauth_oidc_issuer_url: ""  # e.g. "https://id.firma.de"
+
+# OAuth whitelist — emails allowed to log in
+tinyauth_oauth_whitelist: []  # List of email addresses
+
+# Session expiry in seconds (default 24h)
+tinyauth_session_expiry: 86400

@@ -1,0 +1,64 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Paperless-NGX
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  paperless:
+    image: {{ paperless_image }}
+    container_name: paperless
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if server_role | default('app') in ['online', 'gateway', 'all_in_one'] else '0.0.0.0' }}:{{ paperless_port }}:8000"
+    volumes:
+      - {{ paperless_data_path }}/data:/usr/src/paperless/data
+      - {{ paperless_data_path }}/media:/usr/src/paperless/media
+      - {{ paperless_data_path }}/consume:/usr/src/paperless/consume
+      - {{ paperless_data_path }}/export:/usr/src/paperless/export
+    env_file:
+      - .env
+    depends_on:
+      paperless-db:
+        condition: service_healthy
+      paperless-redis:
+        condition: service_started
+      paperless-gotenberg:
+        condition: service_started
+      paperless-tika:
+        condition: service_started
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  paperless-db:
+    image: {{ paperless_db_image }}
+    container_name: paperless-db
+    restart: unless-stopped
+    volumes:
+      - {{ paperless_stack_path }}/db:/var/lib/postgresql
+    environment:
+      POSTGRES_DB: {{ paperless_db_name }}
+      POSTGRES_USER: {{ paperless_db_user }}
+      POSTGRES_PASSWORD: {{ paperless_db_password }}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ paperless_db_user }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  paperless-redis:
+    image: {{ paperless_redis_image }}
+    container_name: paperless-redis
+    restart: unless-stopped
+    volumes:
+      - {{ paperless_stack_path }}/redis:/data
+
+  paperless-gotenberg:
+    image: {{ paperless_gotenberg_image }}
+    container_name: paperless-gotenberg
+    restart: unless-stopped
+
+  paperless-tika:
+    image: {{ paperless_tika_image }}
+    container_name: paperless-tika
+    restart: unless-stopped

@@ -1,0 +1,19 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Vaultwarden
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  vaultwarden:
+    image: {{ vaultwarden_image }}
+    container_name: vaultwarden
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if server_role | default('app') in ['online', 'gateway', 'all_in_one', 'master'] else '0.0.0.0' }}:{{ vaultwarden_port }}:80"
+    volumes:
+      - {{ vaultwarden_data_path }}:/data
+    env_file:
+      - .env
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"

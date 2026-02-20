@@ -1,0 +1,7 @@
+---
+# roles/pocketid/tasks/main.yml
+# Deploy PocketID OIDC Provider
+
+- name: Deploy PocketID
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [pocketid, deploy]

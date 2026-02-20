@@ -1,0 +1,47 @@
+---
+# roles/base/tasks/firewall.yml
+# UFW configuration — SSH only on Netbird interface, ports by server_role
+
+- name: Set UFW default incoming policy
+  community.general.ufw:
+    direction: incoming
+    default: "{{ ufw_default_incoming }}"
+
+- name: Set UFW default outgoing policy
+  community.general.ufw:
+    direction: outgoing
+    default: "{{ ufw_default_outgoing }}"
+
+- name: Allow SSH on Netbird interface only
+  community.general.ufw:
+    rule: allow
+    port: "{{ ssh_port }}"
+    proto: tcp
+    interface: "{{ netbird_interface }}"
+    direction: in
+
+# Entry-Point servers (online, gateway, all_in_one): HTTP/HTTPS public
+- name: Allow HTTP/HTTPS on entry-point servers
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - "80"
+    - "443"
+  when: server_role in ['online', 'gateway', 'all_in_one']
+
+# App-LXCs: app ports only on Netbird interface
+- name: Allow app ports on Netbird interface (app servers)
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port | string }}"
+    proto: "{{ item.proto | default('tcp') }}"
+    interface: "{{ netbird_interface }}"
+    direction: in
+  loop: "{{ ufw_extra_rules }}"
+  when: ufw_extra_rules | length > 0
+
+- name: Enable UFW
+  community.general.ufw:
+    state: enabled

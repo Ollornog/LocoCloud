@@ -1,0 +1,26 @@
+---
+# roles/lxc-create/tasks/create.yml
+# Create LXC container via Proxmox API
+
+- name: Create LXC container
+  community.general.proxmox:
+    vmid: "{{ lxc_vmid }}"
+    hostname: "{{ lxc_hostname }}"
+    node: "{{ proxmox_node }}"
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    ostemplate: "{{ lxc_template_storage }}:vztmpl/{{ lxc_template }}"
+    storage: "{{ lxc_storage }}"
+    disk: "{{ lxc_disk_size }}"
+    cores: "{{ lxc_cores }}"
+    memory: "{{ lxc_memory }}"
+    swap: "{{ lxc_swap }}"
+    netif:
+      net0: "name=eth0,bridge={{ lxc_bridge }},{{ lxc_ip_config }}"
+    features:
+      - "nesting={{ '1' if lxc_nesting else '0' }}"
+    unprivileged: "{{ lxc_unprivileged }}"
+    state: present
+  register: lxc_create_result

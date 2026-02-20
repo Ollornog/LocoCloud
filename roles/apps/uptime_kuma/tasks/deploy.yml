@@ -1,0 +1,32 @@
+---
+# roles/apps/uptime_kuma/tasks/deploy.yml
+
+- name: Create Uptime Kuma directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ uptime_kuma_stack_path }}"
+    - "{{ uptime_kuma_stack_path }}/data"
+
+- name: Deploy Uptime Kuma docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ uptime_kuma_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Start Uptime Kuma
+  community.docker.docker_compose_v2:
+    project_src: "{{ uptime_kuma_stack_path }}"
+    state: present
+
+- name: Wait for Uptime Kuma to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ uptime_kuma_port }}"
+    method: GET
+    status_code: [200, 301, 302]
+  register: uk_health
+  until: uk_health.status in [200, 301, 302]
+  retries: 30
+  delay: 5

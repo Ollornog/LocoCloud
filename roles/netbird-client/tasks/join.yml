@@ -1,0 +1,42 @@
+---
+# roles/netbird-client/tasks/join.yml
+# Join Netbird network with setup key
+
+- name: Check Netbird status
+  ansible.builtin.command: netbird status --json
+  register: nb_status_raw
+  changed_when: false
+  failed_when: false
+
+- name: Parse Netbird status
+  ansible.builtin.set_fact:
+    nb_connected: "{{ (nb_status_raw.stdout | from_json).status | default('') == 'Connected' }}"
+  when: nb_status_raw.rc == 0 and nb_status_raw.stdout | length > 0
+
+- name: Join Netbird network
+  ansible.builtin.command: >
+    netbird up
+    --setup-key {{ netbird_setup_key }}
+    --management-url {{ netbird_management_url }}
+  when: >
+    netbird_setup_key | length > 0
+    and (nb_status_raw.rc != 0 or not nb_connected | default(false))
+  changed_when: true
+
+- name: Wait for Netbird connection
+  ansible.builtin.command: netbird status --json
+  register: nb_status_check
+  until: >
+    nb_status_check.rc == 0
+    and (nb_status_check.stdout | from_json).status | default('') == 'Connected'
+  retries: 30
+  delay: 5
+  changed_when: false
+
+- name: Register Netbird IP as fact
+  ansible.builtin.set_fact:
+    netbird_ip: "{{ (nb_status_check.stdout | from_json).ip | default('') | regex_replace('/.*', '') }}"
+
+- name: Display Netbird IP
+  ansible.builtin.debug:
+    msg: "Netbird IP: {{ netbird_ip }}"

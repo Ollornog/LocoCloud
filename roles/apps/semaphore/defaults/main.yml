@@ -1,0 +1,28 @@
+---
+# roles/apps/semaphore/defaults/main.yml
+# Semaphore — Ansible Web-UI for deployment management
+
+semaphore_stack_path: "/opt/stacks/semaphore"
+semaphore_data_path: "/opt/stacks/semaphore/data"
+semaphore_image: "semaphoreui/semaphore:latest"
+semaphore_port: 3000
+
+# Domain for Semaphore
+semaphore_domain: ""  # e.g. "deploy.loco.ollornog.de"
+
+# PostgreSQL for Semaphore
+semaphore_db_image: "postgres:18"
+semaphore_db_name: "semaphore"
+semaphore_db_user: "semaphore"
+semaphore_db_password: ""  # Generated if empty
+
+# Admin user
+semaphore_admin_user: "admin"
+semaphore_admin_password: ""  # Generated if empty
+semaphore_admin_email: ""
+
+# OIDC (connected to Master PocketID)
+semaphore_oidc_enabled: false
+semaphore_oidc_client_id: ""
+semaphore_oidc_client_secret: ""
+semaphore_oidc_issuer_url: ""

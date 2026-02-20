@@ -1,0 +1,21 @@
+---
+# roles/caddy/defaults/main.yml
+# Caddy reverse proxy — deployed as Docker container
+
+caddy_stack_path: "/opt/stacks/caddy"
+caddy_data_path: "/opt/stacks/caddy/data"
+caddy_config_path: "/opt/stacks/caddy/config"
+caddy_image: "caddy:2"
+
+# Caddyfile mode: "master" for admin services, "customer" for customer apps
+caddy_mode: "customer"
+
+# Port bindings for the Caddy container
+caddy_http_port: "80"
+caddy_https_port: "443"
+
+# Tinyauth port (for forward_auth snippet)
+tinyauth_port: 9090
+
+# PocketID port
+pocketid_port: 1411

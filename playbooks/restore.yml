@@ -1,0 +1,93 @@
+---
+# playbooks/restore.yml
+# Restore app data from a Restic backup.
+# Usage: ansible-playbook playbooks/restore.yml -i inventories/kunde-abc/ \
+#        -e "app_name=nextcloud" [-e "snapshot_id=abc123"]
+#
+# Default: restores latest snapshot. Specify snapshot_id for a specific version.
+
+- name: "Restore App Data"
+  hosts: all:!localhost:!*proxmox*
+  become: true
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - app_name is defined and app_name | length > 0
+          - backup.targets | default([]) | length > 0
+        fail_msg: "Required: -e 'app_name=nextcloud'. Backup targets must be configured."
+
+    - name: Find app in apps_enabled
+      ansible.builtin.set_fact:
+        target_app: "{{ apps_enabled | selectattr('name', 'equalto', app_name) | list | first | default(None) }}"
+
+    - name: Fail if app not found
+      ansible.builtin.fail:
+        msg: "App '{{ app_name }}' not found in apps_enabled."
+      when: target_app == None
+
+  tasks:
+    - name: Set restore variables
+      ansible.builtin.set_fact:
+        restore_snapshot: "{{ snapshot_id | default('latest') }}"
+        restore_target: "/opt/restore/{{ app_name }}-{{ ansible_date_time.date }}"
+        backup_target: "{{ backup.targets | first }}"
+        restore_repo: "{{ backup.targets | first | dict2items | selectattr('key', 'in', ['type', 'user', 'host', 'port', 'path']) | items2dict }}"
+
+    - name: Build repo URL
+      ansible.builtin.set_fact:
+        restore_repo_url: "{{ backup_target.type }}:{{ backup_target.user }}@{{ backup_target.host }}:{{ backup_target.port | default(22) }}{{ backup_target.path }}"
+
+    # List available snapshots
+    - name: List available snapshots
+      ansible.builtin.command: >
+        restic -r {{ restore_repo_url }} snapshots
+        --password-file /opt/scripts/backup/.restic-password
+        --tag {{ kunde_id }}
+      register: restic_snapshots
+      changed_when: false
+
+    - name: Show available snapshots
+      ansible.builtin.debug:
+        msg: "{{ restic_snapshots.stdout_lines }}"
+
+    # Stop app before restore
+    - name: Stop app containers
+      community.docker.docker_compose_v2:
+        project_src: "/opt/stacks/{{ app_name | lower }}"
+        state: absent
+      ignore_errors: true
+
+    # Restore
+    - name: Create restore directory
+      ansible.builtin.file:
+        path: "{{ restore_target }}"
+        state: directory
+        mode: "0700"
+
+    - name: Restore from Restic
+      ansible.builtin.command: >
+        restic -r {{ restore_repo_url }} restore {{ restore_snapshot }}
+        --target {{ restore_target }}
+        --password-file /opt/scripts/backup/.restic-password
+      register: restore_result
+      changed_when: true
+
+    - name: Restore complete
+      ansible.builtin.debug:
+        msg: |
+          Restore complete!
+          App: {{ app_name }}
+          Snapshot: {{ restore_snapshot }}
+          Restored to: {{ restore_target }}
+
+          Next steps:
+          1. Review restored data in {{ restore_target }}
+          2. Copy relevant files to the app data directory
+          3. Restart the app: ansible-playbook playbooks/add-app.yml -i inventories/{{ kunde_id }}/ -e "app_name={{ app_name }}"

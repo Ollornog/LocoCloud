@@ -1,0 +1,7 @@
+---
+# roles/caddy/handlers/main.yml
+# ALWAYS restart, NEVER reload (inode issue with bind-mounts)
+
+- name: restart caddy
+  ansible.builtin.command: docker restart caddy
+  changed_when: true

@@ -1,0 +1,23 @@
+---
+# roles/watchtower/defaults/main.yml
+# Watchtower — Automatic Docker image updates (label-based, patches only)
+
+watchtower_stack_path: "/opt/stacks/watchtower"
+watchtower_image: "containrrr/watchtower:latest"
+
+# Schedule: daily at 04:00
+watchtower_schedule: "0 0 4 * * *"
+
+# Label-based: only update containers with watchtower.enable=true label
+watchtower_label_enable: true
+
+# Cleanup old images after update
+watchtower_cleanup: true
+
+# SMTP notifications (optional)
+watchtower_notifications_enabled: false
+watchtower_smtp_from: ""
+watchtower_smtp_to: ""
+watchtower_smtp_host: ""
+watchtower_smtp_port: 587
+watchtower_smtp_user: ""

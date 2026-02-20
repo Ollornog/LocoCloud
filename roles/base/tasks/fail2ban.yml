@@ -1,0 +1,23 @@
+---
+# roles/base/tasks/fail2ban.yml
+# SSH brute-force protection
+
+- name: Configure fail2ban SSH jail
+  ansible.builtin.copy:
+    content: |
+      [sshd]
+      enabled = true
+      port = {{ ssh_port }}
+      filter = sshd
+      maxretry = {{ fail2ban_ssh_maxretry }}
+      bantime = {{ fail2ban_ssh_bantime }}
+      findtime = 600
+    dest: /etc/fail2ban/jail.d/sshd.conf
+    mode: "0644"
+  notify: restart fail2ban
+
+- name: Ensure fail2ban is running
+  ansible.builtin.service:
+    name: fail2ban
+    state: started
+    enabled: true

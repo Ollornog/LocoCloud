@@ -1,0 +1,22 @@
+---
+# roles/lxc-create/tasks/main.yml
+
+- name: Ensure LXC template is available
+  ansible.builtin.import_tasks: template.yml
+  tags: [lxc, template]
+
+- name: Create LXC container
+  ansible.builtin.import_tasks: create.yml
+  tags: [lxc, create]
+
+- name: Configure TUN device for Netbird
+  ansible.builtin.import_tasks: tun.yml
+  tags: [lxc, tun]
+
+- name: Start LXC
+  ansible.builtin.import_tasks: start.yml
+  tags: [lxc, start]
+
+- name: Bootstrap LXC via pct exec
+  ansible.builtin.import_tasks: bootstrap.yml
+  tags: [lxc, bootstrap]

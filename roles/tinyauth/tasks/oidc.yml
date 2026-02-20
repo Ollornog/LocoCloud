@@ -1,0 +1,56 @@
+---
+# roles/tinyauth/tasks/oidc.yml
+# Register Tinyauth as OIDC client in PocketID via REST API
+
+- name: Check if Tinyauth OIDC client already exists
+  ansible.builtin.uri:
+    url: "{{ tinyauth_oidc_issuer_url }}/api/oidc-clients"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ pocketid_api_token }}"
+    status_code: 200
+  register: existing_clients
+  when: pocketid_api_token | length > 0
+
+- name: Find existing Tinyauth OIDC client
+  ansible.builtin.set_fact:
+    tinyauth_existing_client: "{{ existing_clients.json | selectattr('name', 'equalto', 'Tinyauth') | list | first | default(None) }}"
+  when: existing_clients is defined and existing_clients.json is defined
+
+- name: Create Tinyauth OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "{{ tinyauth_oidc_issuer_url }}/api/oidc-clients"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ pocketid_api_token }}"
+    body_format: json
+    body:
+      name: "Tinyauth"
+      callback_urls:
+        - "https://{{ tinyauth_domain }}/api/oidc/callback"
+    status_code: [200, 201]
+  register: tinyauth_oidc_result
+  when:
+    - pocketid_api_token | length > 0
+    - tinyauth_existing_client is not defined or tinyauth_existing_client == None
+
+- name: Set Tinyauth OIDC credentials from new client
+  ansible.builtin.set_fact:
+    tinyauth_oidc_client_id: "{{ tinyauth_oidc_result.json.client_id }}"
+    tinyauth_oidc_client_secret: "{{ tinyauth_oidc_result.json.client_secret }}"
+  when: tinyauth_oidc_result is changed
+
+- name: Set Tinyauth OIDC credentials from existing client
+  ansible.builtin.set_fact:
+    tinyauth_oidc_client_id: "{{ tinyauth_existing_client.client_id }}"
+    tinyauth_oidc_client_secret: "{{ tinyauth_existing_client.client_secret }}"
+  when:
+    - tinyauth_oidc_result is not changed
+    - tinyauth_existing_client is defined and tinyauth_existing_client != None
+
+- name: Update Tinyauth .env with OIDC credentials
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ tinyauth_stack_path }}/.env"
+    mode: "0600"
+  notify: restart tinyauth

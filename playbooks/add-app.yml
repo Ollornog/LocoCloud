@@ -1,0 +1,138 @@
+---
+# playbooks/add-app.yml
+# Deploy a single app to a customer server.
+# Usage: ansible-playbook playbooks/add-app.yml -i inventories/kunde-abc/ \
+#        -e "app_name=nextcloud"
+#
+# The app must exist in apps_enabled in group_vars/all.yml.
+# For lxc_per_app with target=lokal: also needs lxc_vmid in the app config.
+
+# =====================================================
+# Play 1: Create LXC if needed (lxc_per_app + lokal)
+# =====================================================
+- name: "Add App — Create LXC (if lxc_per_app)"
+  hosts: "*proxmox*"
+  become: true
+  gather_facts: false
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+    - name: Validate app_name
+      ansible.builtin.assert:
+        that:
+          - app_name is defined and app_name | length > 0
+        fail_msg: "Required: -e 'app_name=nextcloud'"
+
+    - name: Find app in apps_enabled
+      ansible.builtin.set_fact:
+        target_app: "{{ apps_enabled | selectattr('name', 'equalto', app_name) | list | first | default(None) }}"
+
+  tasks:
+    - name: Skip if not lxc_per_app or not lokal target
+      ansible.builtin.meta: end_play
+      when: >
+        isolation_mode | default('single_lxc') != 'lxc_per_app'
+        or target_app == None
+        or target_app.target | default('online') != 'lokal'
+
+    - name: Create LXC for app
+      ansible.builtin.include_role:
+        name: lxc-create
+      vars:
+        lxc_vmid: "{{ target_app.lxc_vmid }}"
+        lxc_hostname: "{{ kunde_id }}-{{ target_app.name | lower | replace(' ', '-') }}"
+        lxc_disk_size: "{{ target_app.disk_size | default(16) }}"
+        lxc_cores: "{{ target_app.cores | default(2) }}"
+        lxc_memory: "{{ target_app.memory | default(2048) }}"
+        proxmox_host: "{{ inventory_hostname }}"
+        netbird_setup_key: "{{ netbird_setup_keys.lokal | default('') }}"
+        netbird_management_url: "{{ loco.netbird.manager_url }}"
+      when: target_app.lxc_vmid is defined
+      tags: [lxc, proxmox]
+
+    - name: Store new LXC Netbird IP
+      ansible.builtin.set_fact:
+        new_app_netbird_ip: "{{ lxc_netbird_ip | default('') }}"
+      when: lxc_netbird_ip is defined
+
+# =====================================================
+# Play 2: Deploy app on target server
+# =====================================================
+- name: "Add App — Deploy"
+  hosts: all:!localhost:!*proxmox*
+  become: true
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - app_name is defined and app_name | length > 0
+          - apps_enabled is defined and apps_enabled | length > 0
+        fail_msg: "Required: -e 'app_name=nextcloud'. App must be in apps_enabled."
+
+    - name: Find app in apps_enabled
+      ansible.builtin.set_fact:
+        target_app: "{{ apps_enabled | selectattr('name', 'equalto', app_name) | list | first | default(None) }}"
+
+    - name: Fail if app not found
+      ansible.builtin.fail:
+        msg: "App '{{ app_name }}' not found in apps_enabled. Add it to group_vars/all.yml first."
+      when: target_app == None
+
+  tasks:
+    # Run base role on new LXC first (lxc_per_app)
+    - name: Run base role on new LXC
+      ansible.builtin.include_role:
+        name: base
+      when:
+        - isolation_mode | default('single_lxc') == 'lxc_per_app'
+        - target_app.target | default('online') == 'lokal'
+        - server_role in ['app', 'apps']
+      tags: [base]
+
+    - name: Deploy app role
+      ansible.builtin.include_role:
+        name: "apps/{{ target_app.name | lower | replace('-', '_') | replace(' ', '_') }}"
+      vars:
+        app: "{{ target_app }}"
+        app_subdomain: "{{ target_app.subdomain }}"
+        app_port: "{{ target_app.port }}"
+        app_domain: "{{ target_app.subdomain }}.{{ kunde_domain }}"
+      when: >
+        (target_app.target == 'online' and server_role in ['online', 'all_in_one'])
+        or (target_app.target == 'lokal' and server_role in ['app', 'apps', 'all_in_one'])
+      tags: [apps]
+
+    # Regenerate Caddyfile to include new app (with new Netbird IP route)
+    - name: Update Caddy config
+      ansible.builtin.include_role:
+        name: caddy
+      vars:
+        caddy_mode: "customer"
+      when: server_role in ['online', 'gateway', 'all_in_one']
+      tags: [caddy]
+
+    # Deploy Watchtower if not already present
+    - name: Ensure Watchtower is running
+      ansible.builtin.include_role:
+        name: watchtower
+      tags: [watchtower]
+
+    - name: App deployed
+      ansible.builtin.debug:
+        msg: |
+          App {{ app_name }} deployed!
+          URL: https://{{ target_app.subdomain }}.{{ kunde_domain }}
+          Port: {{ target_app.port }}
+          {% if target_app.netbird_ip | default('') | length > 0 %}
+          Netbird IP: {{ target_app.netbird_ip }}
+          {% endif %}

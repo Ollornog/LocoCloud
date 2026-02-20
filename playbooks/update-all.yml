@@ -1,0 +1,46 @@
+---
+# playbooks/update-all.yml
+# Run OS updates on all customer servers.
+# Usage: ansible-playbook playbooks/update-all.yml -i inventories/kunde-abc/
+
+- name: "OS Update — All Servers"
+  hosts: all:!localhost:!*proxmox*
+  become: true
+  serial: 1  # Update one server at a time to minimize downtime
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 0
+
+    - name: Upgrade all packages
+      ansible.builtin.apt:
+        upgrade: safe
+      register: apt_upgrade
+
+    - name: Show upgraded packages
+      ansible.builtin.debug:
+        msg: "{{ apt_upgrade.stdout_lines | default(['No packages upgraded']) }}"
+      when: apt_upgrade.changed
+
+    - name: Check if reboot is required
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+
+    - name: Notify about pending reboot
+      ansible.builtin.debug:
+        msg: "REBOOT REQUIRED on {{ inventory_hostname }}. Schedule a maintenance window."
+      when: reboot_required.stat.exists
+
+    - name: Clean up old packages
+      ansible.builtin.apt:
+        autoremove: true
+        autoclean: true

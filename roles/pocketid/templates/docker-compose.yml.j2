@@ -1,0 +1,17 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# PocketID OIDC Provider
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  pocketid:
+    image: {{ pocketid_image }}
+    container_name: pocketid
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:{{ pocketid_port }}:80"
+    volumes:
+      - {{ pocketid_data_path }}:/data
+    environment:
+      - TRUST_PROXY=true

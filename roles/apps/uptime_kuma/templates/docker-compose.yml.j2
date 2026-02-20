@@ -1,0 +1,17 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Uptime Kuma
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  uptime-kuma:
+    image: {{ uptime_kuma_image }}
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if server_role | default('app') in ['online', 'gateway', 'all_in_one'] else '0.0.0.0' }}:{{ uptime_kuma_port }}:3001"
+    volumes:
+      - {{ uptime_kuma_stack_path }}/data:/app/data
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"

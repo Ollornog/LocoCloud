@@ -1,0 +1,6 @@
+---
+# roles/apps/semaphore/tasks/main.yml
+
+- name: Deploy Semaphore
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [semaphore, deploy]

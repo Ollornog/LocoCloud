@@ -1,0 +1,15 @@
+---
+# roles/apps/uptime_kuma/tasks/remove.yml
+
+- name: Stop Uptime Kuma
+  community.docker.docker_compose_v2:
+    project_src: "{{ uptime_kuma_stack_path }}"
+    state: absent
+  ignore_errors: true
+
+- name: Archive Uptime Kuma data
+  ansible.builtin.command: >
+    tar czf /opt/archives/uptime-kuma-{{ ansible_date_time.date }}.tar.gz
+    -C {{ uptime_kuma_stack_path }}/data .
+  args:
+    creates: "/opt/archives/uptime-kuma-{{ ansible_date_time.date }}.tar.gz"

@@ -1,0 +1,31 @@
+---
+# playbooks/backup-now.yml
+# Trigger an immediate backup for a customer.
+# Usage: ansible-playbook playbooks/backup-now.yml -i inventories/kunde-abc/
+
+- name: "Backup Now"
+  hosts: all:!localhost:!*proxmox*
+  become: true
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+    - name: Check backup is configured
+      ansible.builtin.assert:
+        that:
+          - backup.enabled | default(false)
+          - backup.targets | default([]) | length > 0
+        fail_msg: "Backup is not enabled or has no targets configured."
+
+  tasks:
+    - name: Run backup script
+      ansible.builtin.command: "{{ backup_script_path | default('/opt/scripts/backup') }}/backup.sh"
+      register: backup_result
+      changed_when: true
+
+    - name: Show backup result
+      ansible.builtin.debug:
+        msg: "{{ backup_result.stdout_lines | default([]) }}"
