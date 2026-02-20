@@ -78,7 +78,7 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 
 **Ziel:** Vollständige Admin-Infrastruktur auf dem Master-LXC.
 
-### 2.1 Netbird-Client-Rolle (`roles/netbird-client/`)
+### 2.1 Netbird-Client-Rolle (`roles/netbird_client/`)
 
 - [ ] Netbird installieren (apt-Repo)
 - [ ] `netbird up` mit Setup-Key + Management-URL
@@ -142,7 +142,7 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 
 **Ziel:** Erster Kunde komplett automatisiert deployen (einfachste Variante).
 
-### 3.1 Netbird-Automation (`roles/netbird-client/` erweitern)
+### 3.1 Netbird-Automation (`roles/netbird_client/` erweitern)
 
 - [ ] `tasks/api.yml` — Netbird REST-API Integration:
   - Kundengruppe erstellen
@@ -235,7 +235,7 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 
 **Ziel:** Hybrid- und Lokal-Only-Deployments ermöglichen.
 
-### 5.1 LXC-Create-Rolle (`roles/lxc-create/`)
+### 5.1 LXC-Create-Rolle (`roles/lxc_create/`)
 
 - [ ] LXC-Template herunterladen (pveam download, idempotent)
 - [ ] LXC erstellen (community.general.proxmox)

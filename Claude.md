@@ -24,11 +24,11 @@ LocoCloud/
 │   ├── caddy/                   ✓ Reverse Proxy (master + customer Caddyfile)
 │   ├── pocketid/                ✓ OIDC Provider
 │   ├── tinyauth/                ✓ Forward Auth (+ OIDC-Registration)
-│   ├── netbird-client/          ✓ VPN (install + join)
+│   ├── netbird_client/          ✓ VPN (install + join)
 │   ├── credentials/             ✓ Vaultwarden API (store + folders)
 │   ├── monitoring/              ← Zabbix Agent (Phase 6)
 │   ├── backup/                  ← Restic (Phase 6)
-│   ├── lxc-create/              ← Proxmox LXC-Erstellung (Phase 5)
+│   ├── lxc_create/              ← Proxmox LXC-Erstellung (Phase 5)
 │   └── apps/
 │       ├── _template/
 │       ├── vaultwarden/         ✓ Credential Manager

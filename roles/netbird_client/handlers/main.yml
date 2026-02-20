@@ -1,5 +1,5 @@
 ---
-# roles/netbird-client/handlers/main.yml
+# roles/netbird_client/handlers/main.yml
 
 - name: restart netbird
   ansible.builtin.service:

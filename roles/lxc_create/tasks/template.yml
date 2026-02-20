@@ -1,5 +1,5 @@
 ---
-# roles/lxc-create/tasks/template.yml
+# roles/lxc_create/tasks/template.yml
 # Ensure LXC template is downloaded on the Proxmox host
 
 - name: Download LXC template if missing

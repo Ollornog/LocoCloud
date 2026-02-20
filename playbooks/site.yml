@@ -23,7 +23,7 @@
       tags: [base]
 
     # Netbird VPN
-    - role: netbird-client
+    - role: netbird_client
       vars:
         netbird_setup_key: "{{ netbird_setup_keys.online | default(netbird_setup_keys.lokal | default('')) }}"
         netbird_management_url: "{{ loco.netbird.manager_url }}"

@@ -46,12 +46,11 @@
 
   tasks:
     - name: Stop all Docker stacks
-      ansible.builtin.command: docker compose down
-      args:
-        chdir: "{{ item }}"
+      community.docker.docker_compose_v2:
+        project_src: "{{ item }}"
+        state: absent
       loop: "{{ lookup('fileglob', '/opt/stacks/*/docker-compose.yml', wantlist=True) | map('dirname') | list }}"
       ignore_errors: true
-      changed_when: true
 
     - name: Stop Zabbix Agent
       ansible.builtin.systemd:

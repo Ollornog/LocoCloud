@@ -21,6 +21,9 @@ semaphore_admin_user: "admin"
 semaphore_admin_password: ""  # Generated if empty
 semaphore_admin_email: ""
 
+# Access key encryption (generated once, must stay stable!)
+semaphore_access_key_encryption: ""  # Generated if empty
+
 # OIDC (connected to Master PocketID)
 semaphore_oidc_enabled: false
 semaphore_oidc_client_id: ""

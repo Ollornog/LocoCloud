@@ -1,5 +1,5 @@
 ---
-# roles/netbird-client/tasks/api_policies.yml
+# roles/netbird_client/tasks/api_policies.yml
 # Create Netbird policies for a customer via REST API
 # Required vars: netbird_api_url, netbird_api_token, nb_group_id, kunde_id
 # Optional vars: loco_admin_group_id, loco_backup_group_id, backup_enabled

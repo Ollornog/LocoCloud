@@ -1,5 +1,5 @@
 ---
-# roles/lxc-create/tasks/main.yml
+# roles/lxc_create/tasks/main.yml
 
 - name: Ensure LXC template is available
   ansible.builtin.import_tasks: template.yml

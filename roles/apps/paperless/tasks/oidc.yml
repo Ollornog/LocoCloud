@@ -47,6 +47,5 @@
     mode: "0600"
   notify: restart paperless
 
-- name: Restart Paperless to apply OIDC config
-  ansible.builtin.command: docker restart paperless
-  changed_when: true
+- name: Apply OIDC config immediately
+  ansible.builtin.meta: flush_handlers

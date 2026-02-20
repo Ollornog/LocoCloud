@@ -4,7 +4,7 @@
 
 pocketid_stack_path: "/opt/stacks/pocketid"
 pocketid_data_path: "/opt/stacks/pocketid/data"
-pocketid_image: "ghcr.io/pocket-id/pocket-id-monolith:latest"
+pocketid_image: "ghcr.io/pocket-id/pocket-id:v2"
 pocketid_port: 1411
 
 # Domain where PocketID is reachable (set per deployment)

@@ -1,5 +1,5 @@
 ---
-# roles/netbird-client/defaults/main.yml
+# roles/netbird_client/defaults/main.yml
 # Netbird VPN client installation and join
 
 # Setup key for joining the Netbird network

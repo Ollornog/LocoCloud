@@ -1,5 +1,5 @@
 ---
-# roles/netbird-client/tasks/api_setup_key.yml
+# roles/netbird_client/tasks/api_setup_key.yml
 # Generate a Netbird setup key for a customer via REST API
 # Required vars: netbird_api_url, netbird_api_token, nb_group_id, kunde_id
 # Optional vars: nb_setup_key_usage_limit (default 20), nb_setup_key_expires (default 86400)

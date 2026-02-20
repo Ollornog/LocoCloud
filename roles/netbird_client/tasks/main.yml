@@ -1,5 +1,5 @@
 ---
-# roles/netbird-client/tasks/main.yml
+# roles/netbird_client/tasks/main.yml
 # Install Netbird client and join the network
 
 - name: Install Netbird

@@ -26,7 +26,7 @@
     - role: base
       tags: [base]
 
-    - role: netbird-client
+    - role: netbird_client
       vars:
         netbird_setup_key: "{{ vault_master_netbird_setup_key | default('') }}"
         netbird_management_url: "{{ loco.netbird.manager_url }}"

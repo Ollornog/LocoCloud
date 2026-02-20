@@ -1,5 +1,5 @@
 ---
-# roles/netbird-client/tasks/join.yml
+# roles/netbird_client/tasks/join.yml
 # Join Netbird network with setup key
 
 - name: Check Netbird status
