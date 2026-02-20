@@ -64,6 +64,7 @@ SMTP_PORT="587"
 SMTP_USER=""
 SMTP_FROM=""
 GATEWAY_IP=""
+POCKETID_API_TOKEN=""
 WRITE_CONFIG=""
 
 REPO_DIR="/root/LocoCloud"
@@ -347,6 +348,10 @@ ok "Collections installiert"
 # =====================================================
 info "Phase 9: config/lococloudd.yml generieren"
 
+# Generate PocketID API token (STATIC_API_KEY)
+POCKETID_API_TOKEN=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 48 || true)
+ok "PocketID API-Token generiert (STATIC_API_KEY)"
+
 CONFIG_FILE="$REPO_DIR/config/lococloudd.yml"
 
 WRITE_CONFIG="true"
@@ -390,9 +395,10 @@ netbird:
   api_token: ""
 
 # --- PocketID (Admin-Instanz) ---
-# Token wird nach dem ersten Setup-Lauf hier eingetragen.
+# STATIC_API_KEY — automatisch generiert, kein manueller Schritt noetig.
+# PocketID nutzt Passkeys (WebAuthn), keine Passwoerter.
 pocketid:
-  api_token: ""
+  api_token: "${POCKETID_API_TOKEN}"
 
 # --- SMTP ---
 smtp:
@@ -600,25 +606,13 @@ if [ -z "$NETBIRD_IP" ]; then
   STEP=$((STEP + 1))
 fi
 
-echo -e "${BOLD}  ${STEP}. PocketID: Admin-Passkey registrieren + API-Key erstellen${NC}"
+echo -e "${BOLD}  ${STEP}. PocketID: Admin-Passkey registrieren${NC}"
 echo ""
 echo "     a) https://id.${ADMIN_DOMAIN} im Browser oeffnen"
 echo "     b) Admin-Account mit Passkey einrichten"
-echo "     c) Settings -> API Keys -> Neuen Key erstellen"
-echo "     d) API-Key in Config eintragen:"
-echo "        nano $REPO_DIR/config/lococloudd.yml"
-echo "        -> pocketid.api_token: \"<API-KEY>\""
 echo ""
-STEP=$((STEP + 1))
-
-echo -e "${BOLD}  ${STEP}. Playbook erneut ausfuehren (mit API-Key)${NC}"
-echo ""
-echo "     ansible-playbook $REPO_DIR/playbooks/setup-master.yml -i $REPO_DIR/inventories/master/"
-echo ""
-echo "     Beim zweiten Lauf passiert automatisch:"
-echo "       - Vaultwarden wird als OIDC-Client in PocketID registriert"
-echo "       - SSO-Login fuer Vaultwarden wird aktiviert"
-echo "       - Credentials werden in Vaultwarden gespeichert"
+echo "     Der API-Key wurde automatisch generiert (STATIC_API_KEY)."
+echo "     Registration ist deaktiviert (ALLOW_USER_SIGNUPS=disabled)."
 echo ""
 STEP=$((STEP + 1))
 
