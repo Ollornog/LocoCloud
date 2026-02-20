@@ -119,6 +119,12 @@ echo "ueberspringen und spaeter 'netbird up' manuell ausfuehren."
 echo ""
 ask "Netbird Management-URL (leer = ueberspringen):" NETBIRD_URL
 
+# https:// Fallback — wenn jemand nur die Domain eingibt
+if [ -n "$NETBIRD_URL" ] && [[ ! "$NETBIRD_URL" =~ ^https?:// ]]; then
+  NETBIRD_URL="https://${NETBIRD_URL}"
+  info "URL korrigiert: $NETBIRD_URL"
+fi
+
 if [ -n "$NETBIRD_URL" ]; then
   ask "Netbird Setup-Key:" NETBIRD_SETUP_KEY
   if [ -n "$NETBIRD_SETUP_KEY" ]; then
