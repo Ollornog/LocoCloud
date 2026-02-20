@@ -16,8 +16,8 @@ Diese Anleitung beschreibt die Ersteinrichtung des LocoCloud Master-Servers auf 
 ### Netzwerk
 
 - Ein Netbird-Management-Server muss bereits laufen (z.B. `netbird.example.com`)
-- DNS-Wildcard-Eintrag: `*.admin.example.com` → IP des Hetzner-Entry-Points
-- Der Hetzner-Entry-Point leitet per Caddy + Netbird an den Master-LXC weiter
+- DNS-Wildcard-Eintrag: `*.admin.example.com` → IP des Gateway-Servers
+- Der Gateway-Server leitet per Caddy + Netbird an den Master weiter
 
 ### Auf dem Admin-Rechner
 
@@ -52,7 +52,7 @@ Datei ausfüllen:
 |------|-------------|
 | `operator.name` | Dein Name |
 | `operator.email` | Admin-E-Mail (wird PocketID-Admin) |
-| `operator.domain` | Basis-Domain (z.B. `loco.ollornog.de`) |
+| `operator.domain` | Basis-Domain (z.B. `admin.example.com`) |
 | `urls.*` | Subdomains für Admin-Dienste |
 | `netbird.manager_url` | URL des Netbird-Management-Servers |
 | `netbird.api_token` | Netbird API-Token |
@@ -73,7 +73,7 @@ all:
       ansible_host: <NETBIRD-IP-DES-MASTERS>
       ansible_user: root  # Erster Lauf als root, danach srvadmin
       is_lxc: true        # Falls LXC-Container
-      server_role: infra
+      server_roles: [master]
 ```
 
 Datei `inventories/master/group_vars/all.yml` bearbeiten:
@@ -152,9 +152,9 @@ Nach der Einrichtung sind folgende Dienste erreichbar:
 
 ---
 
-## Hetzner-Entry-Point (Caddy)
+## Admin-Gateway (Caddy)
 
-Der Hetzner-vServer leitet `*.admin.example.com` per Caddy an den Master-LXC weiter:
+Der Gateway-Server leitet `*.admin.example.com` per Caddy an den Master weiter:
 
 ```
 *.admin.example.com {
@@ -167,7 +167,7 @@ Der Hetzner-vServer leitet `*.admin.example.com` per Caddy an den Master-LXC wei
 }
 ```
 
-DNS: `*.admin.example.com` → A-Record auf die Hetzner-IP.
+DNS: `*.admin.example.com` → A-Record auf die Public IP des Gateway-Servers.
 
 ---
 

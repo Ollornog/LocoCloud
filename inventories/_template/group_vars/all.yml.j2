@@ -8,8 +8,7 @@ kunde_name: "{{ kunde_name }}"
 kunde_domain: "{{ kunde_domain }}"
 kunde_id: "{{ kunde_id }}"
 
-# --- Deployment variant ---
-variante: "{{ variante }}"           # hybrid | cloud_only | lokal_only
+# --- Isolation ---
 isolation_mode: "single_lxc"         # single_lxc | lxc_per_app
 
 # --- Admin user ---
@@ -17,9 +16,7 @@ admin_user: "srvadmin"
 admin_ssh_pubkeys: []  # Add master SSH public key
 
 # --- Netbird ---
-netbird_setup_keys:
-  online: "{{ '{{ vault_netbird_key_online }}' }}"
-  lokal: "{{ '{{ vault_netbird_key_lokal }}' }}"
+netbird_setup_key: "{{ '{{ vault_netbird_setup_key }}' }}"
 netbird_group: "kunde-{{ kunde_id }}"
 
 # --- Customer users ---
@@ -36,8 +33,6 @@ apps_enabled: []
 #    subdomain: "cloud"
 #    port: 8080
 #    image: "nextcloud:29"
-#    target: "lokal"               # lokal | online
-#    netbird_ip: ""                # Netbird IP of the LXC (lxc_per_app)
 #    oidc_enabled: true
 #    oidc_redirect_path: "/apps/user_oidc/code"
 #    needs_db: true
@@ -59,7 +54,7 @@ backup:
     keep_weekly: 4
     keep_monthly: 6
 
-# --- DynDNS (lokal_only only) ---
+# --- DynDNS (optional) ---
 dyndns:
   enabled: false
   provider: "master"

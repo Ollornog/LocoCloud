@@ -38,25 +38,25 @@
           last_name: "{{ display_name.split(' ')[1:] | join(' ') | default('') }}"
         status_code: [200, 201]
       register: pocketid_user_result
-      when: server_role in ['online', 'gateway', 'all_in_one']
+      when: "'customer_master' in server_roles"
 
     # Update Tinyauth whitelist
     - name: Read current Tinyauth .env
       ansible.builtin.slurp:
         src: "/opt/stacks/tinyauth/.env"
       register: tinyauth_env_raw
-      when: server_role in ['online', 'gateway', 'all_in_one']
+      when: "'customer_master' in server_roles"
 
     - name: Parse current whitelist
       ansible.builtin.set_fact:
         current_whitelist: "{{ (tinyauth_env_raw.content | b64decode).split('\n') | select('match', '^OAUTH_WHITELIST=') | first | regex_replace('^OAUTH_WHITELIST=', '') }}"
-      when: server_role in ['online', 'gateway', 'all_in_one']
+      when: "'customer_master' in server_roles"
 
     - name: Add email to whitelist
       ansible.builtin.set_fact:
         updated_whitelist: "{{ current_whitelist + ',' + email }}"
       when:
-        - server_role in ['online', 'gateway', 'all_in_one']
+        - "'customer_master' in server_roles"
         - email not in current_whitelist
 
     - name: Update Tinyauth .env with new whitelist

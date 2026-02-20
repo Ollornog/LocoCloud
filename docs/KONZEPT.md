@@ -2,18 +2,17 @@
 
 ## Konzept & Bauplan für das GitHub-Repository
 
-**Repo:** `github.com/Ollornog/LocoCloud` (privat, Ziel: public)
-**Version:** 3.3 — Februar 2026
-**Autor:** Daniel (ollornog.de)
+**Repo:** `github.com/Ollornog/LocoCloud`
+**Version:** 4.0 — Februar 2026
 
 ---
 
 ## Inhaltsverzeichnis
 
 1. [Systemübersicht & Philosophie](#1-systemübersicht--philosophie)
-2. [Abgrenzung: Privat vs. LocoCloud](#2-abgrenzung-privat-vs-lococloudd)
+2. [Server-Rollen & Architektur](#2-server-rollen--architektur)
 3. [Admin-Infrastruktur (Master-Server)](#3-admin-infrastruktur-master-server)
-4. [Deployment-Varianten pro Kunde](#4-deployment-varianten-pro-kunde)
+4. [Deployment-Szenarien](#4-deployment-szenarien)
 5. [Isolation: Docker vs. LXC pro App](#5-isolation-docker-vs-lxc-pro-app)
 6. [Netzwerk-Architektur (Netbird)](#6-netzwerk-architektur-netbird)
 7. [Authentifizierung & Autorisierung](#7-authentifizierung--autorisierung)
@@ -56,89 +55,115 @@ Ein Ansible-basiertes Deployment-System in einem Git-Repository, das schlüsself
 
 - Kein SaaS — Jeder Kunde hat eigene Server, eigene Instanzen, eigene Daten
 - Kein Shared Hosting — Keine geteilte Infrastruktur zwischen Kunden
-- Kein Cloud-Provider — Kunden besitzen ihre Server (oder mieten sie bei Hetzner etc.)
+- Kein Cloud-Provider — Kunden besitzen ihre Server (oder mieten sie selbst)
 
 ---
 
-## 2. Abgrenzung: Privat vs. LocoCloud
+## 2. Server-Rollen & Architektur
 
-### Komplett getrennte Welten
+### 2.1 Server-Rollen
 
-Daniels privates Setup (ollornog.de) und LocoCloud teilen sich **NICHTS** außer dem Netbird-Management-Server. Das ist die einzige Berührungsstelle.
+LocoCloud definiert folgende Server-Rollen. Jeder Host im Inventar bekommt eine oder mehrere Rollen als Liste (`server_roles`). Rollen können auf einem Host kombiniert werden.
+
+| Rolle | Zweck | Typische Dienste |
+|-------|-------|------------------|
+| `master` | Betreiber-Administration | Ansible, PocketID, Tinyauth, Vaultwarden, Semaphore, Zabbix |
+| `netbird_server` | VPN-Management (optional, kann extern sein) | Netbird Management + Relay + Signal |
+| `gateway` | Öffentlicher Entry-Point pro Kunde | Caddy (TLS-Terminierung), Reverse Proxy |
+| `customer_master` | Kunden-Auth & -Verwaltung | PocketID, Tinyauth (+ optional Vaultwarden) |
+| `app_server` | Kunden-Applikationen | Nextcloud, Paperless, etc. + Datenbanken |
+| `backup_server` | Backup-Ziel | Restic-Repos (übergreifend oder kundenspezifisch) |
+| `proxmox` | Hypervisor (nur API-Zugang, kein Deployment) | LXC-Erstellung via Proxmox API |
+
+### 2.2 Multi-Role per Host
+
+Ein Host kann mehrere Rollen gleichzeitig haben:
+
+```yaml
+# Beispiel: Gateway + Kunden-Auth auf einem Server
+server_roles: [gateway, customer_master]
+
+# Beispiel: Alles auf einem Server
+server_roles: [gateway, customer_master, app_server]
+```
+
+Playbooks prüfen Rollen mit:
+```yaml
+when: "'gateway' in server_roles"
+when: "'customer_master' in server_roles"
+```
+
+### 2.3 Hosting-Typ
+
+Jeder Host hat einen `hosting_type`, der bestimmt wo er läuft:
+
+| Typ | Bedeutung |
+|-----|-----------|
+| `cloud` | Cloud-Server / VPS (eigene öffentliche IP) |
+| `proxmox_lxc` | LXC-Container auf einem Proxmox-Host |
+
+### 2.4 Architektur-Übersicht
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    DANIELS PRIVAT                            │
-│                                                             │
-│  Hetzner vServer (privat)         Proxmox Homeserver        │
-│  ├── Caddy (ollornog.de)          ├── Cloud-LXC (110)       │
-│  ├── PocketID (id.ollornog.de)    │   ├── Nextcloud         │
-│  ├── Tinyauth (auth.ollornog.de)  │   └── Paperless         │
-│  ├── Vaultwarden (vault)          └── Sonstige private LXCs │
-│  ├── Documenso (sign)                                       │
-│  ├── Pingvin (share)                                        │
-│  ├── Website (ollornog.de)                                  │
-│  └── *** Netbird Manager *** ←── EINZIGE BERÜHRUNG          │
-│         (netbird.ollornog.de)                               │
-└─────────────────────────────────────────────────────────────┘
-           │
-           │  Netbird VPN (geteilter Manager, aber getrennte Gruppen+Policies)
-           │
+│  Master-Server (Betreiber)                                   │
+│  ├── Ansible + Git (LocoCloud-Repo)                          │
+│  ├── PocketID (Admin-SSO)                                    │
+│  ├── Tinyauth (Admin Forward-Auth)                           │
+│  ├── Vaultwarden (Admin-Credentials, alle Kunden)            │
+│  ├── Semaphore (Ansible Web-UI)                              │
+│  ├── Zabbix (Zentrales Monitoring)                           │
+│  └── Netbird Client                                          │
+│                                                              │
+│  Netbird-Server (optional self-hosted oder extern)           │
+│  └── Netbird Management + Relay + Signal                     │
+│                                                              │
+│  Backup-Server(s) (übergreifend oder pro Kunde)              │
+│  └── Restic-Repos                                            │
+└──────────────────────────────────────────────────────────────┘
+           │ Netbird VPN
 ┌──────────▼──────────────────────────────────────────────────┐
-│                      LOCOCLOUDD                              │
-│                                                             │
-│  Master-Server (LXC auf Daniels Proxmox)                    │
-│  ├── Caddy (loco.ollornog.de)        ← EIGENE Instanz      │
-│  ├── PocketID (id.loco.ollornog.de)  ← EIGENE Instanz      │
-│  ├── Tinyauth (auth.loco.ollornog.de)← EIGENE Instanz      │
-│  ├── Vaultwarden (vault.loco.ollornog.de) ← EIGENE Instanz │
-│  ├── Semaphore (deploy.loco.ollornog.de)                    │
-│  ├── Zabbix (monitor.loco.ollornog.de)                      │
-│  ├── Ansible + Git (LocoCloud Repo)                         │
-│  └── Netbird Client                                         │
-│                                                             │
-│  Backup-Server (LXC oder Hetzner Storage Box)               │
-│                                                             │
-│  Pro Kunde:                                                 │
-│  ├── Hetzner vServer (NEUER, separater Server)              │
-│  ├── Proxmox beim Kunden (optional)                         │
-│  └── ...                                                    │
-└─────────────────────────────────────────────────────────────┘
+│  Pro Kunde:                                                  │
+│                                                              │
+│  Gateway-Server (öffentlicher Entry-Point)                   │
+│  ├── Caddy (TLS-Terminierung)                                │
+│  └── Netbird Client                                          │
+│                                                              │
+│  Customer-Master-Server (Kunden-Auth)                        │
+│  ├── PocketID (Kunden-SSO)                                   │
+│  ├── Tinyauth (Kunden Forward-Auth)                          │
+│  └── Netbird Client                                          │
+│      (oft kombiniert mit Gateway auf einem Host)             │
+│                                                              │
+│  App-Server(s) (ein oder mehrere)                            │
+│  ├── App-Container (Nextcloud, Paperless, etc.)              │
+│  ├── Datenbanken                                             │
+│  └── Netbird Client                                          │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-### Was geteilt wird
+> **Gateway und Customer-Master** werden in der Praxis oft auf demselben Host kombiniert (`server_roles: [gateway, customer_master]`). Bei Bedarf können sie aber getrennt werden.
 
-| Komponente | Geteilt? | Details |
-|------------|----------|---------|
-| Netbird Manager | ✓ | `netbird.ollornog.de` — der einzige Berührungspunkt. Isolation über Gruppen/Policies |
-| Hetzner vServer (privat) | ✗ | Kunden bekommen eigene Hetzner-Server |
-| PocketID | ✗ | Eigene Instanz auf Master + eigene Instanz pro Kunde |
-| Vaultwarden | ✗ | Eigene Instanz auf Master für Admin-Credentials |
-| Tinyauth | ✗ | Eigene Instanz auf Master + eigene Instanz pro Kunde |
-| Caddy | ✗ | Eigene Instanz auf Master + eigene Instanz pro Kunde/Server |
-| Proxmox Homeserver | Physisch ja | Gleiche Hardware, aber LXCs sind isoliert (Master-LXC ≠ Cloud-LXC) |
+### 2.5 Netbird-Server
 
-### Warum der Netbird-Manager geteilt wird
+Der Netbird-Server kann **extern betrieben** (Default) oder **self-hosted** werden:
 
-Einen zweiten Netbird-Manager aufzusetzen wäre möglich, aber unnötig:
-- Netbird-Gruppen + Policies isolieren zuverlässig
-- Private und LocoCloud-Peers sehen sich nicht (keine Cross-Policy)
-- Ein Manager = eine Verwaltung, weniger Overhead
+- **Extern:** Nur URL + API-Token in `config/lococloudd.yml` konfigurieren. Keine Ansible-Rolle nötig.
+- **Self-Hosted:** Optionale Rolle `netbird_server` deployt einen eigenen Netbird-Management-Server. Kann auf dem Master, dem Gateway oder einem eigenen Server laufen.
 
 ---
 
 ## 3. Admin-Infrastruktur (Master-Server)
 
-### 3.1 Master-Server (LXC auf Daniels Proxmox)
+### 3.1 Master-Server
 
-Dedizierter LXC-Container, komplett getrennt von Daniels privatem Cloud-LXC (110).
+Dedizierter Server oder LXC für die Betreiber-Administration.
 
-**Spezifikationen:**
-- **OS:** Debian 13 (Trixie), unprivileged, nesting=1
+**Empfohlene Spezifikationen:**
+- **OS:** Debian 13 (Trixie), unprivileged LXC mit nesting=1 (oder VM/VPS)
 - **RAM:** 8192 MB (Semaphore + Zabbix + Vaultwarden + PocketID + Ansible)
 - **CPU:** 4 Cores
-- **Disk:** 64 GB auf NVMe (local-lvm)
-- **Netzwerk:** Netbird-Client + LAN-Zugang (192.168.3.x)
+- **Disk:** 64 GB
 
 ### 3.2 Dienste auf dem Master
 
@@ -147,45 +172,42 @@ Alle Dienste laufen als Docker Container auf `127.0.0.1`. Caddy terminiert TLS.
 | Dienst | Subdomain | Port (intern) | Zweck |
 |--------|-----------|---------------|-------|
 | Caddy | — | Host Network | Reverse Proxy für alle Admin-Dienste |
-| PocketID | id.loco.ollornog.de | 127.0.0.1:1411 | OIDC-Provider für Admin-Dienste |
-| Tinyauth | auth.loco.ollornog.de | 127.0.0.1:9090 | Forward-Auth für Admin-Dienste |
-| Vaultwarden | vault.loco.ollornog.de | 127.0.0.1:8222 | Credential-Management (alle Kunden) |
-| Semaphore | deploy.loco.ollornog.de | 127.0.0.1:3000 | Ansible Web-UI |
-| Zabbix | monitor.loco.ollornog.de | 127.0.0.1:8080 | Zentrales Monitoring |
+| PocketID | id.admin.example.com | 127.0.0.1:1411 | OIDC-Provider für Admin-Dienste |
+| Tinyauth | auth.admin.example.com | 127.0.0.1:9090 | Forward-Auth für Admin-Dienste |
+| Vaultwarden | vault.admin.example.com | 127.0.0.1:8222 | Credential-Management (alle Kunden) |
+| Semaphore | deploy.admin.example.com | 127.0.0.1:3000 | Ansible Web-UI |
+| Zabbix | monitor.admin.example.com | 127.0.0.1:8080 | Zentrales Monitoring |
 | Ansible | — | — | Direkt installiert (apt/pip) |
 | Git | — | — | LocoCloud-Repo (geklont) |
 | msmtp | — | — | Alert-Mails |
 | Netbird Client | — | — | VPN zu allen Kunden |
 
-### 3.3 Subdomain-Schema: `*.loco.ollornog.de`
+### 3.3 Subdomain-Schema
 
-Alle Admin-Dienste laufen unter `loco.ollornog.de` als Sub-Subdomain:
+Alle Admin-Dienste laufen unter einer konfigurierbaren Admin-Subdomain (`admin.subdomain` in `lococloudd.yml`):
 
 ```
-loco.ollornog.de           → Landingpage / Dashboard (optional)
-id.loco.ollornog.de        → PocketID (Admin-SSO)
-auth.loco.ollornog.de      → Tinyauth (Admin Forward-Auth)
-vault.loco.ollornog.de     → Vaultwarden (Admin-Credentials)
-deploy.loco.ollornog.de    → Semaphore (Ansible-UI)
-monitor.loco.ollornog.de   → Zabbix (Monitoring)
+admin.example.com           → Landingpage / Dashboard (optional)
+id.admin.example.com        → PocketID (Admin-SSO)
+auth.admin.example.com      → Tinyauth (Admin Forward-Auth)
+vault.admin.example.com     → Vaultwarden (Admin-Credentials)
+deploy.admin.example.com    → Semaphore (Ansible-UI)
+monitor.admin.example.com   → Zabbix (Monitoring)
 ```
 
 **DNS-Setup:**
-- Wildcard A-Record: `*.loco.ollornog.de → 46.225.165.213` (Daniels Hetzner-Server, A-Record bei UDAG)
+- Wildcard A-Record: `*.admin.example.com → <Gateway-IP>`
 
-**Entscheidung:** Der Master-LXC auf Daniels Proxmox ist NICHT direkt öffentlich erreichbar. Stattdessen bekommt der Caddy auf Daniels bestehendem Hetzner-Server (46.225.165.213) zusätzliche Routen für `*.loco.ollornog.de`.
+**Traffic-Flow:** Der Master muss öffentlich erreichbar sein, entweder direkt (eigene IP) oder über einen Gateway-Server (Caddy leitet via Netbird weiter):
 
-**Traffic-Flow:** Internet → Hetzner Caddy (46.225.165.213) → Netbird → Master-LXC
-
-Das ist die pragmatischste Lösung:
-- Kein zusätzlicher Server nötig
-- Kein Sicherheitsrisiko: Master-LXC ist nur über Netbird erreichbar, Caddy auf Hetzner leitet nur weiter
-- Für Kunden mit eigenem Hetzner-Server kann alternativ der Traffic über deren Server geroutet werden
+```
+Internet → Gateway-Caddy (öffentliche IP) → Netbird → Master-Server
+```
 
 ### 3.4 TLS für Master-Dienste
 
-- Caddy auf Daniels Hetzner (46.225.165.213) terminiert TLS für `*.loco.ollornog.de`
-- Leitet über Netbird an den Master-LXC weiter (HTTP, kein TLS nötig im Tunnel)
+- Caddy auf dem öffentlichen Gateway terminiert TLS
+- Leitet über Netbird an den Master weiter (HTTP, kein TLS nötig im Tunnel)
 - Master-Caddy lauscht auf HTTP und fügt Header hinzu
 
 ### 3.5 Repo auf dem Master
@@ -194,7 +216,7 @@ Das Repo ist öffentlich auf GitHub. Setup-Flow für den Master:
 
 ```bash
 # 1. Repo klonen (öffentlich, kein Key nötig für read-only)
-git clone https://github.com/Ollornog/LocoCloud.git /opt/lococloudd
+git clone https://github.com/YourUser/LocoCloud.git /opt/lococloudd
 
 # 2. Config aus Example erstellen und anpassen
 cd /opt/lococloudd
@@ -219,27 +241,32 @@ GIT_SSH_COMMAND="ssh -i /root/.ssh/github-deploy-key" git pull origin main
 
 Änderungen werden primär lokal gemacht, gepusht, und auf dem Master per `git pull` aktualisiert (manuell oder per Semaphore-Task).
 
-### 3.6 Backup-Server (Admin-Seite)
+### 3.6 Backup-Server
 
-Dedizierter LXC oder externe Storage für Kunden-Backups:
+Dedizierter Server oder LXC für Kunden-Backups. Kann übergreifend oder kundenspezifisch sein.
 
-| Option | Standort | Kapazität | Zweck |
-|--------|----------|-----------|-------|
-| Backup-LXC auf Proxmox | Lokal (SATA SSD) | 3.7 TB verfügbar | Primäres Backup-Ziel |
-| Hetzner Storage Box | Hetzner DC (EU) | Skalierbar (ab 1TB) | Off-Site-Backup |
-| Zweiter Hetzner vServer | Hetzner DC (EU) | Je nach Plan | Redundanz |
+| Option | Beschreibung |
+|--------|-------------|
+| Backup-LXC auf Proxmox | Lokales Backup-Ziel auf eigener Hardware |
+| Cloud Storage Box | Off-Site-Backup bei einem Provider (z.B. Storage Box) |
+| Eigener Cloud-Server | Dedizierter VPS als Backup-Ziel |
+
+Backup-Ziele sind **dynamisch pro Kunde und pro App/Dienst** konfigurierbar. Mehrere Ziele gleichzeitig möglich.
 
 ---
 
-## 4. Deployment-Varianten pro Kunde
+## 4. Deployment-Szenarien
 
-### 4.1 Variante A: Cloud-Only (Alles auf Hetzner)
+Es gibt keine festen "Varianten" mehr. Stattdessen definiert der Betreiber im Inventar frei, welche Server welche Rollen übernehmen. Hier typische Szenarien als Orientierung:
+
+### 4.1 Szenario: Alles auf einem Server
 
 ```
 Internet (HTTPS)
     │
     ▼
-Hetzner vServer (firma.de)      ← NEUER Server, NICHT Daniels privater!
+Cloud-Server (firma.de)
+    server_roles: [gateway, customer_master, app_server]
     ├── Caddy (TLS, forward_auth → Tinyauth)
     ├── PocketID (id.firma.de)
     ├── Tinyauth (auth.firma.de)
@@ -249,75 +276,70 @@ Hetzner vServer (firma.de)      ← NEUER Server, NICHT Daniels privater!
     └── Zabbix Agent
 ```
 
-**Einfachste Variante.** Alles auf einem Server. Caddy terminiert TLS, Tinyauth schützt alles. Alle Dienste als Docker Container.
+**Einfachstes Setup.** Ein Server mit allen Rollen kombiniert.
 
-### 4.2 Variante B: Hybrid (Hetzner + Lokaler Proxmox)
+### 4.2 Szenario: Cloud-Gateway + lokale App-Server
 
 ```
 Internet (HTTPS)
     │
     ▼
-Hetzner vServer (firma.de)      ← NEUER Server pro Kunde (= Gateway/Entry-Point)
+Cloud-Server (firma.de)
+    server_roles: [gateway, customer_master]
     ├── Caddy (TLS, forward_auth → Tinyauth)
     ├── PocketID (id.firma.de)
     ├── Tinyauth (auth.firma.de)
-    ├── Optionale Apps auf Hetzner (Docker)
     ├── Netbird Client
     │
     │   Netbird VPN Tunnel (WireGuard-verschlüsselt)
     │
-    ├──► LXC "nextcloud" (100.114.x.1:8080)   ← Eigener Netbird-Client
-    ├──► LXC "paperless" (100.114.x.2:8081)    ← Eigener Netbird-Client
-    └──► LXC "vaultwarden" (100.114.x.3:8222)  ← Eigener Netbird-Client
+    ├──► LXC "nextcloud" (100.x.x.1:8080)   ← Eigener Netbird-Client
+    ├──► LXC "paperless" (100.x.x.2:8081)    ← Eigener Netbird-Client
+    └──► LXC "vaultwarden" (100.x.x.3:8222)  ← Eigener Netbird-Client
          (alle auf Proxmox beim Kunden)
 ```
 
-**Kein lokaler Caddy, kein Gateway-LXC, keine Proxmox-Bridge!** Der Hetzner-Caddy routet direkt über Netbird an jeden einzelnen App-LXC. Jeder LXC hat seinen eigenen Netbird-Client.
+**Kein lokaler Caddy, kein Gateway-LXC, keine Proxmox-Bridge!** Der Gateway-Caddy routet direkt über Netbird an jeden einzelnen App-Server. Jeder hat seinen eigenen Netbird-Client.
 
 **Traffic-Flow:**
-1. Mitarbeiter → HTTPS → Hetzner vServer
+1. Mitarbeiter → HTTPS → Gateway-Server
 2. Caddy: TLS-Terminierung + `forward_auth` → Tinyauth
-3. Lokale Apps: `reverse_proxy` direkt an Netbird-IP des jeweiligen LXC
-4. Online-Apps: `reverse_proxy` auf `127.0.0.1:PORT`
+3. Lokale Apps: `reverse_proxy` direkt an Netbird-IP des jeweiligen App-Servers
+4. Apps auf dem Gateway: `reverse_proxy` auf `127.0.0.1:PORT`
 
-**Kein TLS auf den lokalen LXCs nötig!** Caddy auf Hetzner terminiert TLS, Netbird-Tunnel ist WireGuard-verschlüsselt. Das eliminiert den Certbot+rsync+Pull-Mechanismus komplett.
+**Kein TLS auf den lokalen Servern nötig!** Caddy auf dem Gateway terminiert TLS, Netbird-Tunnel ist WireGuard-verschlüsselt.
 
-**Bei `single_lxc`-Modus:** Nur ein LXC mit allem, ein Netbird-Client, ein Peer. Caddy auf Hetzner routet alles an eine einzige Netbird-IP.
+**Bei `single_lxc`-Modus:** Nur ein LXC mit allem, ein Netbird-Client, ein Peer. Gateway-Caddy routet alles an eine einzige Netbird-IP.
 
-### 4.3 Variante C: Lokal-Only (Alles beim Kunden)
+### 4.3 Szenario: Komplett lokal
 
 ```
 Internet (HTTPS)
     │
     ▼
-Kunden-Router (Port-Forward 80/443 oder DynDNS)
+Kunden-Router (Port-Forward 80/443, optional DynDNS)
     │
     ▼
 Proxmox beim Kunden
-    ├── LXC "gateway" (exponiert, Port-Forward Ziel)
+    ├── LXC "gateway"
+    │   server_roles: [gateway, customer_master]
     │   ├── Docker: Caddy (TLS via Let's Encrypt)
     │   ├── Docker: PocketID (id.firma.de)
     │   ├── Docker: Tinyauth (auth.firma.de)
-    │   └── Netbird Client (100.114.x.0)
+    │   └── Netbird Client (100.x.x.0)
     │
     │   Netbird-Tunnel (lokal, trotzdem verschlüsselt)
     │
-    ├── LXC "nextcloud" + Netbird (100.114.x.1)
-    ├── LXC "paperless" + Netbird (100.114.x.2)
-    └── LXC "infra" + Netbird (100.114.x.4)
+    ├── LXC "nextcloud"  [app_server] + Netbird (100.x.x.1)
+    ├── LXC "paperless"  [app_server] + Netbird (100.x.x.2)
+    └── LXC "infra"      [app_server] + Netbird (100.x.x.3)
 ```
 
-> **Nur bei Lokal-Only gibt es einen Gateway-LXC.** Dieser übernimmt die Rolle, die bei Hybrid/Cloud der Hetzner hat: Caddy + PocketID + Tinyauth. Routing zu den App-LXCs läuft über Netbird — konsistent mit den anderen Varianten.
-
-**Voraussetzung:** Feste IP oder DynDNS + Port-Forward.
+**Voraussetzung:** Feste IP oder DynDNS + Port-Forward. Optional kann der Gateway auch auf einem externen Server laufen.
 
 ### 4.4 Der öffentliche Einstiegspunkt
 
-**Immer ist der öffentlich erreichbare Server der Single-Entry-Point.** Der Caddy auf diesem Server routet zu allen anderen Servern:
-
-- **Cloud-Only:** Hetzner ist Entry-Point, alles lokal
-- **Hybrid:** Hetzner ist Entry-Point, routet via Netbird zu lokalem Proxmox
-- **Lokal-Only:** Proxmox-LXC ist Entry-Point (via DynDNS/Port-Forward)
+**Immer ist der Host mit der `gateway`-Rolle der Single-Entry-Point.** Der Caddy auf diesem Server routet zu allen anderen Servern über Netbird.
 
 ---
 
@@ -325,11 +347,11 @@ Proxmox beim Kunden
 
 ### 5.1 Das Problem
 
-Auf Hetzner-Servern (Cloud-Only oder Hybrid-Online-Teil): **Alles Docker.** Kein Proxmox, kein LXC. Einfach, bewährt.
+Auf Cloud-Servern (Gateway/All-in-One): **Alles Docker.** Kein Proxmox, kein LXC. Einfach, bewährt.
 
 Auf dem lokalen Proxmox beim Kunden gibt es zwei Ansätze:
 
-### 5.2 Option 1: Ein LXC, alles Docker (wie auf Hetzner)
+### 5.2 Option 1: Ein LXC, alles Docker (wie auf Cloud-Servern)
 
 ```
 Proxmox
@@ -343,7 +365,7 @@ Proxmox
 ```
 
 **Vorteile:**
-- Einheitlich mit Hetzner-Variante (selbe Ansible-Rollen)
+- Einheitlich mit Cloud-Server-Setup (selbe Ansible-Rollen)
 - Einfacheres Ansible (ein Host = ein Inventar-Eintrag)
 - Docker Compose verwaltet Abhängigkeiten
 - Nur ein Netbird-Peer nötig
@@ -372,11 +394,11 @@ Proxmox
     └── Netbird Client (100.114.x.4)
 ```
 
-**Jeder LXC bekommt seinen eigenen Netbird-Client** und damit eine eigene Netbird-IP. Es gibt KEINEN Gateway-LXC auf dem Proxmox — der Kunden-Hetzner-Server ist der Gateway!
+**Jeder LXC bekommt seinen eigenen Netbird-Client** und damit eine eigene Netbird-IP. Es gibt KEINEN Gateway-LXC auf dem Proxmox — der Gateway-Server ist der Entry-Point!
 
 **Traffic-Flow (Hybrid):**
 ```
-Internet → Hetzner vServer (Caddy + Auth)
+Internet → Cloud-Server (Caddy + Auth)
                │
                ├── Netbird → 100.114.x.1:8080  (LXC: Nextcloud)
                ├── Netbird → 100.114.x.2:8081  (LXC: Paperless)
@@ -396,7 +418,7 @@ Internet → Kunden-Router (Port-Forward)
                └── Netbird → 100.114.x.3:8222  (LXC: Vaultwarden)
 ```
 
-> **Bei Lokal-Only** braucht man einen Gateway-LXC mit Caddy, weil es keinen Hetzner gibt. Dieser Gateway-LXC hat auch einen Netbird-Client und routet über Netbird an die App-LXCs.
+> **Bei komplett lokaler Installation** braucht man einen Gateway-LXC mit Caddy, weil es keinen externen Cloud-Server gibt. Dieser Gateway-LXC hat auch einen Netbird-Client und routet über Netbird an die App-LXCs.
 
 **Vorteile:**
 - Echte Prozess-Isolation auf Kernel-Ebene (LXC-Namespaces)
@@ -416,14 +438,14 @@ Internet → Kunden-Router (Port-Forward)
 
 ### 5.4 Warum KEIN Gateway-LXC / KEINE Proxmox-Bridge
 
-Bei Hybrid- und Cloud-Only-Varianten ist der **Kunden-Hetzner-Server der Gateway**. Der Caddy auf dem Hetzner terminiert TLS und leitet über Netbird direkt an die einzelnen App-LXCs. Das bedeutet:
+Wenn ein externer Gateway-Server existiert, übernimmt dieser die TLS-Terminierung und leitet über Netbird direkt an die einzelnen App-LXCs. Das bedeutet:
 
 - **Keine Proxmox-Bridge nötig** — kein vmbr1, kein internes Subnetz, kein Routing
-- **Kein zusätzlicher Caddy auf dem Proxmox** — der Hetzner-Caddy macht alles
+- **Kein zusätzlicher Caddy auf dem Proxmox** — der Gateway-Caddy macht alles
 - **Kein Single Point of Failure** auf Proxmox-Seite — jeder LXC ist eigenständig erreichbar
 - **Direkter Ansible-Zugriff** — Master-Server erreicht jeden LXC direkt über Netbird (kein SSH-Hopping über Gateway)
 
-Die einzige Ausnahme ist **Lokal-Only** — dort muss ein Gateway-LXC mit Caddy existieren, weil es keinen Hetzner gibt.
+Wenn kein externer Gateway existiert (komplett lokal), wird ein Gateway-LXC auf dem Proxmox erstellt.
 
 ### 5.5 Konfigurierbare Isolation im Inventar
 
@@ -539,24 +561,25 @@ Master-LXC ──Netbird──► Proxmox-Host ──pct exec──► Neuer LXC
 
 > **Warum `pct exec`?** Zuverlässiger als Cloud-Init (nicht alle Templates unterstützen es) und flexibler als der `pubkey`-Parameter des Proxmox-Moduls (der nur SSH-Keys kann, kein Netbird-Install).
 
-### 5.7 Netzwerk-Übersicht bei LXC-pro-App (Hybrid)
+### 5.7 Netzwerk-Übersicht bei LXC-pro-App
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Hetzner vServer (firma.de)                                  │
-│ ├── Caddy (TLS, forward_auth → Tinyauth)                   │
-│ ├── PocketID (id.firma.de)                                  │
-│ ├── Tinyauth (auth.firma.de)                                │
-│ └── Netbird Client (100.114.a.0)                            │
-│         │                                                   │
-│         │ Netbird WireGuard Tunnel (verschlüsselt)          │
-└─────────┼───────────────────────────────────────────────────┘
+│ Gateway-Server (firma.de)                                    │
+│ server_roles: [gateway, customer_master]                     │
+│ ├── Caddy (TLS, forward_auth → Tinyauth)                    │
+│ ├── PocketID (id.firma.de)                                   │
+│ ├── Tinyauth (auth.firma.de)                                 │
+│ └── Netbird Client (100.x.x.0)                              │
+│         │                                                    │
+│         │ Netbird WireGuard Tunnel (verschlüsselt)           │
+└─────────┼────────────────────────────────────────────────────┘
           │
           ├───────────────────────────────────────────────┐
           │                                               │
 ┌─────────▼─────────────┐  ┌──────────────▼──────────────┐
-│ Proxmox beim Kunden   │  │                             │
-│                       │  │                             │
+│ App-Server (LXC)      │  │                             │
+│                       │  │  App-Server (LXC)           │
 │ LXC: nextcloud        │  │  LXC: paperless             │
 │ ├── Netbird (x.1)     │  │  ├── Netbird (x.2)          │
 │ ├── Docker: Nextcloud  │  │  ├── Docker: Paperless      │
@@ -566,34 +589,30 @@ Master-LXC ──Netbird──► Proxmox-Host ──pct exec──► Neuer LXC
 │                       │  │      Port: 8081              │
 └───────────────────────┘  └──────────────────────────────┘
 
-Caddyfile auf Hetzner:
-  cloud.firma.de → reverse_proxy 100.114.x.1:8080
-  paper.firma.de → reverse_proxy 100.114.x.2:8081
+Caddyfile auf dem Gateway:
+  cloud.firma.de → reverse_proxy 100.x.x.1:8080
+  paper.firma.de → reverse_proxy 100.x.x.2:8081
 ```
 
-**Kein TLS auf den LXCs nötig** — Netbird-Tunnel ist WireGuard-verschlüsselt, Caddy auf Hetzner terminiert TLS für den Endbenutzer.
+**Kein TLS auf den App-Servern nötig** — Netbird-Tunnel ist WireGuard-verschlüsselt, Caddy auf dem Gateway terminiert TLS für den Endbenutzer.
 
-**Kein lokaler Caddy nötig** — der Hetzner-Caddy routet direkt an jeden LXC.
+**Kein lokaler Caddy nötig** — der Gateway-Caddy routet direkt an jeden App-Server.
 
-**Alle Docker-Container binden auf 127.0.0.1** — Netbird-Traffic kommt über `wt0` Interface auf dem LXC an und wird vom Docker-Container auf localhost bedient. Caddy auf Hetzner erreicht den Port über die Netbird-IP.
+**Alle Docker-Container binden auf 0.0.0.0** — Netbird-Traffic kommt über `wt0` Interface an. Absicherung über UFW: App-Port nur auf `wt0` erlauben.
 
 ---
 
 ## 6. Netzwerk-Architektur (Netbird)
 
-### 6.1 Geteilter Manager, getrennte Gruppen
+### 6.1 Netbird-Server & Gruppenstruktur
 
-Daniels bestehender Netbird-Manager (`netbird.ollornog.de`) wird für LocoCloud mitgenutzt. Die Isolation geschieht über Gruppen und Policies.
+Der Netbird-Server kann extern betrieben oder self-hosted werden (siehe Kap. 2.5). Die Isolation geschieht über Gruppen und Policies.
 
 ```
-Netbird Manager (netbird.ollornog.de)
-│
-├── PRIVATE GRUPPEN (Daniels Kram, unverändert)
-│   ├── Group: admin-privat    → Drog-Tower, Cloud-LXC
-│   └── Policy: admin-privat ↔ admin-privat
+Netbird Manager
 │
 ├── LOCOCLOUDD GRUPPEN
-│   ├── Group: loco-admin      → Master-LXC, Daniels Geräte (für Admin)
+│   ├── Group: loco-admin      → Master-Server, Admin-Geräte
 │   ├── Group: loco-backup     → Backup-Server
 │   ├── Group: kunde-abc       → Alle Server von Kunde ABC
 │   ├── Group: kunde-xyz       → Alle Server von Kunde XYZ
@@ -603,12 +622,11 @@ Netbird Manager (netbird.ollornog.de)
 │   ├── loco-admin → kunde-*        (Admin-Zugang zu allen Kunden)
 │   ├── loco-admin → loco-backup    (Admin-Zugang zu Backup)
 │   ├── loco-backup → kunde-*       (Backup-Pull von allen Kunden)
-│   ├── kunde-abc → kunde-abc       (Intern: Hetzner ↔ Proxmox)
+│   ├── kunde-abc → kunde-abc       (Intern: Gateway ↔ App-Server)
 │   ├── kunde-xyz → kunde-xyz       (Intern)
 │   └── KEINE Policy: kunde-abc ↔ kunde-xyz  (Isolation!)
 │
-└── KEINE Cross-Policies zwischen privat und loco!
-    (admin-privat sieht loco-* nicht und umgekehrt)
+└── Kunden sehen sich NICHT gegenseitig
 ```
 
 ### 6.2 Peer-Benennung
@@ -616,13 +634,13 @@ Netbird Manager (netbird.ollornog.de)
 Konsistente Benennung für Übersichtlichkeit:
 
 ```
-loco-master                    ← Master-LXC
+loco-master                    ← Master-Server
 loco-backup                    ← Backup-Server
-abc-hetzner                    ← Kunde ABC, Hetzner vServer
+abc-gw                         ← Kunde ABC, Gateway-Server
 abc-proxmox                    ← Kunde ABC, lokaler Proxmox
-abc-gw                         ← Kunde ABC, Gateway-LXC (bei LXC-pro-App)
-abc-apps                       ← Kunde ABC, Apps-LXC
-xyz-hetzner                    ← Kunde XYZ
+abc-apps                       ← Kunde ABC, Apps-Server
+abc-nextcloud                  ← Kunde ABC, Nextcloud-LXC (bei lxc_per_app)
+xyz-gw                         ← Kunde XYZ, Gateway
 ...
 ```
 
@@ -738,7 +756,7 @@ Ansible erstellt beim Kunden-Onboarding **alle Netbird-Ressourcen automatisch** 
 
 **NUR für interne Domains verwenden!**
 
-Bei Hybrid: Wenn der Hetzner-Caddy an lokale LXCs routen muss, braucht er die Netbird-IP. Diese wird als Ansible-Variable hinterlegt, NICHT als Netbird DNS Zone (verursacht Konflikte mit öffentlichem DNS).
+Wenn der Gateway-Caddy an App-Server routen muss, braucht er die Netbird-IP. Diese wird als Ansible-Variable hinterlegt, NICHT als Netbird DNS Zone (verursacht Konflikte mit öffentlichem DNS).
 
 ---
 
@@ -746,8 +764,8 @@ Bei Hybrid: Wenn der Hetzner-Caddy an lokale LXCs routen muss, braucht er die Ne
 
 ### 7.1 Zwei Auth-Ebenen
 
-1. **Admin-Auth** (LocoCloud-Management): PocketID + Tinyauth auf `*.loco.ollornog.de`
-2. **Kunden-Auth** (pro Kunde): Eigene PocketID + Tinyauth auf `*.firma.de`
+1. **Admin-Auth** (LocoCloud-Management): PocketID + Tinyauth auf der Admin-Domain
+2. **Kunden-Auth** (pro Kunde): Eigene PocketID + Tinyauth auf der Kunden-Domain
 
 Diese sind komplett getrennt — andere PocketID-Instanzen, andere Tinyauth-Instanzen, andere Secrets.
 
@@ -772,7 +790,7 @@ Caddy (TLS auf öffentlichem Server)
 
 **Instanz:** Eigener Docker-Container pro Kunde auf dem Entry-Point-Server
 **URL:** `id.firma.de`
-**Admin:** Daniel (generiertes Passwort → Admin-Vaultwarden)
+**Admin:** Betreiber (generiertes Passwort → Admin-Vaultwarden)
 **Registrierung:** Blockiert per Caddy (`/register` → 403)
 **Settings:** Hinter Tinyauth (`/settings` → `import auth`)
 
@@ -874,7 +892,7 @@ API-Endpoints: `https://id.firma.de/api/...` mit Bearer-Token-Auth (`Authorizati
 
 **Default: ALLES blockiert.** Öffentliche Pfade werden explizit gewhitelistet.
 
-Pro öffentlich erreichbarem Server ein Caddy. Bei Hybrid: Caddy auf Hetzner ist der Single-Entry-Point, KEIN Caddy auf dem lokalen Server nötig (Netbird-Tunnel ist verschlüsselt).
+Pro öffentlich erreichbarem Server ein Caddy. Der Gateway-Caddy ist der Single-Entry-Point, KEIN Caddy auf den App-Servern nötig (Netbird-Tunnel ist verschlüsselt).
 
 ### 8.2 Snippets (global wiederverwendbar)
 
@@ -1147,7 +1165,7 @@ Bei `lxc_per_app` muss `add-app.yml` einen komplett neuen LXC erstellen und boot
 │                                                                │
 │  4. hosts.yml aktualisieren (neuen Host hinzufügen)            │
 │     └── ansible_host: <neue Netbird-IP>                        │
-│     └── server_role: app                                       │
+│     └── server_roles: [app_server]                             │
 │     └── app_name: <app>                                        │
 │                                                                │
 │  5. Base-Rolle (via direkte SSH über Netbird-IP)               │
@@ -1191,7 +1209,7 @@ Bei `lxc_per_app` muss `add-app.yml` einen komplett neuen LXC erstellen und boot
 | Was | Wo | Wie |
 |-----|-----|-----|
 | Kunden-Inventar-Secrets (Netbird-Keys, Tokens) | Ansible Vault (`group_vars/vault.yml`, verschlüsselt im Repo) | `ansible-vault encrypt` |
-| Ansible-Vault-Passwort selbst | Admin-Vaultwarden (vault.loco.ollornog.de) | Shell-Script `vault-pass.sh` holt es via `bw` CLI |
+| Ansible-Vault-Passwort selbst | Admin-Vaultwarden (vault.admin.example.com) | Shell-Script `vault-pass.sh` holt es via `bw` CLI |
 | Generierte App-Credentials (DB-Passwörter, OIDC-Secrets) | Admin-Vaultwarden via API | `credentials`-Rolle speichert nach Deploy |
 | SSH-Keys | Admin-Vaultwarden | Bitwarden SSH-Agent |
 | Laufzeit-Secrets lesen | Vaultwarden via `community.general.bitwarden` Lookup-Plugin | `lookup('community.general.bitwarden', 'name', field='password')` |
@@ -1214,7 +1232,7 @@ So muss man sich nur das Vaultwarden-Master-Passwort merken. Alles andere ist ve
 
 ### 10.2 Eigene Vaultwarden-Instanz auf Master-Server
 
-`vault.loco.ollornog.de` — komplett getrennt von Daniels privatem Vaultwarden (`vault.ollornog.de`).
+`vault.admin.example.com` — dedizierte Admin-Instanz für alle Kunden-Credentials.
 
 ### 10.3 Ordnerstruktur
 
@@ -1228,7 +1246,7 @@ LocoCloud Organisation/
 │   └── Master PocketID Admin
 ├── Kunde ABC (firma-abc.de)/
 │   ├── Server/
-│   │   ├── Hetzner SSH Key
+│   │   ├── Cloud-Server SSH Key
 │   │   ├── Proxmox LXC SSH Key
 │   │   └── Proxmox API Token
 │   ├── Auth/
@@ -1298,7 +1316,7 @@ Kunden-Server
     ▼
 Backup-Ziel (pro Kunde konfigurierbar)
     ├── Option 1: Eigener Backup-Server via Netbird
-    ├── Option 2: Hetzner Storage Box
+    ├── Option 2: Cloud Storage Box
     └── Option 3: Off-Site auf Betreiber-Infrastruktur via Netbird
 ```
 
@@ -1325,7 +1343,7 @@ backup:
       user: "backup"
       path: "/backup/{{ kunde_id }}"
 
-    # Option 2: Hetzner Storage Box
+    # Option 2: Cloud Storage Box
     - type: "sftp"
       host: "uXXXXX.your-storagebox.de"
       port: 23
@@ -1351,7 +1369,7 @@ backup:
 
 ### 12.1 Zabbix auf Master-Server
 
-`monitor.loco.ollornog.de` — eigene Instanz, getrennt von Daniels privatem Monitoring.
+`monitor.admin.example.com` — zentrales Monitoring für alle Kunden.
 
 ### 12.2 Was wird überwacht
 
@@ -1470,77 +1488,9 @@ LocoCloud/
 
 ### 13.2 Globale Konfiguration: `config/lococloudd.yml`
 
-**ALLES Spezifische wird hier konfiguriert.** So kann das Repo public gehen, ohne Daniels persönliche Daten zu leaken.
+**ALLES Spezifische wird hier konfiguriert.** So kann das Repo public sein — keine persönlichen Daten im Code.
 
-```yaml
-# config/lococloudd.yml
-# =====================================================================
-# GLOBALE LOCOCLOUDD-KONFIGURATION
-# Alle betreiberspezifischen Einstellungen zentral an einem Ort.
-# Diese Datei wird in .gitignore aufgenommen!
-# Stattdessen wird config/lococloudd.yml.example committed.
-# =====================================================================
-
-# --- Betreiber ---
-operator:
-  name: "Daniel"
-  email: "daniel@ollornog.de"           # Admin-E-Mail für PocketID etc.
-  domain: "ollornog.de"                 # Basis-Domain des Betreibers
-
-# --- Admin-Subdomain ---
-admin:
-  subdomain: "loco"                     # → *.loco.ollornog.de
-  full_domain: "loco.ollornog.de"       # Generiert aus operator.domain + admin.subdomain
-
-# --- Admin-Dienste URLs ---
-urls:
-  pocketid: "id.loco.ollornog.de"
-  tinyauth: "auth.loco.ollornog.de"
-  vaultwarden: "vault.loco.ollornog.de"
-  semaphore: "deploy.loco.ollornog.de"
-  zabbix: "monitor.loco.ollornog.de"
-
-# --- Netbird (geteilter Manager) ---
-netbird:
-  manager_url: "https://netbird.ollornog.de"  # Daniels bestehender Netbird
-  api_token: ""                                # Netbird API Token
-  # NICHT im Repo! Wird über Umgebungsvariable oder Vault geladen.
-
-# --- PocketID (Admin-Instanz, REST-API) ---
-pocketid:
-  api_token: ""                                # PocketID REST-API Token
-  # Für User/Gruppen/OIDC-Client-Automation via uri-Modul
-
-# --- SMTP ---
-smtp:
-  host: "smtps.udag.de"
-  port: 587
-  starttls: true
-  user: "ollornog-de-0001"
-  from: "loco@ollornog.de"
-  # Passwort: Über Vault oder Umgebungsvariable
-
-# --- GitHub Repo ---
-repo:
-  url: "git@github.com:Ollornog/LocoCloud.git"
-  branch: "main"
-  deploy_key_path: "/root/.ssh/lococloudd-github-key"
-
-# --- Vaultwarden (Admin-Instanz) ---
-vaultwarden:
-  url: "https://vault.loco.ollornog.de"
-  api_token_path: "/root/.loco-vaultwarden-token"
-  organization_id: ""                   # Wird nach Setup eingetragen
-
-# --- Bitwarden CLI (für Ansible Vault Passwort + Lookup-Plugin) ---
-bitwarden_cli:
-  server_url: "https://vault.loco.ollornog.de"  # Muss auf Vaultwarden zeigen
-  vault_item_name: "lococloudd-ansible-vault"    # Item mit Vault-Passwort
-
-# --- Öffentlicher Einstiegspunkt für Admin-Dienste ---
-admin_gateway:
-  hetzner_ip: "46.225.165.213"         # Caddy leitet *.loco.ollornog.de via Netbird an Master-LXC
-```
+Die Datei `config/lococloudd.yml.example` zeigt die vollständige Struktur (siehe Kap. 13.4).
 
 ### 13.3 `.gitignore`
 
@@ -1618,7 +1568,7 @@ bitwarden_cli:
   vault_item_name: "lococloudd-ansible-vault"
 
 admin_gateway:
-  hetzner_ip: ""                             # IP des Hetzner-Servers fuer Admin-Routing
+  public_ip: ""                              # IP des Cloud-Servers fuer Admin-Routing
 ```
 
 ### 13.5 `ansible.cfg`
@@ -1661,7 +1611,7 @@ ssh_args = -o ControlMaster=auto -o ControlPersist=60s
 
 ### 14.1 Zugang
 
-`deploy.loco.ollornog.de` — hinter Tinyauth (nur Daniel)
+`deploy.admin.example.com` — hinter Tinyauth (nur Betreiber)
 
 ### 14.2 Projekte
 
@@ -1705,7 +1655,7 @@ Da die öffentlichen Pfade im Inventar (`apps_enabled[].public_paths`) definiert
 
 ```bash
 # 1. LXC auf Proxmox erstellen (manuell oder per Script)
-# 2. SSH-Zugang einrichten (Key von Daniel)
+# 2. SSH-Zugang einrichten (Admin-Key)
 # 3. Bootstrap-Script ausführen:
 ssh root@<master-lxc-ip>
 curl -sSL https://raw.githubusercontent.com/Ollornog/LocoCloud/main/scripts/init-master.sh | bash
@@ -1722,11 +1672,11 @@ ansible-playbook playbooks/setup-master.yml -i inventories/master/
 **`setup-master.yml` macht:**
 1. base-Rolle (Hardening, Docker, UFW)
 2. Netbird-Client installieren + joinen (Gruppe: `loco-admin`)
-3. PocketID deployen (`id.loco.ollornog.de`)
-4. Tinyauth deployen (`auth.loco.ollornog.de`)
-5. Vaultwarden deployen (`vault.loco.ollornog.de`)
-6. Semaphore deployen (`deploy.loco.ollornog.de`)
-7. Zabbix Server deployen (`monitor.loco.ollornog.de`)
+3. PocketID deployen (`id.admin.example.com`)
+4. Tinyauth deployen (`auth.admin.example.com`)
+5. Vaultwarden deployen (`vault.admin.example.com`)
+6. Semaphore deployen (`deploy.admin.example.com`)
+7. Zabbix Server deployen (`monitor.admin.example.com`)
 8. Caddy deployen mit Admin-Caddyfile
 9. Alle Credentials in Vaultwarden speichern
 
@@ -1748,7 +1698,7 @@ Inventar vorbereiten:
 1. bash scripts/new-customer.sh kunde-abc "Firma ABC GmbH" "firma-abc.de" "hybrid"
 2. hosts.yml + group_vars/all.yml anpassen (Proxmox API-Token, Netbird-IP)
 3. DNS-Records anlegen (A + Wildcard *.firma-abc.de)
-4. Hetzner vServer bestellen (falls Hybrid/Cloud)
+4. Cloud-Server bestellen (falls Hybrid/Cloud)
 5. Git commit + push → Auf Master: git pull
 
 Automatisiert (Semaphore → onboard-customer.yml):
@@ -1763,7 +1713,7 @@ Automatisiert (Semaphore → onboard-customer.yml):
     ├── Netbird installieren + joinen (Setup-Key aus Schritt 3)
     └── Netbird-IP ermitteln → hosts.yml aktualisieren
  7. base-Rolle (direkte SSH via Netbird-IP): Hardening + Docker + UFW
- 8. Entry-Point konfigurieren (Hetzner oder Gateway-LXC):
+ 8. Entry-Point konfigurieren (Gateway-Server):
     ├── PocketID deployen (id.firma.de)
     ├── Tinyauth deployen (auth.firma.de)
     └── Admin-User in PocketID anlegen (API)
@@ -1845,7 +1795,7 @@ Automatisiert (Semaphore → onboard-customer.yml):
 └────────────────────────────────────────────────────────────────┘
 ```
 
-> **Hetzner-Server wird NICHT automatisch gelöscht.** Das muss Daniel manuell über die Hetzner-Konsole tun — zu riskant für Automation. Das Playbook gibt am Ende eine Zusammenfassung aus mit Hinweis: "Hetzner-Server XYZ kann jetzt manuell gelöscht werden."
+> **Cloud-Server wird NICHT automatisch gelöscht.** Das muss der Betreiber manuell über das Provider-Dashboard tun — zu riskant für Automation. Das Playbook gibt am Ende eine Zusammenfassung aus mit Hinweis: "Cloud-Server XYZ kann jetzt manuell gelöscht werden."
 
 > **DNS-Records** müssen ebenfalls manuell entfernt werden (A-Record + Wildcard der Kunden-Domain).
 
@@ -1957,153 +1907,163 @@ services:
 
 ## 18. Kunden-Inventar-System
 
-### 18.1 Beispiel: Hybrid-Kunde (single_lxc)
+### 18.1 Grundprinzip
+
+Jeder Host im Kunden-Inventar bekommt:
+- **`server_roles`**: Liste von Rollen (siehe Kap. 2.1)
+- **`hosting_type`**: `cloud` oder `proxmox_lxc`
+- **`is_lxc`**: `true`/`false`
+
+Es gibt keine festen Deployment-Varianten. Der Betreiber definiert frei, welche Rollen auf welchem Host laufen. Rollen können kombiniert werden (siehe Kap. 2.2).
+
+### 18.2 Beispiel: Alles-auf-einem-Server (Cloud)
+
+Ein einzelner Cloud-Server übernimmt alle Rollen.
 
 ```yaml
 # inventories/kunde-abc/hosts.yml
-all:
-  children:
-    proxmox:
-      hosts:
-        abc-proxmox:
-          ansible_host: "100.114.a.99"   # Netbird-IP des Proxmox-Hosts
-          ansible_user: root
-          server_role: proxmox
-          is_lxc: false
-          proxmox_node: "pve"
-          proxmox_api_host: "100.114.a.99"
-          proxmox_api_token_id: "ansible@pam!loco"
-          proxmox_api_token_secret: "{{ vault_proxmox_token }}"
-          lxc_template: "local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst"
-    online:
-      hosts:
-        abc-hetzner:
-          ansible_host: "100.114.a.0"    # Netbird-IP
-          ansible_user: srvadmin
-          server_role: online
-          public_ip: "203.0.113.10"
-          is_lxc: false
-    lokal:
-      hosts:
-        abc-apps:
-          ansible_host: "100.114.a.1"    # Netbird-IP (ein LXC für alles)
-          ansible_user: srvadmin
-          server_role: apps
-          is_lxc: true
-```
-
-> **Der Proxmox-Host** ist im Inventar als `server_role: proxmox`. Er wird NICHT wie ein App-Server gehärtet (kein Docker, andere UFW-Regeln). Er dient nur als Ziel für LXC-Erstellung via Proxmox API und `pct exec`-Bootstrap. Netbird auf dem Proxmox-Host wird beim Kunden-Onboarding manuell installiert (einmaliger Schritt).
-
-### 18.2 Beispiel: Hybrid-Kunde (lxc_per_app)
-
-```yaml
-# inventories/kunde-abc/hosts.yml
-all:
-  children:
-    proxmox:
-      hosts:
-        abc-proxmox:
-          ansible_host: "100.114.a.99"   # Netbird-IP des Proxmox-Hosts
-          ansible_user: root
-          server_role: proxmox
-          is_lxc: false
-          proxmox_node: "pve"
-          proxmox_api_host: "100.114.a.99"
-          proxmox_api_token_id: "ansible@pam!loco"
-          proxmox_api_token_secret: "{{ vault_proxmox_token }}"
-          lxc_template: "local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst"
-    online:
-      hosts:
-        abc-hetzner:
-          ansible_host: "100.114.a.0"    # Netbird-IP
-          ansible_user: srvadmin
-          server_role: online
-          public_ip: "203.0.113.10"
-          is_lxc: false
-    lokal:
-      hosts:
-        abc-nextcloud:
-          ansible_host: "100.114.a.1"    # Eigener Netbird-Client
-          ansible_user: srvadmin
-          server_role: app
-          app_name: nextcloud
-          is_lxc: true
-        abc-paperless:
-          ansible_host: "100.114.a.2"    # Eigener Netbird-Client
-          ansible_user: srvadmin
-          server_role: app
-          app_name: paperless
-          is_lxc: true
-        abc-infra:
-          ansible_host: "100.114.a.3"    # Eigener Netbird-Client
-          ansible_user: srvadmin
-          server_role: infra
-          is_lxc: true
-```
-
-> **Jeder LXC hat seine eigene Netbird-IP.** Ansible erreicht jeden einzelnen direkt über Netbird — kein SSH-Hopping, kein Gateway. Der Proxmox-Host wird nur für LXC-Erstellung und Bootstrap benötigt.
-
-### 18.3 Beispiel: Cloud-Only
-
-```yaml
 all:
   hosts:
-    abc-hetzner:
-      ansible_host: "100.114.a.0"
+    abc-server:
+      ansible_host: "100.114.a.0"      # Netbird-IP
       ansible_user: srvadmin
-      server_role: all_in_one
+      server_roles: [gateway, customer_master, app_server]
+      hosting_type: cloud
       public_ip: "203.0.113.10"
       is_lxc: false
 ```
 
-### 18.4 Beispiel: Lokal-Only (lxc_per_app)
+### 18.3 Beispiel: Cloud-Gateway + lokale App-Server (ein LXC)
+
+Cloud-Server als Entry-Point, eine lokale Proxmox-LXC für alle Apps.
 
 ```yaml
+# inventories/kunde-abc/hosts.yml
 all:
+  hosts:
+    abc-gw:
+      ansible_host: "100.114.a.0"      # Netbird-IP
+      ansible_user: srvadmin
+      server_roles: [gateway, customer_master]
+      hosting_type: cloud
+      public_ip: "203.0.113.10"
+      is_lxc: false
+    abc-apps:
+      ansible_host: "100.114.a.1"      # Netbird-IP (ein LXC für alle Apps)
+      ansible_user: srvadmin
+      server_roles: [app_server]
+      hosting_type: proxmox_lxc
+      is_lxc: true
   children:
     proxmox:
       hosts:
         abc-proxmox:
-          ansible_host: "100.114.a.99"   # Netbird-IP des Proxmox-Hosts
+          ansible_host: "100.114.a.99" # Netbird-IP des Proxmox-Hosts
           ansible_user: root
-          server_role: proxmox
+          server_roles: [proxmox]
           is_lxc: false
           proxmox_node: "pve"
           proxmox_api_host: "100.114.a.99"
           proxmox_api_token_id: "ansible@pam!loco"
           proxmox_api_token_secret: "{{ vault_proxmox_token }}"
           lxc_template: "local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst"
-    gateway:
-      hosts:
-        abc-gw:
-          ansible_host: "100.114.a.0"    # Netbird-IP
-          ansible_user: srvadmin
-          server_role: gateway           # Caddy + PocketID + Tinyauth
-          is_lxc: true
-    lokal:
-      hosts:
-        abc-nextcloud:
-          ansible_host: "100.114.a.1"    # Eigener Netbird-Client
-          ansible_user: srvadmin
-          server_role: app
-          app_name: nextcloud
-          is_lxc: true
-        abc-paperless:
-          ansible_host: "100.114.a.2"    # Eigener Netbird-Client
-          ansible_user: srvadmin
-          server_role: app
-          app_name: paperless
-          is_lxc: true
-        abc-infra:
-          ansible_host: "100.114.a.3"
-          ansible_user: srvadmin
-          server_role: infra
-          is_lxc: true
 ```
 
-> **Bei Lokal-Only:** Der Gateway-LXC übernimmt die Rolle des Hetzner-Servers (Caddy + Auth). Routing zu App-LXCs geht über Netbird — kein Unterschied zur Hybrid-Variante aus Sicht der App-LXCs. Der Proxmox-Host ist im Inventar für LXC-Erstellung und Bootstrap.
+> **Der Proxmox-Host** hat `server_roles: [proxmox]`. Er wird NICHT wie ein App-Server gehärtet (kein Docker, andere UFW-Regeln). Er dient nur als Ziel für LXC-Erstellung via Proxmox API und `pct exec`-Bootstrap. Netbird auf dem Proxmox-Host wird beim Kunden-Onboarding manuell installiert (einmaliger Schritt).
 
-### 18.5 group_vars/all.yml (Hauptkonfiguration)
+### 18.4 Beispiel: Cloud-Gateway + lokale App-Server (LXC pro App)
+
+Cloud-Server als Entry-Point, separate LXCs pro App auf Proxmox.
+
+```yaml
+# inventories/kunde-abc/hosts.yml
+all:
+  hosts:
+    abc-gw:
+      ansible_host: "100.114.a.0"      # Netbird-IP
+      ansible_user: srvadmin
+      server_roles: [gateway, customer_master]
+      hosting_type: cloud
+      public_ip: "203.0.113.10"
+      is_lxc: false
+    abc-nextcloud:
+      ansible_host: "100.114.a.1"      # Eigene Netbird-IP
+      ansible_user: srvadmin
+      server_roles: [app_server]
+      hosting_type: proxmox_lxc
+      app_name: nextcloud
+      is_lxc: true
+    abc-paperless:
+      ansible_host: "100.114.a.2"      # Eigene Netbird-IP
+      ansible_user: srvadmin
+      server_roles: [app_server]
+      hosting_type: proxmox_lxc
+      app_name: paperless
+      is_lxc: true
+  children:
+    proxmox:
+      hosts:
+        abc-proxmox:
+          ansible_host: "100.114.a.99" # Netbird-IP des Proxmox-Hosts
+          ansible_user: root
+          server_roles: [proxmox]
+          is_lxc: false
+          proxmox_node: "pve"
+          proxmox_api_host: "100.114.a.99"
+          proxmox_api_token_id: "ansible@pam!loco"
+          proxmox_api_token_secret: "{{ vault_proxmox_token }}"
+          lxc_template: "local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst"
+```
+
+> **Jeder LXC hat seine eigene Netbird-IP.** Ansible erreicht jeden einzelnen direkt über Netbird — kein SSH-Hopping, kein Gateway. Der Proxmox-Host wird nur für LXC-Erstellung und Bootstrap benötigt.
+
+### 18.5 Beispiel: Komplett lokal (LXC pro App)
+
+Kein Cloud-Server. Ein Gateway-LXC auf Proxmox übernimmt den öffentlichen Zugang (via Port-Forward oder DynDNS).
+
+```yaml
+# inventories/kunde-abc/hosts.yml
+all:
+  hosts:
+    abc-gw:
+      ansible_host: "100.114.a.0"      # Netbird-IP
+      ansible_user: srvadmin
+      server_roles: [gateway, customer_master]
+      hosting_type: proxmox_lxc
+      public_ip: ""                     # Via DynDNS oder Port-Forward
+      is_lxc: true
+    abc-nextcloud:
+      ansible_host: "100.114.a.1"      # Eigene Netbird-IP
+      ansible_user: srvadmin
+      server_roles: [app_server]
+      hosting_type: proxmox_lxc
+      app_name: nextcloud
+      is_lxc: true
+    abc-paperless:
+      ansible_host: "100.114.a.2"      # Eigene Netbird-IP
+      ansible_user: srvadmin
+      server_roles: [app_server]
+      hosting_type: proxmox_lxc
+      app_name: paperless
+      is_lxc: true
+  children:
+    proxmox:
+      hosts:
+        abc-proxmox:
+          ansible_host: "100.114.a.99" # Netbird-IP des Proxmox-Hosts
+          ansible_user: root
+          server_roles: [proxmox]
+          is_lxc: false
+          proxmox_node: "pve"
+          proxmox_api_host: "100.114.a.99"
+          proxmox_api_token_id: "ansible@pam!loco"
+          proxmox_api_token_secret: "{{ vault_proxmox_token }}"
+          lxc_template: "local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst"
+```
+
+> **Bei komplett lokaler Installation:** Der Gateway-LXC übernimmt die Rolle des Cloud-Servers (Caddy + Auth). Routing zu App-LXCs geht über Netbird — kein Unterschied zum Cloud-Gateway aus Sicht der App-Server.
+
+### 18.6 group_vars/all.yml (Hauptkonfiguration)
 
 ```yaml
 # =====================================================================
@@ -2114,16 +2074,10 @@ kunde_name: "Firma ABC GmbH"
 kunde_domain: "firma-abc.de"
 kunde_id: "abc001"
 
-variante: "hybrid"                      # hybrid | cloud_only | lokal_only
 isolation_mode: "lxc_per_app"           # single_lxc | lxc_per_app
 
-online_server: "abc-hetzner"
-
 # --- Netbird ---
-netbird_setup_keys:
-  online: "{{ vault_netbird_key_online }}"
-  # Bei lxc_per_app: ein Key pro LXC (oder reusable Key für die Kundengruppe)
-  lokal: "{{ vault_netbird_key_lokal }}"
+netbird_setup_key: "{{ vault_netbird_setup_key }}"
 netbird_group: "kunde-{{ kunde_id }}"
 
 # --- Benutzer ---
@@ -2143,8 +2097,6 @@ apps_enabled:
     subdomain: "cloud"
     port: 8080
     image: "nextcloud:latest"
-    target: "lokal"
-    netbird_ip: "100.114.a.1"          # Eigene Netbird-IP (LXC: abc-nextcloud)
     oidc_enabled: true
     oidc_redirect_path: "/apps/user_oidc/code"
     needs_db: true
@@ -2163,8 +2115,6 @@ apps_enabled:
     subdomain: "paper"
     port: 8081
     image: "ghcr.io/paperless-ngx/paperless-ngx:latest"
-    target: "lokal"
-    netbird_ip: "100.114.a.2"          # Eigene Netbird-IP (LXC: abc-paperless)
     oidc_enabled: true
     oidc_redirect_path: "/accounts/oidc/callback/"
     needs_db: true
@@ -2183,8 +2133,6 @@ apps_enabled:
     subdomain: "vault"
     port: 8222
     image: "vaultwarden/server:latest"
-    target: "online"                   # Läuft auf Hetzner → netbird_ip wird ignoriert
-    netbird_ip: ""
     oidc_enabled: true
     oidc_redirect_path: "/identity/connect/authorize"
     needs_db: false
@@ -2205,13 +2153,17 @@ backup:
     keep_weekly: 4
     keep_monthly: 6
 
-# --- DynDNS (nur bei lokal_only) ---
-# Entschieden: Master-Server (Hetzner) übernimmt DNS-Updates
-# für lokale Kunden — immer online, kennt die Netbird-IPs
+# --- DynDNS (optional, z.B. bei komplett lokaler Installation) ---
 dyndns:
   enabled: false
   provider: "master"  # Master-Server aktualisiert DNS für lokale Kunden
 ```
+
+> **Wichtige Änderungen zum alten Format:**
+> - `variante` (hybrid/cloud_only/lokal_only) entfällt — die Architektur ergibt sich aus den `server_roles` im Inventar
+> - `target` pro App entfällt — Apps laufen auf Hosts mit `server_roles: [app_server]`
+> - `online_server` entfällt — der Gateway wird über `server_roles: [gateway]` identifiziert
+> - `netbird_setup_keys.online/lokal` → ein `netbird_setup_key` pro Kundengruppe (Netbird-API erstellt Keys automatisch)
 
 ---
 
@@ -2268,7 +2220,7 @@ Microsoft 365 / Google Workspace.
 
 ## 20. Bekannte Fallstricke & Lessons Learned
 
-### Aus dem ollornog.de-Setup
+### Allgemein
 
 | Problem | Lösung | Wo relevant |
 |---------|--------|-------------|
@@ -2280,7 +2232,7 @@ Microsoft 365 / Google Workspace.
 | **Nextcloud Single Logout** | `--send-id-token-hint=0` | Nextcloud OIDC |
 | **Paperless ESC-Registrierung** | `ACCOUNT_ALLOW_SIGNUPS: false` explizit! | Paperless |
 | **LXC Kernel-Parameter** | `is_lxc`-Variable, nur netzwerk-sysctl | base-Rolle |
-| **Docker Port-Binding** | **Auf Entry-Point-Servern** (Hetzner, Gateway-LXC): `127.0.0.1:PORT:PORT` — Caddy ist lokal. **Auf App-LXCs** (lxc_per_app): `0.0.0.0:PORT:PORT` — Caddy sitzt remote auf dem Hetzner und erreicht den LXC über Netbird-IP. Absichern über UFW: App-Port nur auf `wt0` erlauben! | Alle Compose Files |
+| **Docker Port-Binding** | **Auf Gateway-Servern**: `127.0.0.1:PORT:PORT` — Caddy ist lokal. **Auf App-Servern** (remote): `0.0.0.0:PORT:PORT` — Caddy sitzt auf dem Gateway und erreicht den App-Server über Netbird-IP. Absichern über UFW: App-Port nur auf `wt0` erlauben! | Alle Compose Files |
 | **UFW auf App-LXCs** | Bei lxc_per_app: App-Ports (8080, 8081 etc.) nur auf Netbird-Interface `wt0` erlauben, SSH nur auf `wt0`. Default deny incoming. So sind die Docker-Ports trotz `0.0.0.0`-Bind nicht im LAN erreichbar. | base-Rolle + UFW |
 | **Health-Check hinter Auth** | Backend-Ports (localhost) prüfen, nicht öffentliche URL | Monitoring |
 | **Caddy handle-Reihenfolge** | Spezifische Matcher VOR Fallback `handle {}` | Caddyfile |
@@ -2309,9 +2261,9 @@ Microsoft 365 / Google Workspace.
 
 | Frage | Entscheidung | Siehe Kapitel |
 |-------|-------------|---------------|
-| Öffentliche IP für `*.loco.ollornog.de` | Route über Daniels Hetzner (46.225.165.213), Caddy leitet via Netbird an Master-LXC weiter | Kap. 3.3 |
+| Öffentliche IP für Admin-Domain | Gateway-Caddy leitet via Netbird an Master-Server weiter | Kap. 3.3 |
 | PocketID User-Management | API-Automation via PocketID REST-API (Bearer-Token) | Kap. 7.6 |
-| Backup Off-Site Ziel | Dynamisch pro Kunde konfigurierbar (SFTP via Netbird, Hetzner Storage Box, oder Betreiber-Infra) | Kap. 11 |
+| Backup Off-Site Ziel | Dynamisch pro Kunde konfigurierbar (SFTP via Netbird, Storage Box, oder Betreiber-Infra) | Kap. 11 |
 | Ansible Vault vs. Vaultwarden | Beides komplementär: Vault für Repo-Encryption, Vaultwarden für Credential-Store + Lookup | Kap. 10.1 |
 | Shared Redis | Implizit durch `isolation_mode` gelöst (single_lxc: DB-Nummern, lxc_per_app: eigener Container) | Kap. 9.3 |
 | Isolation auf Proxmox | `lxc_per_app` empfohlen, `single_lxc` als Option | Kap. 5 |
@@ -2319,9 +2271,9 @@ Microsoft 365 / Google Workspace.
 | Netbird-Gruppen/Keys/Policies | Vollautomatisch via Netbird REST-API durch Ansible (kein manueller Eingriff) | Kap. 6.3 |
 | Watchtower-Strategie | NUR für Kunden-Apps (Label-basiert + gepinnte Major-Versionen). Infra-Container (Netbird, Caddy, PocketID, Tinyauth, Semaphore, Zabbix) OHNE Label — Updates nur über Ansible. Vorfall: Watchtower hat Netbird aktualisiert → Relay kaputt → VPN-Ausfall | Kap. 17.2 |
 | LXC-Template auf Proxmox | Ansible lädt Template via `pveam download` automatisch herunter wenn fehlend | Kap. 5.6 |
-| Offboarding-Strategie | Gestuft: Archivieren (Standard) oder komplett löschen. Hetzner-Server manuell. Credentials archiviert | Kap. 15.4 |
+| Offboarding-Strategie | Gestuft: Archivieren (Standard) oder komplett löschen. Server manuell beim Provider löschen. Credentials archiviert | Kap. 15.4 |
 | Tinyauth als Forward-Auth | PocketID + Tinyauth — im Betrieb bewährt. Nur OIDC via PocketID (kein direkter Login, kein Brute-Force-Risiko) | Kap. 7.8 |
-| DynDNS (Lokal-Only) | Master-Server (Hetzner) übernimmt DNS-Updates für lokale Kunden — immer online, kennt die Netbird-IPs | Kap. 18 |
+| DynDNS (komplett lokal) | Master-Server übernimmt DNS-Updates für lokale Kunden — immer online, kennt die Netbird-IPs | Kap. 18 |
 | Admin sudo | NOPASSWD — SSH nur über Netbird (`wt0`) + Key-Only. Netbird ist die zweite Sicherheitsstufe | Kap. 16.3 |
 | Monitoring | Zabbix auf Master für Infrastruktur-Monitoring. Uptime Kuma als optionale Kunden-App für Status-Dashboards (`status.firma.de`) | Kap. 12 |
 

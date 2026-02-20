@@ -41,7 +41,7 @@
         name: caddy
       vars:
         caddy_mode: "customer"
-      when: server_role in ['online', 'gateway', 'all_in_one']
+      when: "'gateway' in server_roles"
       tags: [caddy]
 
     - name: App removed

@@ -227,7 +227,7 @@ services:
     container_name: meineapp
     restart: unless-stopped
     ports:
-      - "{{ '127.0.0.1' if server_role | default('app') in ['online', 'gateway', 'all_in_one'] else '0.0.0.0' }}:{{ meineapp_port }}:8080"
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ meineapp_port }}:8080"
     env_file:
       - .env
     volumes:

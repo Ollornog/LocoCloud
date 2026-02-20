@@ -1,0 +1,31 @@
+---
+# roles/netbird_server/defaults/main.yml
+# Self-hosted Netbird Management + Relay + Signal
+
+netbird_server_stack_path: "/opt/stacks/netbird"
+
+# Netbird server domain (Management UI + API)
+netbird_server_domain: ""  # e.g. "netbird.example.com"
+
+# Relay domain
+netbird_relay_domain: ""  # e.g. "relay.example.com"
+
+# Signal domain (usually same host, different port or subdomain)
+netbird_signal_domain: ""  # e.g. "signal.example.com"
+
+# Docker images
+netbird_management_image: "netbirdio/management:latest"
+netbird_signal_image: "netbirdio/signal:latest"
+netbird_relay_image: "netbirdio/relay:latest"
+netbird_dashboard_image: "netbirdio/dashboard:latest"
+netbird_coturn_image: "coturn/coturn:latest"
+
+# Ports
+netbird_management_port: 443
+netbird_signal_port: 10000
+netbird_relay_port: 33073
+
+# STUN servers (external, for NAT traversal)
+netbird_stun_servers:
+  - "stun:stun.cloudflare.com:3478"
+  - "stun:stun.l.google.com:19302"

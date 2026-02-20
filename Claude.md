@@ -74,11 +74,12 @@ LocoCloud/
 - **Port-Binding:** Entry-Point `127.0.0.1:PORT`, App-LXCs `0.0.0.0:PORT` + UFW auf `wt0`.
 - **Secrets:** Ansible Vault für Repo-Encryption, Vaultwarden als Credential-Store. `community.general.bitwarden` Lookup-Plugin für Laufzeit-Secrets. `scripts/vault-pass.sh` holt Vault-Passwort aus Vaultwarden.
 - **Backup:** Restic über SFTP (via Netbird oder direkt). Ziel dynamisch pro Kunde konfigurierbar.
-- **Deployment-Varianten:** Cloud-Only (Hetzner), Hybrid (Hetzner + Proxmox), Lokal-Only (Proxmox + Gateway-LXC).
+- **Server-Rollen:** `master`, `netbird_server`, `gateway`, `customer_master`, `app_server`, `backup_server`, `proxmox`. Multi-Role per Host: `server_roles: [gateway, customer_master]`.
+- **Kein festes Deployment-Modell.** Betreiber definiert `server_roles` + `hosting_type` (cloud/proxmox_lxc) pro Host im Inventar.
 - **Monitoring:** Zabbix auf Master (Infra). Uptime Kuma optional pro Kunde (`status.firma.de`).
-- **DynDNS (Lokal-Only):** Master-Server (Hetzner) übernimmt DNS-Updates für lokale Kunden.
+- **DynDNS (optional):** Master-Server übernimmt DNS-Updates für lokale Kunden.
 - **Admin sudo:** NOPASSWD — SSH nur über Netbird + Key-Only.
-- **Admin-Infra:** `*.loco.ollornog.de` → Caddy auf Hetzner (46.225.165.213) → Netbird → Master-LXC.
+- **Admin-Infra:** `*.admin.example.com` → Gateway-Caddy → Netbird → Master.
 
 ---
 
@@ -95,7 +96,7 @@ pre_tasks:
       name: loco
 
 # Neuer Kunde
-bash scripts/new-customer.sh kunde-abc "Firma ABC" "firma-abc.de" "hybrid"
+bash scripts/new-customer.sh kunde-abc "Firma ABC" "firma-abc.de"
 
 # Ansible Vault (Passwort kommt automatisch via vault-pass.sh)
 ansible-vault encrypt inventories/kunde-abc/group_vars/vault.yml

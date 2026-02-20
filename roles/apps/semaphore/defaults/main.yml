@@ -8,7 +8,7 @@ semaphore_image: "semaphoreui/semaphore:latest"
 semaphore_port: 3000
 
 # Domain for Semaphore
-semaphore_domain: ""  # e.g. "deploy.loco.ollornog.de"
+semaphore_domain: ""  # e.g. "deploy.admin.example.com"
 
 # PostgreSQL for Semaphore
 semaphore_db_image: "postgres:18"

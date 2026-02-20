@@ -19,18 +19,15 @@ Diese Anleitung beschreibt den kompletten Ablauf, einen neuen Kunden in LocoClou
 ## Schritt 1: Kunden-Inventar anlegen
 
 ```bash
-bash scripts/new-customer.sh <kunde_id> "<kunde_name>" "<kunde_domain>" <variante>
+bash scripts/new-customer.sh <kunde_id> "<kunde_name>" "<kunde_domain>"
 ```
 
 **Beispiel:**
 ```bash
-bash scripts/new-customer.sh abc001 "Firma ABC GmbH" "firma-abc.de" hybrid
+bash scripts/new-customer.sh abc001 "Firma ABC GmbH" "firma-abc.de"
 ```
 
-Varianten:
-- `cloud_only` — Server bei Hetzner, kein lokaler Proxmox
-- `hybrid` — Hetzner Entry-Point + lokaler Proxmox mit LXCs
-- `lokal_only` — Alles lokal auf Proxmox, Gateway-LXC als Entry-Point
+Das Script erstellt ein Inventar-Template mit `server_roles` pro Host. Der Betreiber definiert frei, welche Rollen auf welchem Host laufen.
 
 Das Script erstellt:
 ```
@@ -47,45 +44,54 @@ inventories/kunde-abc001/
 
 Server-Einträge je nach Variante:
 
-**Cloud-Only:**
+**Alles-auf-einem-Server:**
 ```yaml
 all:
   hosts:
-    abc001-online:
-      ansible_host: "{{ vault_hetzner_netbird_ip }}"
-      ansible_user: srvadmin
-      is_lxc: false
-      server_role: online
-```
-
-**Hybrid:**
-```yaml
-all:
-  hosts:
-    abc001-online:
-      ansible_host: "{{ vault_hetzner_netbird_ip }}"
-      ansible_user: srvadmin
-      is_lxc: false
-      server_role: online
-    abc001-proxmox:
-      ansible_host: "{{ vault_proxmox_netbird_ip }}"
-      ansible_user: root
-      server_role: proxmox
-```
-
-**Lokal-Only:**
-```yaml
-all:
-  hosts:
-    abc001-proxmox:
-      ansible_host: "{{ vault_proxmox_netbird_ip }}"
-      ansible_user: root
-      server_role: proxmox
-    abc001-gateway:
+    abc001-server:
       ansible_host: "{{ vault_gateway_netbird_ip }}"
       ansible_user: srvadmin
+      server_roles: [gateway, customer_master, app_server]
+      hosting_type: cloud
+      is_lxc: false
+```
+
+**Cloud-Gateway + lokale App-Server:**
+```yaml
+all:
+  hosts:
+    abc001-gw:
+      ansible_host: "{{ vault_gateway_netbird_ip }}"
+      ansible_user: srvadmin
+      server_roles: [gateway, customer_master]
+      hosting_type: cloud
+      is_lxc: false
+  children:
+    proxmox:
+      hosts:
+        abc001-proxmox:
+          ansible_host: "{{ vault_proxmox_netbird_ip }}"
+          ansible_user: root
+          server_roles: [proxmox]
+```
+
+**Komplett lokal:**
+```yaml
+all:
+  hosts:
+    abc001-gw:
+      ansible_host: "{{ vault_gateway_netbird_ip }}"
+      ansible_user: srvadmin
+      server_roles: [gateway, customer_master]
+      hosting_type: proxmox_lxc
       is_lxc: true
-      server_role: gateway
+  children:
+    proxmox:
+      hosts:
+        abc001-proxmox:
+          ansible_host: "{{ vault_proxmox_netbird_ip }}"
+          ansible_user: root
+          server_roles: [proxmox]
 ```
 
 ### group_vars/all.yml
@@ -98,7 +104,7 @@ apps_enabled:
     subdomain: "cloud"
     port: 8080
     image: "nextcloud:29"
-    target: "online"          # online = Hetzner, lokal = Proxmox-LXC
+    # Apps laufen auf Hosts mit server_roles: [app_server]
     oidc_enabled: true
     oidc_redirect_path: "/apps/user_oidc/code"
     needs_db: true
@@ -193,15 +199,15 @@ ansible-playbook playbooks/add-user.yml -i inventories/kunde-abc001/ \
 
 ## DNS-Konfiguration
 
-### Cloud-Only / Hybrid
+### Cloud-Gateway
 
 DNS beim Kunden-Domain-Provider:
 
 ```
-*.firma-abc.de  →  A-Record  →  Hetzner-IP des Entry-Point-Servers
+*.firma-abc.de  →  A-Record  →  Public IP des Gateway-Servers
 ```
 
-### Lokal-Only
+### Komplett lokal
 
 Port-Forward auf dem Kunden-Router:
 - Port 80 → Gateway-LXC IP

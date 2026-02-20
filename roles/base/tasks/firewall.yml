@@ -29,7 +29,7 @@
   loop:
     - "80"
     - "443"
-  when: server_role in ['online', 'gateway', 'all_in_one']
+  when: "'gateway' in server_roles"
 
 # App-LXCs: app ports only on Netbird interface
 - name: Allow app ports on Netbird interface (app servers)

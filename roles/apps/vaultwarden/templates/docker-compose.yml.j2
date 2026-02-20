@@ -10,7 +10,7 @@ services:
     container_name: vaultwarden
     restart: unless-stopped
     ports:
-      - "{{ '127.0.0.1' if server_role | default('app') in ['online', 'gateway', 'all_in_one', 'master'] else '0.0.0.0' }}:{{ vaultwarden_port }}:80"
+      - "{{ '127.0.0.1' if 'gateway' in server_roles or 'master' in server_roles else '0.0.0.0' }}:{{ vaultwarden_port }}:80"
     volumes:
       - {{ vaultwarden_data_path }}:/data
     env_file:

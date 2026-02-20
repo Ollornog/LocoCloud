@@ -32,12 +32,11 @@
         target_app: "{{ apps_enabled | selectattr('name', 'equalto', app_name) | list | first | default(None) }}"
 
   tasks:
-    - name: Skip if not lxc_per_app or not lokal target
+    - name: Skip if not lxc_per_app or app not found
       ansible.builtin.meta: end_play
       when: >
         isolation_mode | default('single_lxc') != 'lxc_per_app'
         or target_app == None
-        or target_app.target | default('online') != 'lokal'
 
     - name: Create LXC for app
       ansible.builtin.include_role:
@@ -49,7 +48,7 @@
         lxc_cores: "{{ target_app.cores | default(2) }}"
         lxc_memory: "{{ target_app.memory | default(2048) }}"
         proxmox_host: "{{ inventory_hostname }}"
-        netbird_setup_key: "{{ netbird_setup_keys.lokal | default('') }}"
+        netbird_setup_key: "{{ netbird_setup_key | default('') }}"
         netbird_management_url: "{{ loco.netbird.manager_url }}"
       when: target_app.lxc_vmid is defined
       tags: [lxc, proxmox]
@@ -95,8 +94,7 @@
         name: base
       when:
         - isolation_mode | default('single_lxc') == 'lxc_per_app'
-        - target_app.target | default('online') == 'lokal'
-        - server_role in ['app', 'apps']
+        - "'app_server' in server_roles"
       tags: [base]
 
     - name: Deploy app role
@@ -107,9 +105,7 @@
         app_subdomain: "{{ target_app.subdomain }}"
         app_port: "{{ target_app.port }}"
         app_domain: "{{ target_app.subdomain }}.{{ kunde_domain }}"
-      when: >
-        (target_app.target == 'online' and server_role in ['online', 'all_in_one'])
-        or (target_app.target == 'lokal' and server_role in ['app', 'apps', 'all_in_one'])
+      when: "'app_server' in server_roles"
       tags: [apps]
 
     # Regenerate Caddyfile to include new app (with new Netbird IP route)
@@ -118,7 +114,7 @@
         name: caddy
       vars:
         caddy_mode: "customer"
-      when: server_role in ['online', 'gateway', 'all_in_one']
+      when: "'gateway' in server_roles"
       tags: [caddy]
 
     # Deploy Watchtower if not already present

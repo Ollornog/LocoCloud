@@ -7,7 +7,7 @@ admin_ssh_pubkeys: []  # Add your SSH public key(s) here
 
 is_lxc: true
 docker_install: true
-server_role: master
+server_roles: [master]
 
 # Master-specific: admin services bind to localhost, Caddy terminates TLS
 # Ports defined in roles (pocketid: 1411, tinyauth: 9090, vaultwarden: 8222, semaphore: 3000, zabbix: 8080)
