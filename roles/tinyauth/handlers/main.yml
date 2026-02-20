@@ -1,0 +1,10 @@
+---
+# roles/tinyauth/handlers/main.yml
+
+- name: restart tinyauth
+  ansible.builtin.command: docker restart tinyauth
+  changed_when: true
+
+- name: restart caddy
+  ansible.builtin.command: docker restart caddy
+  changed_when: true

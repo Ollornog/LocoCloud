@@ -2,6 +2,15 @@
 # playbooks/setup-master.yml
 # Initial setup of the Master-LXC with all admin services.
 # Usage: ansible-playbook playbooks/setup-master.yml -i inventories/master/
+#
+# Order matters:
+#   1. base       — OS hardening, Docker, UFW, Fail2ban
+#   2. netbird    — VPN connectivity (everything after this uses Netbird)
+#   3. pocketid   — OIDC provider (needed before Tinyauth)
+#   4. tinyauth   — Forward-auth (needs PocketID OIDC client)
+#   5. vaultwarden — Credential store (needed before credentials role)
+#   6. semaphore  — Ansible Web-UI
+#   7. caddy      — Reverse proxy (last: needs all backends running)
 
 - name: Setup Master Server
   hosts: all
@@ -17,18 +26,82 @@
     - role: base
       tags: [base]
 
-    # Phase 2 roles (added later):
-    # - role: netbird-client
-    #   tags: [netbird]
-    # - role: pocketid
-    #   tags: [pocketid]
-    # - role: tinyauth
-    #   tags: [tinyauth]
-    # - role: apps/vaultwarden
-    #   tags: [vaultwarden]
-    # - role: credentials
-    #   tags: [credentials]
-    # - role: apps/semaphore
-    #   tags: [semaphore]
-    # - role: caddy
-    #   tags: [caddy]
+    - role: netbird-client
+      vars:
+        netbird_setup_key: "{{ vault_master_netbird_setup_key | default('') }}"
+        netbird_management_url: "{{ loco.netbird.manager_url }}"
+      tags: [netbird]
+
+    - role: pocketid
+      vars:
+        pocketid_domain: "{{ loco.urls.pocketid }}"
+        pocketid_api_token: "{{ loco.pocketid.api_token | default('') }}"
+      tags: [pocketid]
+
+    - role: tinyauth
+      vars:
+        tinyauth_domain: "{{ loco.urls.tinyauth }}"
+        tinyauth_oidc_issuer_url: "https://{{ loco.urls.pocketid }}"
+        tinyauth_oauth_whitelist:
+          - "{{ loco.operator.email }}"
+        pocketid_api_token: "{{ loco.pocketid.api_token | default('') }}"
+      tags: [tinyauth]
+
+    - role: apps/vaultwarden
+      vars:
+        vaultwarden_domain: "{{ loco.urls.vaultwarden }}"
+        vaultwarden_smtp_host: "{{ loco.smtp.host | default('') }}"
+        vaultwarden_smtp_port: "{{ loco.smtp.port | default(587) }}"
+        vaultwarden_smtp_username: "{{ loco.smtp.user | default('') }}"
+        vaultwarden_smtp_from: "{{ loco.smtp.from | default('') }}"
+        caddy_mode: "master"
+      tags: [vaultwarden]
+
+    - role: apps/semaphore
+      vars:
+        semaphore_domain: "{{ loco.urls.semaphore }}"
+        semaphore_admin_email: "{{ loco.operator.email }}"
+      tags: [semaphore]
+
+    - role: caddy
+      vars:
+        caddy_mode: "master"
+      tags: [caddy]
+
+  post_tasks:
+    - name: Store PocketID admin credentials in Vaultwarden
+      ansible.builtin.include_role:
+        name: credentials
+        tasks_from: store.yml
+      vars:
+        vw_api_url: "https://{{ loco.urls.vaultwarden }}"
+        credential_name: "Master — PocketID Admin"
+        credential_username: "admin"
+        credential_password: "{{ pocketid_admin_password }}"
+        credential_uri: "https://{{ loco.urls.pocketid }}"
+        credential_notes: "PocketID admin account on master. Deployed: {{ ansible_date_time.iso8601 }}"
+      when: pocketid_admin_password is defined
+      tags: [credentials]
+
+    - name: Store Semaphore admin credentials in Vaultwarden
+      ansible.builtin.include_role:
+        name: credentials
+        tasks_from: store.yml
+      vars:
+        vw_api_url: "https://{{ loco.urls.vaultwarden }}"
+        credential_name: "Master — Semaphore Admin"
+        credential_username: "{{ semaphore_admin_user | default('admin') }}"
+        credential_password: "{{ semaphore_admin_password }}"
+        credential_uri: "https://{{ loco.urls.semaphore }}"
+        credential_notes: "Semaphore admin account. Deployed: {{ ansible_date_time.iso8601 }}"
+      when: semaphore_admin_password is defined
+      tags: [credentials]
+
+    - name: Master setup complete
+      ansible.builtin.debug:
+        msg: |
+          Master setup complete!
+          PocketID:   https://{{ loco.urls.pocketid }}
+          Tinyauth:   https://{{ loco.urls.tinyauth }}
+          Vaultwarden: https://{{ loco.urls.vaultwarden }}
+          Semaphore:  https://{{ loco.urls.semaphore }}

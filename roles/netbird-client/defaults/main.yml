@@ -1,0 +1,12 @@
+---
+# roles/netbird-client/defaults/main.yml
+# Netbird VPN client installation and join
+
+# Setup key for joining the Netbird network
+netbird_setup_key: ""
+
+# Management URL (from global config: loco.netbird.manager_url)
+netbird_management_url: ""
+
+# Interface name (used by UFW rules in base role)
+netbird_interface: "wt0"

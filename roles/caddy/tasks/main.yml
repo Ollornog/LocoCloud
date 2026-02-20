@@ -1,0 +1,41 @@
+---
+# roles/caddy/tasks/main.yml
+# Deploy Caddy reverse proxy
+
+- name: Create Caddy directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ caddy_stack_path }}"
+    - "{{ caddy_data_path }}"
+    - "{{ caddy_config_path }}"
+
+- name: Deploy Caddy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ caddy_stack_path }}/docker-compose.yml"
+    mode: "0644"
+  notify: restart caddy
+
+- name: Deploy Caddyfile (master)
+  ansible.builtin.template:
+    src: Caddyfile-master.j2
+    dest: "{{ caddy_stack_path }}/Caddyfile"
+    mode: "0644"
+  when: caddy_mode == "master"
+  notify: restart caddy
+
+- name: Deploy Caddyfile (customer)
+  ansible.builtin.template:
+    src: Caddyfile-customer.j2
+    dest: "{{ caddy_stack_path }}/Caddyfile"
+    mode: "0644"
+  when: caddy_mode == "customer"
+  notify: restart caddy
+
+- name: Start Caddy
+  community.docker.docker_compose_v2:
+    project_src: "{{ caddy_stack_path }}"
+    state: present

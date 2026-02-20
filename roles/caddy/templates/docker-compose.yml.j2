@@ -1,0 +1,16 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Caddy Reverse Proxy
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  caddy:
+    image: {{ caddy_image }}
+    container_name: caddy
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - {{ caddy_stack_path }}/Caddyfile:/etc/caddy/Caddyfile:ro
+      - {{ caddy_data_path }}:/data
+      - {{ caddy_config_path }}:/config

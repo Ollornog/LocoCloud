@@ -1,0 +1,6 @@
+---
+# roles/apps/vaultwarden/tasks/main.yml
+
+- name: Deploy Vaultwarden
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [vaultwarden, deploy]

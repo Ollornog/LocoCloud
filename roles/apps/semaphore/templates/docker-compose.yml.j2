@@ -1,0 +1,36 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Semaphore (Ansible Web-UI)
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  semaphore:
+    image: {{ semaphore_image }}
+    container_name: semaphore
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:{{ semaphore_port }}:3000"
+    env_file:
+      - .env
+    depends_on:
+      semaphore-db:
+        condition: service_healthy
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  semaphore-db:
+    image: {{ semaphore_db_image }}
+    container_name: semaphore-db
+    restart: unless-stopped
+    volumes:
+      - {{ semaphore_data_path }}/db:/var/lib/postgresql
+    environment:
+      POSTGRES_DB: {{ semaphore_db_name }}
+      POSTGRES_USER: {{ semaphore_db_user }}
+      POSTGRES_PASSWORD: {{ semaphore_db_password }}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ semaphore_db_user }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

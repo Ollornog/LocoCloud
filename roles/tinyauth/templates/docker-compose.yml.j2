@@ -1,0 +1,15 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Tinyauth Forward-Auth Proxy
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  tinyauth:
+    image: {{ tinyauth_image }}
+    container_name: tinyauth
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:{{ tinyauth_port }}:3000"
+    env_file:
+      - .env

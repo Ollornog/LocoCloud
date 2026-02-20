@@ -1,0 +1,11 @@
+---
+# roles/netbird-client/tasks/main.yml
+# Install Netbird client and join the network
+
+- name: Install Netbird
+  ansible.builtin.import_tasks: install.yml
+  tags: [netbird, install]
+
+- name: Join Netbird network
+  ansible.builtin.import_tasks: join.yml
+  tags: [netbird, join]

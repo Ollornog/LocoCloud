@@ -1,0 +1,21 @@
+---
+# roles/apps/vaultwarden/defaults/main.yml
+# Vaultwarden — Bitwarden-compatible credential manager
+
+vaultwarden_stack_path: "/opt/stacks/vaultwarden"
+vaultwarden_data_path: "/opt/stacks/vaultwarden/data"
+vaultwarden_image: "vaultwarden/server:latest"
+vaultwarden_port: 8222
+
+# Domain for Vaultwarden
+vaultwarden_domain: ""  # e.g. "vault.firma.de"
+
+# Admin token (generated if empty)
+vaultwarden_admin_token: ""
+
+# SMTP for email notifications
+vaultwarden_smtp_host: ""
+vaultwarden_smtp_port: 587
+vaultwarden_smtp_security: "starttls"
+vaultwarden_smtp_username: ""
+vaultwarden_smtp_from: ""

@@ -1,0 +1,49 @@
+---
+# roles/apps/semaphore/tasks/deploy.yml
+
+- name: Create Semaphore directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ semaphore_stack_path }}"
+    - "{{ semaphore_data_path }}"
+    - "{{ semaphore_data_path }}/db"
+
+- name: Generate Semaphore DB password
+  ansible.builtin.set_fact:
+    semaphore_db_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: semaphore_db_password | length == 0
+
+- name: Generate Semaphore admin password
+  ansible.builtin.set_fact:
+    semaphore_admin_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: semaphore_admin_password | length == 0
+
+- name: Deploy Semaphore docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ semaphore_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Deploy Semaphore .env
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ semaphore_stack_path }}/.env"
+    mode: "0600"
+
+- name: Start Semaphore
+  community.docker.docker_compose_v2:
+    project_src: "{{ semaphore_stack_path }}"
+    state: present
+
+- name: Wait for Semaphore to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ semaphore_port }}/api/ping"
+    method: GET
+    status_code: [200, 204]
+  register: semaphore_health
+  until: semaphore_health.status in [200, 204]
+  retries: 30
+  delay: 5

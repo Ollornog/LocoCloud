@@ -1,0 +1,11 @@
+---
+# roles/tinyauth/tasks/main.yml
+# Deploy Tinyauth forward-auth proxy
+
+- name: Deploy Tinyauth
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [tinyauth, deploy]
+
+- name: Register OIDC client for Tinyauth
+  ansible.builtin.import_tasks: oidc.yml
+  tags: [tinyauth, oidc]

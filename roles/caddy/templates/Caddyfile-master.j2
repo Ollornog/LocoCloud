@@ -1,0 +1,70 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Master-Server Admin-Dienste
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+(public) {
+	header -Server
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+	header X-Content-Type-Options "nosniff"
+	header X-Frame-Options "SAMEORIGIN"
+	header Referrer-Policy "strict-origin-when-cross-origin"
+	header Permissions-Policy "camera=(), microphone=(), geolocation=()"
+}
+
+(auth) {
+	forward_auth 127.0.0.1:{{ tinyauth_port }} {
+		uri /api/auth/caddy
+	}
+}
+
+# --- PocketID (Admin OIDC Provider) ---
+{{ loco.urls.pocketid }} {
+	import public
+	@blocked path /register*
+	handle @blocked {
+		respond "Access Denied" 403
+	}
+	@admin path /settings*
+	handle @admin {
+		import auth
+		reverse_proxy 127.0.0.1:{{ pocketid_port }}
+	}
+	handle {
+		reverse_proxy 127.0.0.1:{{ pocketid_port }}
+	}
+}
+
+# --- Tinyauth (Admin Forward Auth Portal) ---
+{{ loco.urls.tinyauth }} {
+	import public
+	reverse_proxy 127.0.0.1:{{ tinyauth_port }}
+}
+
+# --- Vaultwarden (Admin Credential Store) ---
+{{ loco.urls.vaultwarden }} {
+	import public
+	import auth
+	reverse_proxy 127.0.0.1:8222
+}
+
+# --- Semaphore (Ansible UI) ---
+{{ loco.urls.semaphore }} {
+	import public
+	import auth
+	reverse_proxy 127.0.0.1:3000
+}
+
+# --- Zabbix (Monitoring) ---
+{{ loco.urls.zabbix }} {
+	import public
+	import auth
+	reverse_proxy 127.0.0.1:8080
+}
+
+# --- Catch-All ---
+:80, :443 {
+	respond "Access Denied" 403
+	header -Server
+}
