@@ -2,36 +2,83 @@
 # scripts/setup.sh
 # LocoCloud — Kompletter Setup vom blanken Debian-Server.
 #
-# Usage: curl -fsSL https://raw.githubusercontent.com/Ollornog/LocoCloud/main/scripts/setup.sh | bash
-#   oder: bash scripts/setup.sh  (wenn Repo bereits geklont)
+# Usage:
+#   curl -fsSL https://raw.githubusercontent.com/Ollornog/LocoCloud/main/scripts/setup.sh -o setup.sh
+#   bash setup.sh
 #
-# Was das Script macht:
-#   1. System aktualisieren (apt update/upgrade)
-#   2. Grundpakete installieren (sudo, curl, git, etc.)
-#   3. Netbird installieren und optional joinen
-#   4. Repo klonen (falls noch nicht vorhanden)
-#   5. Ansible installieren (pipx)
-#   6. Ansible Collections installieren
-#   7. Interaktiv: Domain, Name, E-Mail abfragen
-#   8. config/lococloudd.yml automatisch generieren
-#   9. Master-Inventar vorbereiten
+# Oder wenn das Repo bereits geklont ist:
+#   bash scripts/setup.sh
+#
+# WICHTIG: Nicht mit "curl | bash" ausfuehren — das Script braucht
+# interaktive Eingaben und muss vom Terminal lesen koennen.
 
-set -euo pipefail
+set -eo pipefail
 
 # --- Colors ---
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
+BOLD='\033[1m'
 NC='\033[0m'
 
 info()  { echo -e "${CYAN}[INFO]${NC} $*"; }
 ok()    { echo -e "${GREEN}[OK]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
-ask()   { echo -en "${CYAN}$1${NC} "; read -r "$2"; }
+
+# Read from /dev/tty so it works even if script is piped
+# Usage: ask "Prompt text:" VARNAME
+ask() {
+  local prompt="$1"
+  local varname="$2"
+  echo -en "${CYAN}${prompt}${NC} " >/dev/tty
+  IFS= read -r "$varname" </dev/tty || true
+}
+
+# Ask with a default value — shows [default] and uses it if input is empty
+# Usage: ask_default "Prompt text" VARNAME "default"
+ask_default() {
+  local prompt="$1"
+  local varname="$2"
+  local default="$3"
+  echo -en "${CYAN}${prompt}${NC} [${default}] " >/dev/tty
+  local input=""
+  IFS= read -r input </dev/tty || true
+  if [ -z "$input" ]; then
+    eval "$varname=\"$default\""
+  else
+    eval "$varname=\"$input\""
+  fi
+}
+
+# Pre-init all variables to avoid unbound errors
+NETBIRD_URL=""
+NETBIRD_SETUP_KEY=""
+NETBIRD_IP=""
+NETBIRD_SELF_HOSTED="n"
+NETBIRD_DOMAIN=""
+NETBIRD_RELAY_DOMAIN=""
+OPERATOR_NAME=""
+OPERATOR_EMAIL=""
+BASE_DOMAIN=""
+ADMIN_SUB="admin"
+ADMIN_DOMAIN=""
+SMTP_HOST=""
+SMTP_PORT="587"
+SMTP_USER=""
+SMTP_FROM=""
+GATEWAY_IP=""
+WRITE_CONFIG=""
 
 REPO_DIR="/root/LocoCloud"
+
+# =====================================================
+echo ""
+echo -e "${BOLD}==========================================${NC}"
+echo -e "${BOLD}  LocoCloud Setup${NC}"
+echo -e "${BOLD}==========================================${NC}"
+echo ""
 
 # =====================================================
 # Phase 1: System aktualisieren + Grundpakete
@@ -67,21 +114,19 @@ fi
 echo ""
 echo "Netbird muss mit einem Management-Server verbunden werden."
 echo "Falls du einen eigenen Netbird-Server betreibst, gib die URL an."
-echo "Falls noch kein Netbird-Server existiert, kannst du diesen Schritt ueberspringen"
-echo "und spaeter 'netbird up' manuell ausfuehren."
+echo "Falls noch kein Netbird-Server existiert, kannst du diesen Schritt"
+echo "ueberspringen und spaeter 'netbird up' manuell ausfuehren."
 echo ""
 ask "Netbird Management-URL (leer = ueberspringen):" NETBIRD_URL
 
-if [ -n "${NETBIRD_URL:-}" ]; then
+if [ -n "$NETBIRD_URL" ]; then
   ask "Netbird Setup-Key:" NETBIRD_SETUP_KEY
-  if [ -n "${NETBIRD_SETUP_KEY:-}" ]; then
+  if [ -n "$NETBIRD_SETUP_KEY" ]; then
     netbird up --management-url "$NETBIRD_URL" --setup-key "$NETBIRD_SETUP_KEY"
     ok "Netbird verbunden"
     sleep 2
-    NETBIRD_IP=$(netbird status --json 2>/dev/null | jq -r '.localPeerState.fqdn // empty' 2>/dev/null || true)
-    if [ -z "$NETBIRD_IP" ]; then
-      NETBIRD_IP=$(netbird status --json 2>/dev/null | jq -r '.localPeerState.ip // empty' 2>/dev/null || true)
-    fi
+    # Try to get IP automatically
+    NETBIRD_IP=$(netbird status --json 2>/dev/null | jq -r '.localPeerState.ip // empty' 2>/dev/null || true)
     if [ -n "$NETBIRD_IP" ]; then
       # Strip /32 CIDR suffix if present
       NETBIRD_IP="${NETBIRD_IP%/32}"
@@ -92,9 +137,8 @@ if [ -n "${NETBIRD_URL:-}" ]; then
     fi
   fi
 else
-  warn "Netbird-Join uebersprungen. Spaeter manuell: netbird up --management-url URL --setup-key KEY"
-  NETBIRD_IP=""
-  NETBIRD_URL=""
+  warn "Netbird-Join uebersprungen."
+  echo "  Spaeter manuell: netbird up --management-url URL --setup-key KEY"
 fi
 
 # =====================================================
@@ -116,13 +160,16 @@ cd "$REPO_DIR"
 # =====================================================
 info "Phase 4: Ansible installieren"
 
+# PATH fuer diese Session sicherstellen (falls pipx schon installiert hat)
+export PATH="$PATH:/root/.local/bin"
+
 if command -v ansible &>/dev/null; then
   ok "Ansible ist bereits installiert: $(ansible --version | head -1)"
 else
   pipx install ansible-core
   pipx ensurepath
 
-  # PATH fuer diese Session aktualisieren
+  # PATH nochmal aktualisieren
   export PATH="$PATH:/root/.local/bin"
 
   if command -v ansible &>/dev/null; then
@@ -143,57 +190,57 @@ ok "Collections installiert"
 # =====================================================
 # Phase 6: Interaktive Konfiguration
 # =====================================================
-info "Phase 6: Konfiguration"
 echo ""
-echo "Jetzt werden die wichtigsten Einstellungen abgefragt."
+echo -e "${BOLD}==========================================${NC}"
+echo -e "${BOLD}  Konfiguration${NC}"
+echo -e "${BOLD}==========================================${NC}"
+echo ""
 echo "Subdomains werden automatisch aus der Basis-Domain generiert."
 echo ""
 
 ask "Dein Name:" OPERATOR_NAME
+[ -z "$OPERATOR_NAME" ] && error "Name darf nicht leer sein."
+
 ask "Admin-E-Mail:" OPERATOR_EMAIL
+[ -z "$OPERATOR_EMAIL" ] && error "E-Mail darf nicht leer sein."
+
 ask "Basis-Domain (z.B. example.com):" BASE_DOMAIN
-ask "Admin-Subdomain [admin]:" ADMIN_SUB
-ADMIN_SUB="${ADMIN_SUB:-admin}"
+[ -z "$BASE_DOMAIN" ] && error "Domain darf nicht leer sein."
+
+ask_default "Admin-Subdomain" ADMIN_SUB "admin"
 ADMIN_DOMAIN="${ADMIN_SUB}.${BASE_DOMAIN}"
 
 echo ""
 info "Generierte Admin-URLs:"
-echo "  PocketID:    id.${ADMIN_DOMAIN}"
-echo "  Tinyauth:    auth.${ADMIN_DOMAIN}"
-echo "  Vaultwarden: vault.${ADMIN_DOMAIN}"
-echo "  Semaphore:   deploy.${ADMIN_DOMAIN}"
-echo "  Zabbix:      monitor.${ADMIN_DOMAIN}"
+echo "  PocketID:    https://id.${ADMIN_DOMAIN}"
+echo "  Tinyauth:    https://auth.${ADMIN_DOMAIN}"
+echo "  Vaultwarden: https://vault.${ADMIN_DOMAIN}"
+echo "  Semaphore:   https://deploy.${ADMIN_DOMAIN}"
+echo "  Zabbix:      https://monitor.${ADMIN_DOMAIN}"
 echo ""
 
 # SMTP (optional)
 ask "SMTP Host (leer = spaeter konfigurieren):" SMTP_HOST
-SMTP_PORT=""
-SMTP_USER=""
-SMTP_FROM=""
-if [ -n "${SMTP_HOST:-}" ]; then
-  ask "SMTP Port [587]:" SMTP_PORT
-  SMTP_PORT="${SMTP_PORT:-587}"
+if [ -n "$SMTP_HOST" ]; then
+  ask_default "SMTP Port" SMTP_PORT "587"
   ask "SMTP User:" SMTP_USER
-  ask "SMTP From-Adresse [noreply@${BASE_DOMAIN}]:" SMTP_FROM
-  SMTP_FROM="${SMTP_FROM:-noreply@${BASE_DOMAIN}}"
+  ask_default "SMTP From-Adresse" SMTP_FROM "noreply@${BASE_DOMAIN}"
 fi
 
 # Gateway
+echo ""
 ask "Public IP des Gateway-Servers (leer = spaeter):" GATEWAY_IP
 
 # Netbird Server self-hosted?
 echo ""
-ask "Eigenen Netbird-Server mit einrichten? (j/n) [n]:" NETBIRD_SELF_HOSTED
-NETBIRD_SELF_HOSTED="${NETBIRD_SELF_HOSTED:-n}"
-NETBIRD_DOMAIN=""
-NETBIRD_RELAY_DOMAIN=""
+ask_default "Eigenen Netbird-Server mit einrichten? (j/n)" NETBIRD_SELF_HOSTED "n"
 if [[ "$NETBIRD_SELF_HOSTED" =~ ^[jJyY]$ ]]; then
-  ask "Netbird-Domain (z.B. netbird.${BASE_DOMAIN}):" NETBIRD_DOMAIN
-  NETBIRD_DOMAIN="${NETBIRD_DOMAIN:-netbird.${BASE_DOMAIN}}"
-  ask "Netbird-Relay-Domain (z.B. relay.${BASE_DOMAIN}):" NETBIRD_RELAY_DOMAIN
-  NETBIRD_RELAY_DOMAIN="${NETBIRD_RELAY_DOMAIN:-relay.${BASE_DOMAIN}}"
+  ask_default "Netbird-Domain" NETBIRD_DOMAIN "netbird.${BASE_DOMAIN}"
+  ask_default "Netbird-Relay-Domain" NETBIRD_RELAY_DOMAIN "relay.${BASE_DOMAIN}"
   # If no management URL was set earlier, set it now
-  NETBIRD_URL="${NETBIRD_URL:-https://${NETBIRD_DOMAIN}}"
+  if [ -z "$NETBIRD_URL" ]; then
+    NETBIRD_URL="https://${NETBIRD_DOMAIN}"
+  fi
 fi
 
 # =====================================================
@@ -203,19 +250,17 @@ info "Phase 7: config/lococloudd.yml generieren"
 
 CONFIG_FILE="$REPO_DIR/config/lococloudd.yml"
 
+WRITE_CONFIG="true"
 if [ -f "$CONFIG_FILE" ]; then
   warn "Config existiert bereits: $CONFIG_FILE"
-  ask "Ueberschreiben? (j/n) [n]:" OVERWRITE
+  ask_default "Ueberschreiben? (j/n)" OVERWRITE "n"
   if [[ ! "$OVERWRITE" =~ ^[jJyY]$ ]]; then
     info "Config wird nicht ueberschrieben."
-  else
-    WRITE_CONFIG=true
+    WRITE_CONFIG=""
   fi
-else
-  WRITE_CONFIG=true
 fi
 
-if [ "${WRITE_CONFIG:-}" = "true" ] || [ ! -f "$CONFIG_FILE" ]; then
+if [ "$WRITE_CONFIG" = "true" ]; then
   cat > "$CONFIG_FILE" <<YAML
 # config/lococloudd.yml
 # Generiert durch scripts/setup.sh
@@ -242,7 +287,7 @@ urls:
 
 # --- Netbird ---
 netbird:
-  manager_url: "${NETBIRD_URL:-}"
+  manager_url: "${NETBIRD_URL}"
   api_token: ""
 
 # --- PocketID (Admin-Instanz) ---
@@ -252,10 +297,10 @@ pocketid:
 
 # --- SMTP ---
 smtp:
-  host: "${SMTP_HOST:-}"
-  port: ${SMTP_PORT:-587}
+  host: "${SMTP_HOST}"
+  port: ${SMTP_PORT}
   starttls: true
-  user: "${SMTP_USER:-}"
+  user: "${SMTP_USER}"
   from: "${SMTP_FROM:-noreply@${BASE_DOMAIN}}"
 
 # --- GitHub Repo ---
@@ -276,11 +321,11 @@ bitwarden_cli:
 
 # --- Gateway ---
 admin_gateway:
-  public_ip: "${GATEWAY_IP:-}"
+  public_ip: "${GATEWAY_IP}"
 YAML
 
   # Append netbird_server section if self-hosted
-  if [[ "${NETBIRD_SELF_HOSTED:-n}" =~ ^[jJyY]$ ]]; then
+  if [[ "$NETBIRD_SELF_HOSTED" =~ ^[jJyY]$ ]]; then
     cat >> "$CONFIG_FILE" <<YAML
 
 # --- Netbird Server (Self-Hosted) ---
@@ -301,9 +346,8 @@ fi
 info "Phase 8: Master-Inventar vorbereiten"
 
 HOSTS_FILE="$REPO_DIR/inventories/master/hosts.yml"
-GROUPVARS_FILE="$REPO_DIR/inventories/master/group_vars/all.yml"
 
-if [ -n "${NETBIRD_IP:-}" ]; then
+if [ -n "$NETBIRD_IP" ]; then
   cat > "$HOSTS_FILE" <<YAML
 ---
 all:
@@ -325,9 +369,9 @@ fi
 # Zusammenfassung
 # =====================================================
 echo ""
-echo "==========================================="
-echo -e "${GREEN} LocoCloud Setup abgeschlossen!${NC}"
-echo "==========================================="
+echo -e "${BOLD}==========================================${NC}"
+echo -e "${GREEN}${BOLD}  LocoCloud Setup abgeschlossen!${NC}"
+echo -e "${BOLD}==========================================${NC}"
 echo ""
 echo "Repo:   $REPO_DIR"
 echo "Config: $REPO_DIR/config/lococloudd.yml"
@@ -339,16 +383,16 @@ echo "  Vaultwarden: https://vault.${ADMIN_DOMAIN}"
 echo "  Semaphore:   https://deploy.${ADMIN_DOMAIN}"
 echo ""
 
-if [ -n "${NETBIRD_IP:-}" ]; then
+if [ -n "$NETBIRD_IP" ]; then
   echo "Netbird-IP:    ${NETBIRD_IP}"
+  echo ""
 fi
 
-echo ""
-echo "Naechste Schritte:"
+echo -e "${BOLD}Naechste Schritte:${NC}"
 echo ""
 
 STEP=1
-if [ -z "${NETBIRD_IP:-}" ]; then
+if [ -z "$NETBIRD_IP" ]; then
   echo "  ${STEP}. Netbird joinen:"
   echo "     netbird up --management-url <URL> --setup-key <KEY>"
   echo "     Dann: inventories/master/hosts.yml bearbeiten (ansible_host setzen)"
