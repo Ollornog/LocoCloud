@@ -321,29 +321,32 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 
 ### 7.2 Dokumentation vervollständigen
 
-- [ ] `docs/SETUP.md` — Master-Server Setup Anleitung
-- [ ] `docs/ONBOARDING.md` — Neukunden-Prozess Schritt für Schritt
-- [ ] `docs/APP-DEVELOPMENT.md` — Wie man eine neue App-Rolle erstellt
-- [ ] `docs/TROUBLESHOOTING.md` — Bekannte Probleme + Lösungen
-- [ ] `README.md` — Englisch, Quick Start, Architektur-Überblick
+- [x] `docs/SETUP.md` — Master-Server Setup Anleitung
+- [x] `docs/ONBOARDING.md` — Neukunden-Prozess Schritt für Schritt
+- [x] `docs/APP-DEVELOPMENT.md` — Wie man eine neue App-Rolle erstellt
+- [x] `docs/TROUBLESHOOTING.md` — Bekannte Probleme + Lösungen
+- [x] `README.md` — Englisch, Quick Start, Architektur-Überblick
+- [x] `docs/SEMAPHORE.md` — Semaphore-Templates pro Kunde
 
 ### 7.3 Security-Review
 
-- [ ] Keine Secrets im Repo (grep nach Passwörtern, Tokens, Keys)
-- [ ] Alle .env-Dateien chmod 600
-- [ ] UFW-Regeln korrekt auf allen Server-Rollen
-- [ ] Fail2ban aktiv
-- [ ] SSH Key-Only überall
+- [x] Keine Secrets im Repo (grep nach Passwörtern, Tokens, Keys)
+- [x] Alle .env-Dateien chmod 600
+- [x] UFW-Regeln korrekt auf allen Server-Rollen
+- [x] Fail2ban aktiv
+- [x] SSH Key-Only überall
+- [x] `.ansible-lint` + `.yamllint` Konfiguration
 
 ### 7.4 Idempotenz-Tests
 
-- [ ] Jedes Playbook 2x hintereinander ausführen → keine Änderungen beim 2. Lauf
-- [ ] Jede Rolle einzeln testbar mit Tags
+- [x] Code-Review: Alle Rollen verwenden idempotente Module (state: present, template, file)
+- [x] Jede Rolle einzeln testbar mit Tags
+- [ ] Jedes Playbook 2x hintereinander ausführen → keine Änderungen beim 2. Lauf (manuell auf Infra testen)
 
 ### 7.5 Semaphore-Templates
 
-- [ ] Alle Playbooks als Semaphore-Templates dokumentieren
-- [ ] Anleitung: Semaphore-Projekte pro Kunde einrichten
+- [x] Alle Playbooks als Semaphore-Templates dokumentiert (`docs/SEMAPHORE.md`)
+- [x] Anleitung: Semaphore-Projekte pro Kunde einrichten
 
 **Ergebnis Phase 7:** Repo ist public-fähig. Dokumentation vollständig. Alles getestet.
 
