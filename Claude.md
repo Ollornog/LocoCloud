@@ -51,12 +51,15 @@ LocoCloud/
 ## Architektur-Essenz
 
 - **Netbird überall.** Jeder LXC eigener Netbird-Client + eigene IP. Keine Proxmox-Bridge.
-- **PocketID + Tinyauth pro Kunde.** Eigene Instanzen, kein Sharing. PocketID REST-API für User/Gruppen/OIDC-Client-Automation via `uri`-Modul.
+- **PocketID + Tinyauth pro Kunde.** Eigene Instanzen, kein Sharing. Tinyauth reicht (nur OIDC, kein Brute-Force-Risiko), austauschbar auf Authelia. PocketID REST-API für User/Gruppen/OIDC-Client-Automation via `uri`-Modul.
 - **Caddy als Entry-Point.** Default: alles blockiert. Öffentliche Pfade explizit gewhitelistet.
 - **Port-Binding:** Entry-Point `127.0.0.1:PORT`, App-LXCs `0.0.0.0:PORT` + UFW auf `wt0`.
 - **Secrets:** Ansible Vault für Repo-Encryption, Vaultwarden als Credential-Store. `community.general.bitwarden` Lookup-Plugin für Laufzeit-Secrets. `scripts/vault-pass.sh` holt Vault-Passwort aus Vaultwarden.
 - **Backup:** Restic über SFTP (via Netbird oder direkt). Ziel dynamisch pro Kunde konfigurierbar.
 - **Deployment-Varianten:** Cloud-Only (Hetzner), Hybrid (Hetzner + Proxmox), Lokal-Only (Proxmox + Gateway-LXC).
+- **Monitoring:** Zabbix auf Master (Infra). Uptime Kuma optional pro Kunde (`status.firma.de`).
+- **DynDNS (Lokal-Only):** Master-Server (Hetzner) übernimmt DNS-Updates für lokale Kunden.
+- **Admin sudo:** NOPASSWD — SSH nur über Netbird + Key-Only.
 - **Admin-Infra:** `*.loco.ollornog.de` → Caddy auf Hetzner (46.225.165.213) → Netbird → Master-LXC.
 
 ---
