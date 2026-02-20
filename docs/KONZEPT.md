@@ -171,27 +171,22 @@ monitor.loco.ollornog.de   → Zabbix (Monitoring)
 ```
 
 **DNS-Setup:**
-- Wildcard A-Record: `*.loco.ollornog.de → <öffentliche IP>`
-- Die öffentliche IP kommt vom Hetzner-Server (privat) der als Reverse Proxy dient
-- ODER: Der Master-LXC bekommt eine eigene öffentliche Route über einen NEUEN Hetzner-vServer
+- Wildcard A-Record: `*.loco.ollornog.de → 46.225.165.213` (Daniels Hetzner-Server, A-Record bei UDAG)
 
-> **ENTSCHEIDUNG NÖTIG:** Woher kommt die öffentliche IP für `*.loco.ollornog.de`?
-> - **Option A:** Daniels privater Hetzner leitet `*.loco.ollornog.de` über Netbird an den Master-LXC weiter (Caddy-Route auf privatem Hetzner, ABER: berührt dann doch private Infra)
-> - **Option B:** Ein NEUER kleiner Hetzner-vServer nur für LocoCloud-Admin (sauberste Trennung, Kosten ~€4/Monat)
-> - **Option C:** Master-LXC direkt exponiert (DynDNS + Port-Forward durch Daniels Router, abhängig von Internetverbindung)
->
-> **Empfehlung:** Option A ist pragmatisch — es ist nur eine Caddy-Route auf dem privaten Hetzner, keine Vermischung von Daten. Oder Option B für absolute Trennung.
+**Entscheidung:** Der Master-LXC auf Daniels Proxmox ist NICHT direkt öffentlich erreichbar. Stattdessen bekommt der Caddy auf Daniels bestehendem Hetzner-Server (46.225.165.213) zusätzliche Routen für `*.loco.ollornog.de`.
+
+**Traffic-Flow:** Internet → Hetzner Caddy (46.225.165.213) → Netbird → Master-LXC
+
+Das ist die pragmatischste Lösung:
+- Kein zusätzlicher Server nötig
+- Kein Sicherheitsrisiko: Master-LXC ist nur über Netbird erreichbar, Caddy auf Hetzner leitet nur weiter
+- Für Kunden mit eigenem Hetzner-Server kann alternativ der Traffic über deren Server geroutet werden
 
 ### 3.4 TLS für Master-Dienste
 
-**Falls Option A (Route über privaten Hetzner):**
-- Caddy auf privatem Hetzner terminiert TLS für `*.loco.ollornog.de`
+- Caddy auf Daniels Hetzner (46.225.165.213) terminiert TLS für `*.loco.ollornog.de`
 - Leitet über Netbird an den Master-LXC weiter (HTTP, kein TLS nötig im Tunnel)
 - Master-Caddy lauscht auf HTTP und fügt Header hinzu
-
-**Falls Option B (eigener Hetzner für LocoCloud):**
-- Caddy auf dem neuen Hetzner terminiert TLS
-- Gleicher Aufbau wie bei Kunden (Hybrid-Variante)
 
 ### 3.5 Repo auf dem Master
 
@@ -654,22 +649,37 @@ Jede App die OIDC unterstützt wird direkt mit der Kunden-PocketID verbunden:
 
 Apps OHNE OIDC (Uptime Kuma, Listmonk etc.) werden ausschließlich durch Tinyauth Forward-Auth geschützt.
 
-### 7.6 Benutzer-Management
+### 7.6 PocketID REST-API
 
-```
-Neuer Mitarbeiter:
-1. In PocketID anlegen (id.firma.de → Admin-Panel)
-2. E-Mail in Tinyauth OAUTH_WHITELIST eintragen
-3. docker restart tinyauth
-4. Mitarbeiter loggt sich ein → automatische Provisionierung in Apps (OIDC)
+**PocketID hat eine REST-API mit API-Token-Authentifizierung.** Ansible kann über das `uri`-Modul direkt:
+- **User anlegen:** `POST /api/users` (username, email, first_name, last_name)
+- **Gruppen erstellen und User zuweisen:** `POST /api/user-groups`
+- **OIDC-Clients erstellen:** `POST /api/oidc-clients` (Name, Callback-URLs, Scopes)
 
-Mitarbeiter entfernen:
-1. In PocketID deaktivieren/löschen
-2. E-Mail aus OAUTH_WHITELIST entfernen
-3. docker restart tinyauth → Session sofort ungültig
-```
+API-Endpoints: `https://id.firma.de/api/...` mit Bearer-Token-Auth (`Authorization: Bearer <api-token>`).
 
-### 7.7 Tinyauth-Warnung
+### 7.7 Benutzer-Management (automatisiert via API)
+
+**Workflow "Neuer Mitarbeiter":**
+1. Ansible erstellt User in PocketID via API (`uri`-Modul)
+2. PocketID sendet Setup-E-Mail an den User
+3. User registriert seinen Passkey im Browser (manuell, kann nicht automatisiert werden)
+4. E-Mail wird zur Tinyauth `OAUTH_WHITELIST` hinzugefügt
+5. `docker restart tinyauth`
+6. User kann sich bei allen Apps anmelden (automatische Provisionierung via OIDC)
+
+**Workflow "Mitarbeiter entfernen":**
+1. In PocketID deaktivieren/löschen (via API oder UI)
+2. E-Mail aus `OAUTH_WHITELIST` entfernen
+3. `docker restart tinyauth` → Session sofort ungültig
+
+**Workflow "OIDC-Client für neue App":**
+1. Ansible erstellt OIDC-Client in PocketID via API (Name, Callback-URL)
+2. API gibt Client-ID und Client-Secret zurück
+3. Ansible konfiguriert die App mit diesen Credentials
+4. Credentials werden in Admin-Vaultwarden gespeichert (via `credentials`-Rolle)
+
+### 7.8 Tinyauth-Warnung
 
 > **Tinyauth ist laut Maintainer nicht production-ready.** Für den Start ist es ausreichend, da es leichtgewichtig ist und die Grundfunktion (Forward-Auth via OIDC) zuverlässig erfüllt. Bei Problemen: Fallback auf **Authelia** (schwerer, aber ausgereift, Multi-User, Brute-Force-Schutz, TOTP/WebAuthn). Die Ansible-Rollen sollten so gebaut werden, dass ein Austausch möglich ist.
 
@@ -860,7 +870,7 @@ roles/apps/nextcloud/
 │   ├── main.yml               # Dispatcher (deploy/remove/configure)
 │   ├── deploy.yml             # Docker Compose + starten
 │   ├── configure.yml          # App-spezifisch (occ, etc.)
-│   ├── oidc.yml               # OIDC-Client registrieren
+│   ├── oidc.yml               # OIDC-Client via PocketID API registrieren
 │   └── remove.yml             # Aufräumen
 ├── templates/
 │   ├── docker-compose.yml.j2
@@ -868,7 +878,32 @@ roles/apps/nextcloud/
 └── handlers/main.yml
 ```
 
-### 9.3 Redis-Strategie
+**OIDC-Registrierung (`oidc.yml`)** nutzt die PocketID REST-API:
+```yaml
+- name: Create OIDC client in PocketID
+  uri:
+    url: "https://id.{{ kunde_domain }}/api/oidc-clients"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ pocketid_api_token }}"
+    body_format: json
+    body:
+      name: "{{ app_name }}"
+      callback_urls:
+        - "https://{{ app_subdomain }}.{{ kunde_domain }}{{ app_oidc_redirect_path }}"
+    status_code: 201
+  register: oidc_result
+
+- name: Store OIDC credentials in Vaultwarden
+  include_role:
+    name: credentials
+  vars:
+    credential_name: "{{ kunde_name }} — {{ app_name }} OIDC"
+    credential_username: "{{ oidc_result.json.client_id }}"
+    credential_password: "{{ oidc_result.json.client_secret }}"
+```
+
+### 9.3 Redis-Strategie (durch `isolation_mode` implizit gelöst)
 
 **Bei `single_lxc`:** Ein Redis-Container, mehrere Apps. Isolation über DB-Nummern:
 
@@ -885,6 +920,8 @@ REDIS_DB: 1
 ```
 
 **Bei `lxc_per_app`:** Jeder LXC hat seinen eigenen Redis-Container. Keine DB-Nummern nötig — die Isolation geschieht auf LXC-Ebene.
+
+> **Keine offene Entscheidung mehr** — das Verhalten ist durch `isolation_mode` determiniert.
 
 ### 9.4 PostgreSQL 18 Mount-Pfad
 
@@ -919,13 +956,41 @@ volumes:
 
 ---
 
-## 10. Credential-Management (Vaultwarden)
+## 10. Credential-Management (Ansible Vault + Vaultwarden)
 
-### 10.1 Eigene Instanz auf Master-Server
+### 10.1 Zwei-Schichten-Strategie
+
+**Ansible Vault und Vaultwarden ergänzen sich — beides wird eingesetzt:**
+
+| Was | Wo | Wie |
+|-----|-----|-----|
+| Kunden-Inventar-Secrets (Netbird-Keys, Tokens) | Ansible Vault (`group_vars/vault.yml`, verschlüsselt im Repo) | `ansible-vault encrypt` |
+| Ansible-Vault-Passwort selbst | Admin-Vaultwarden (vault.loco.ollornog.de) | Shell-Script `vault-pass.sh` holt es via `bw` CLI |
+| Generierte App-Credentials (DB-Passwörter, OIDC-Secrets) | Admin-Vaultwarden via API | `credentials`-Rolle speichert nach Deploy |
+| SSH-Keys | Admin-Vaultwarden | Bitwarden SSH-Agent |
+| Laufzeit-Secrets lesen | Vaultwarden via `community.general.bitwarden` Lookup-Plugin | `lookup('community.general.bitwarden', 'name', field='password')` |
+
+**Ansible-Vault-Passwort aus Vaultwarden:**
+```bash
+#!/bin/bash
+# scripts/vault-pass.sh — wird von ansible.cfg als vault_password_file referenziert
+_bw_session="$(bw unlock --raw)"
+bw get password "lococloudd-ansible-vault" --session "${_bw_session}" --raw
+```
+
+In `ansible.cfg`:
+```ini
+[defaults]
+vault_password_file = scripts/vault-pass.sh
+```
+
+So muss man sich nur das Vaultwarden-Master-Passwort merken. Alles andere ist verschlüsselt oder in Vaultwarden.
+
+### 10.2 Eigene Vaultwarden-Instanz auf Master-Server
 
 `vault.loco.ollornog.de` — komplett getrennt von Daniels privatem Vaultwarden (`vault.ollornog.de`).
 
-### 10.2 Ordnerstruktur
+### 10.3 Ordnerstruktur
 
 ```
 LocoCloud Organisation/
@@ -957,7 +1022,7 @@ LocoCloud Organisation/
 │   └── ...
 ```
 
-### 10.3 Ansible-Integration
+### 10.4 Ansible-Integration
 
 ```yaml
 # Credential generieren
@@ -991,7 +1056,7 @@ LocoCloud Organisation/
       organizationId: "{{ loco_org_id }}"
 ```
 
-### 10.4 Vaultwarden API Token
+### 10.5 Vaultwarden API Token
 
 Gespeichert auf Master-LXC: `/root/.loco-vaultwarden-token` (chmod 600)
 
@@ -1003,12 +1068,15 @@ Gespeichert auf Master-LXC: `/root/.loco-vaultwarden-token` (chmod 600)
 
 ```
 Kunden-Server
-    │ Restic via SFTP über Netbird
+    │ Restic via SFTP über Netbird (oder direkt per SFTP)
     ▼
-Backup-Server (Admin-Seite, Netbird-Gruppe "loco-backup")
-    ├── Primär: Lokaler Backup-LXC
-    └── Off-Site: Hetzner Storage Box
+Backup-Ziel (pro Kunde konfigurierbar)
+    ├── Option 1: Eigener Backup-Server via Netbird
+    ├── Option 2: Hetzner Storage Box
+    └── Option 3: Off-Site auf Betreiber-Infrastruktur via Netbird
 ```
+
+Das Backup-Ziel ist **pro Kunde konfigurierbar**, nicht eine globale Entscheidung. Alle Ziele sind über Netbird oder direkt per SFTP erreichbar. Restic verschlüsselt client-seitig — der Backup-Server sieht nur verschlüsselte Blobs.
 
 ### 11.2 Was wird gesichert
 
@@ -1025,12 +1093,23 @@ Backup-Server (Admin-Seite, Netbird-Gruppe "loco-backup")
 backup:
   enabled: true
   targets:
+    # Option 1: Eigener Backup-Server via Netbird
     - type: "sftp"
-      host: "{{ loco_backup_netbird_ip }}"
+      host: "{{ backup_server_netbird_ip }}"
       user: "backup"
       path: "/backup/{{ kunde_id }}"
-    - type: "sftp"                          # Off-Site
+
+    # Option 2: Hetzner Storage Box
+    - type: "sftp"
       host: "uXXXXX.your-storagebox.de"
+      port: 23
+      user: "uXXXXX"
+      path: "/backup/{{ kunde_id }}"
+
+    # Option 3: Off-Site auf Betreiber-Infrastruktur via Netbird
+    - type: "sftp"
+      host: "{{ loco.backup_netbird_ip }}"
+      user: "backup"
       path: "/backup/{{ kunde_id }}"
   schedule:
     incremental: "0 */6 * * *"
@@ -1189,6 +1268,11 @@ netbird:
   api_token: ""                                # Netbird API Token
   # NICHT im Repo! Wird über Umgebungsvariable oder Vault geladen.
 
+# --- PocketID (Admin-Instanz, REST-API) ---
+pocketid:
+  api_token: ""                                # PocketID REST-API Token
+  # Für User/Gruppen/OIDC-Client-Automation via uri-Modul
+
 # --- SMTP ---
 smtp:
   host: "smtps.udag.de"
@@ -1209,6 +1293,15 @@ vaultwarden:
   url: "https://vault.loco.ollornog.de"
   api_token_path: "/root/.loco-vaultwarden-token"
   organization_id: ""                   # Wird nach Setup eingetragen
+
+# --- Bitwarden CLI (für Ansible Vault Passwort + Lookup-Plugin) ---
+bitwarden_cli:
+  server_url: "https://vault.loco.ollornog.de"  # Muss auf Vaultwarden zeigen
+  vault_item_name: "lococloudd-ansible-vault"    # Item mit Vault-Passwort
+
+# --- Öffentlicher Einstiegspunkt für Admin-Dienste ---
+admin_gateway:
+  hetzner_ip: "46.225.165.213"         # Caddy leitet *.loco.ollornog.de via Netbird an Master-LXC
 ```
 
 ### 13.3 `.gitignore`
@@ -1262,6 +1355,9 @@ netbird:
   manager_url: "https://netbird.example.com"
   api_token: ""
 
+pocketid:
+  api_token: ""                              # PocketID REST-API Token
+
 smtp:
   host: "smtp.example.com"
   port: 587
@@ -1278,6 +1374,13 @@ vaultwarden:
   url: "https://vault.admin.example.com"
   api_token_path: "/root/.vaultwarden-token"
   organization_id: ""
+
+bitwarden_cli:
+  server_url: "https://vault.admin.example.com"
+  vault_item_name: "lococloudd-ansible-vault"
+
+admin_gateway:
+  hetzner_ip: ""                             # IP des Hetzner-Servers fuer Admin-Routing
 ```
 
 ### 13.5 `ansible.cfg`
@@ -1289,8 +1392,7 @@ roles_path = roles/
 host_key_checking = False
 retry_files_enabled = False
 stdout_callback = yaml
-# Globale Config laden
-vars_files = config/lococloudd.yml
+vault_password_file = scripts/vault-pass.sh
 
 [privilege_escalation]
 become = True
@@ -1302,7 +1404,7 @@ pipelining = True
 ssh_args = -o ControlMaster=auto -o ControlPersist=60s
 ```
 
-> **Hinweis:** `vars_files` in `ansible.cfg` funktioniert nicht direkt. Die globale Config muss über `include_vars` in den Playbooks oder über `group_vars/all.yml` im Master-Inventar geladen werden. Alternativ: `ANSIBLE_EXTRA_VARS` Umgebungsvariable.
+> **Hinweis:** Die globale Config muss über `include_vars` in den Playbooks geladen werden (`vars_files` in `ansible.cfg` funktioniert nicht direkt). Das Ansible-Vault-Passwort wird automatisch via `scripts/vault-pass.sh` aus Vaultwarden geholt.
 
 **Empfohlener Ansatz:** In jedem Playbook als erstes:
 
@@ -1389,29 +1491,39 @@ ansible-playbook playbooks/setup-master.yml -i inventories/master/
 
 ### 15.2 Neuer Kunde
 
+**Proxmox-Onboarding (Hybrid/Lokal-Only mit `lxc_per_app`):**
+
+Der Kunden-Proxmox wird minimal vorbereitet — nur Netbird wird manuell installiert. Alles andere (LXC-Erstellung, App-Deployment) erledigt Ansible remote:
+
 ```
-Vorbereitung (manuell):
-1. Inventar generieren:
-   bash scripts/new-customer.sh kunde-abc "Firma ABC GmbH" "firma-abc.de" "hybrid"
-   → Erstellt inventories/kunde-abc/ aus _template
-2. hosts.yml + group_vars/all.yml anpassen
-3. DNS-Records beim Kunden anlegen (A + Wildcard *.firma-abc.de)
-4. Hetzner vServer bestellen (falls Cloud/Hybrid)
-5. Netbird Setup-Keys generieren
-6. Git commit + push
-7. Auf Master: git pull
+Manuelle Vorbereitung (einmalig am Kunden-Proxmox):
+1. Proxmox aufsetzen (Standard-Installation)
+2. Netbird auf dem Proxmox-Host installieren + joinen (Gruppe: kunde-xxx)
+3. API-Token für Ansible erstellen (Datacenter → API Tokens)
+4. SSH-Key von Master deployen
+→ Proxmox ist jetzt über Netbird vom Master erreichbar
+
+Inventar vorbereiten:
+1. bash scripts/new-customer.sh kunde-abc "Firma ABC GmbH" "firma-abc.de" "hybrid"
+2. hosts.yml + group_vars/all.yml anpassen (Proxmox API-Token, Netbird-Keys)
+3. DNS-Records anlegen (A + Wildcard *.firma-abc.de)
+4. Hetzner vServer bestellen (falls Hybrid/Cloud)
+5. Git commit + push → Auf Master: git pull
 
 Automatisiert (Semaphore → onboard-customer.yml):
-1. base → Hardening auf allen Kunden-Servern
-2. netbird-client → Installation + Join
-3. pocketid → Eigene Instanz für Kunden
-4. tinyauth → Eigene Instanz, OIDC mit Kunden-PocketID
-5. caddy → Caddyfile generieren
-6. Pro App: Deploy + OIDC + Credentials → Vaultwarden
-7. monitoring → Zabbix Agent
-8. backup → Restic Setup
-9. Test → HTTP-Checks
+1. lxc-create → LXC-Container auf Proxmox erstellen (via Proxmox API über Netbird)
+2. base → Hardening + Docker auf jedem LXC
+3. netbird-client → Installation + Join auf jedem LXC (eigener Client pro LXC)
+4. pocketid → Eigene Instanz für Kunden (auf Entry-Point)
+5. tinyauth → Eigene Instanz, OIDC mit Kunden-PocketID
+6. caddy → Caddyfile generieren
+7. Pro App: Deploy + OIDC (via PocketID API) + Credentials → Vaultwarden
+8. monitoring → Zabbix Agent
+9. backup → Restic Setup
+10. Test → HTTP-Checks
 ```
+
+> **Kernidee:** Der Proxmox-Host braucht nur Netbird + API-Token. Ansible erstellt und konfiguriert alle LXC-Container remote über die Proxmox API und SSH via Netbird. Kein manuelles LXC-Setup nötig.
 
 ### 15.3 Benutzer hinzufügen
 
@@ -1420,10 +1532,11 @@ Automatisiert (Semaphore → onboard-customer.yml):
 #         -e "username=m.mueller email=m.mueller@firma-abc.de display_name='Max Müller'"
 
 # Was passiert:
-# 1. Benutzer in PocketID anlegen (id.firma-abc.de)
-# 2. E-Mail zur OAUTH_WHITELIST in Tinyauth hinzufügen
-# 3. docker restart tinyauth
-# 4. Inventar-YAML aktualisieren (kunden_users Liste)
+# 1. Benutzer in PocketID anlegen via REST-API (POST /api/users)
+# 2. PocketID sendet Setup-E-Mail → User registriert Passkey (manuell)
+# 3. E-Mail zur OAUTH_WHITELIST in Tinyauth hinzufügen
+# 4. docker restart tinyauth
+# 5. Inventar-YAML aktualisieren (kunden_users Liste)
 ```
 
 ---
@@ -1797,16 +1910,23 @@ Microsoft 365 / Google Workspace.
 
 ## 21. Offene Design-Entscheidungen
 
+### Gelöste Entscheidungen (zur Referenz)
+
+| Frage | Entscheidung | Siehe Kapitel |
+|-------|-------------|---------------|
+| Öffentliche IP für `*.loco.ollornog.de` | Route über Daniels Hetzner (46.225.165.213), Caddy leitet via Netbird an Master-LXC weiter | Kap. 3.3 |
+| PocketID User-Management | API-Automation via PocketID REST-API (Bearer-Token) | Kap. 7.6 |
+| Backup Off-Site Ziel | Dynamisch pro Kunde konfigurierbar (SFTP via Netbird, Hetzner Storage Box, oder Betreiber-Infra) | Kap. 11 |
+| Ansible Vault vs. Vaultwarden | Beides komplementär: Vault für Repo-Encryption, Vaultwarden für Credential-Store + Lookup | Kap. 10.1 |
+| Shared Redis | Implizit durch `isolation_mode` gelöst (single_lxc: DB-Nummern, lxc_per_app: eigener Container) | Kap. 9.3 |
+| Isolation auf Proxmox | `lxc_per_app` empfohlen, `single_lxc` als Option | Kap. 5 |
+
+### Noch offene Entscheidungen
+
 | Frage | Optionen | Empfehlung |
 |-------|----------|------------|
-| **Öffentliche IP für *.loco.ollornog.de** | A) Route über privaten Hetzner, B) Neuer Hetzner-vServer, C) DynDNS | A pragmatisch, B sauber |
-| **Isolation auf Proxmox** | single_lxc, lxc_per_app | lxc_per_app (jeder LXC eigener Netbird-Client) |
-| **Tinyauth vs. Authelia** | Tinyauth (leicht) vs. Authelia (ausgereift) | Tinyauth für Start, austauschbar bauen |
-| **Backup Off-Site** | Hetzner Storage Box vs. BorgBase | Hetzner Storage Box (günstig, EU) |
-| **PocketID User-Mgmt** | Manuell UI vs. API-Automation | API wenn verfügbar, sonst manuell |
-| **Ansible Vault vs. Vaultwarden** | Wo liegen Playbook-Secrets? | Vaultwarden primär, Vault als Fallback |
+| **Tinyauth vs. Authelia** | Tinyauth (leicht) vs. Authelia (ausgereift) | Tinyauth für Start, austauschbar bauen, beobachten |
 | **DynDNS (Lokal-Only)** | ddclient vs. Cloudflare API | Cloudflare API |
-| **Shared Redis vs. Separate** | Ein Redis vs. einer pro App | Bei single_lxc: Shared mit DB-Nummern. Bei lxc_per_app: automatisch separate |
 | **Admin sudo** | NOPASSWD vs. mit Passwort | NOPASSWD |
 | **Monitoring** | Zabbix vs. Uptime Kuma vs. beides | Zabbix für Infra, optional Uptime Kuma als Kunden-Dashboard |
 
@@ -1837,15 +1957,15 @@ Microsoft 365 / Google Workspace.
 ## Anhang B: Checkliste neue App-Rolle
 
 - [ ] `defaults/main.yml` mit allen Variablen
-- [ ] `docker-compose.yml.j2` — auf `127.0.0.1:PORT` binden
+- [ ] `docker-compose.yml.j2` — Port-Binding je nach Server-Rolle
 - [ ] `.env.j2` — Secrets als Variablen
-- [ ] OIDC: Client-ID + Secret generieren → PocketID → Vaultwarden
+- [ ] `oidc.yml` — OIDC-Client via PocketID REST-API erstellen, Credentials in Vaultwarden speichern
 - [ ] Public Paths definieren (oder leer = komplett geschützt)
 - [ ] Backup-Pfade definieren
 - [ ] Health-Check: Port + Path für Monitoring
 - [ ] Handler: `docker restart caddy`
 - [ ] PG 18: Mount `/var/lib/postgresql`
-- [ ] Redis: DB-Nummer zuweisen
+- [ ] Redis: DB-Nummer zuweisen (single_lxc) oder eigener Container (lxc_per_app)
 - [ ] CSP: Nur setzen wenn App keinen eigenen hat
 - [ ] `remove.yml`: Daten archivieren, nicht löschen
 - [ ] Idempotenz testen (2x laufen lassen)
@@ -1858,7 +1978,9 @@ Microsoft 365 / Google Workspace.
 ```yaml
 # requirements.yml
 collections:
-  - name: community.general      # Für Proxmox LXC-Erstellung
+  - name: community.general      # Für Proxmox LXC-Erstellung + Bitwarden Lookup-Plugin
   - name: community.docker        # Für Docker Compose Management
   - name: ansible.posix           # Für sysctl, authorized_key etc.
 ```
+
+> **Hinweis:** `community.general.bitwarden` Lookup-Plugin ist Teil der `community.general` Collection und benötigt die `bw` CLI auf dem Master-Server.

@@ -1,0 +1,69 @@
+# config/lococloudd.yml.example
+# =====================================================================
+# GLOBALE LOCOCLOUDD-KONFIGURATION
+# Kopiere diese Datei nach config/lococloudd.yml und passe sie an.
+# Diese Datei wird in .gitignore aufgenommen!
+# =====================================================================
+
+# --- Betreiber ---
+operator:
+  name: "Dein Name"
+  email: "admin@example.com"
+  domain: "example.com"
+
+# --- Admin-Subdomain ---
+admin:
+  subdomain: "admin"
+  full_domain: "admin.example.com"
+
+# --- Admin-Dienste URLs ---
+urls:
+  pocketid: "id.admin.example.com"
+  tinyauth: "auth.admin.example.com"
+  vaultwarden: "vault.admin.example.com"
+  semaphore: "deploy.admin.example.com"
+  zabbix: "monitor.admin.example.com"
+
+# --- Netbird (geteilter Manager) ---
+netbird:
+  manager_url: "https://netbird.example.com"
+  api_token: ""                              # Netbird API Token (NICHT im Repo!)
+
+# --- PocketID (Admin-Instanz) ---
+pocketid:
+  api_token: ""                              # PocketID REST-API Token
+  # Wird fuer User/Gruppen/OIDC-Client-Automation benoetigt
+
+# --- SMTP ---
+smtp:
+  host: "smtp.example.com"
+  port: 587
+  starttls: true
+  user: "user@example.com"
+  from: "noreply@example.com"
+  # Passwort: Ueber Vault oder Umgebungsvariable
+
+# --- GitHub Repo ---
+repo:
+  url: "git@github.com:YourUser/LocoCloud.git"
+  branch: "main"
+  deploy_key_path: "/root/.ssh/github-deploy-key"
+
+# --- Vaultwarden (Admin-Instanz) ---
+vaultwarden:
+  url: "https://vault.admin.example.com"
+  api_token_path: "/root/.vaultwarden-token"   # Pfad zum API-Token auf dem Master
+  organization_id: ""                          # Wird nach Setup eingetragen
+
+# --- Bitwarden CLI (fuer Ansible Vault Passwort + Lookup-Plugin) ---
+bitwarden_cli:
+  # Das Ansible-Vault-Passwort wird via scripts/vault-pass.sh aus Vaultwarden geholt.
+  # Voraussetzung: bw CLI installiert, BITWARDENCLI_APPDATA_DIR konfiguriert
+  server_url: "https://vault.admin.example.com"  # Muss auf die Vaultwarden-Instanz zeigen
+  vault_item_name: "lococloudd-ansible-vault"     # Name des Items mit dem Vault-Passwort
+
+# --- Oeffentlicher Einstiegspunkt fuer Admin-Dienste ---
+admin_gateway:
+  # Hetzner-Server der *.admin.example.com via Caddy + Netbird an den Master-LXC weiterleitet
+  hetzner_ip: ""                               # z.B. "46.225.165.213"
+  # DNS: *.admin.example.com -> A-Record auf diese IP
