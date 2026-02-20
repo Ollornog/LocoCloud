@@ -1,95 +1,187 @@
-# Master-Server Setup — Anleitung
+# LocoCloud Setup — Kompletter Start bei Null
 
-Diese Anleitung beschreibt die Ersteinrichtung des LocoCloud Master-Servers auf einem frischen Debian 13 (Trixie) LXC oder VPS.
+Diese Anleitung beschreibt die Ersteinrichtung von LocoCloud auf einem frischen Server — vom blanken Debian bis zum laufenden Master mit allen Admin-Diensten.
 
 ---
 
-## Voraussetzungen
+## Phase 1: Server vorbereiten (manuell)
 
-### Hardware / VPS
+### 1.1 Frischen Server bereitstellen
 
-- Debian 13 (Trixie), frisch installiert
+- Debian 13 (Trixie), Minimal-Installation
 - Mindestens 2 CPU-Kerne, 2 GB RAM, 20 GB Disk
-- Öffentliche IP-Adresse (oder Erreichbarkeit über Netbird)
-- Root-Zugang via SSH
+- Öffentliche IP-Adresse (für Gateway) oder nur Netbird-erreichbar (für Master)
+- Root-Zugang (SSH oder Konsole)
 
-### Netzwerk
-
-- Ein Netbird-Management-Server muss bereits laufen (z.B. `netbird.example.com`)
-- DNS-Wildcard-Eintrag: `*.admin.example.com` → IP des Gateway-Servers
-- Der Gateway-Server leitet per Caddy + Netbird an den Master weiter
-
-### Auf dem Admin-Rechner
-
-- Git, SSH-Key-Pair
-- Ansible >= 2.15 (mit `community.general`, `community.docker`, `ansible.posix`)
-- Bitwarden CLI (`bw`) für Vault-Passwort-Management
-
----
-
-## Schritt 1: Repo klonen
+### 1.2 System aktualisieren
 
 ```bash
-git clone git@github.com:Ollornog/LocoCloud.git
+apt update && apt upgrade -y
+```
+
+### 1.3 Grundpakete installieren
+
+```bash
+apt install -y sudo curl git wget gnupg ca-certificates
+```
+
+### 1.4 Netbird installieren
+
+Netbird wird als VPN-Mesh für die gesamte Kommunikation verwendet. Ein externer Netbird-Management-Server muss bereits existieren (z.B. `netbird.example.com`).
+
+```bash
+# Signing Key herunterladen
+mkdir -p /etc/apt/keyrings
+curl -fsSL https://pkgs.netbird.io/debian/public.key -o /etc/apt/keyrings/netbird.asc
+
+# Repository hinzufügen
+echo "deb [signed-by=/etc/apt/keyrings/netbird.asc] https://pkgs.netbird.io/debian stable main" \
+  > /etc/apt/sources.list.d/netbird.list
+
+# Installieren und starten
+apt update && apt install -y netbird
+netbird up --management-url https://netbird.example.com --setup-key DEIN-SETUP-KEY
+```
+
+Nach dem Join die Netbird-IP notieren:
+
+```bash
+netbird status
+# Die 100.x.x.x IP wird für das Ansible-Inventar benötigt
+```
+
+### 1.5 Admin-Benutzer anlegen (optional)
+
+Falls du nicht als root arbeiten willst:
+
+```bash
+adduser srvadmin
+usermod -aG sudo srvadmin
+```
+
+---
+
+## Phase 2: LocoCloud-Repo klonen
+
+```bash
+git clone https://github.com/Ollornog/LocoCloud.git
 cd LocoCloud
 ```
 
-## Schritt 2: Ansible Collections installieren
+**Hinweis:** HTTPS, kein SSH — so braucht der Server keinen Deploy-Key für den initialen Clone.
+
+---
+
+## Phase 3: Ansible auf dem Server einrichten
+
+### 3.1 Ansible installieren
 
 ```bash
+apt install -y pipx
+pipx install ansible-core
+pipx ensurepath
+# Neue Shell öffnen oder:
+export PATH="$PATH:/root/.local/bin"
+```
+
+### 3.2 Ansible Collections installieren
+
+```bash
+cd /root/LocoCloud  # oder wo auch immer das Repo liegt
 ansible-galaxy collection install -r requirements.yml
 ```
 
-## Schritt 3: Globale Config anlegen
+Die benötigten Collections:
+- `community.general` — Proxmox LXC, Bitwarden Lookup-Plugin
+- `community.docker` — Docker Compose Management
+- `ansible.posix` — sysctl, authorized_key, etc.
+
+---
+
+## Phase 4: Globale Konfiguration
+
+### 4.1 Config-Datei anlegen
 
 ```bash
 cp config/lococloudd.yml.example config/lococloudd.yml
 ```
 
-Datei ausfüllen:
+### 4.2 Config ausfüllen
 
-| Feld | Beschreibung |
-|------|-------------|
-| `operator.name` | Dein Name |
-| `operator.email` | Admin-E-Mail (wird PocketID-Admin) |
-| `operator.domain` | Basis-Domain (z.B. `admin.example.com`) |
-| `urls.*` | Subdomains für Admin-Dienste |
-| `netbird.manager_url` | URL des Netbird-Management-Servers |
-| `netbird.api_token` | Netbird API-Token |
-| `pocketid.api_token` | PocketID API-Token (nach Erstsetup eintragen) |
-| `smtp.*` | SMTP-Zugangsdaten für E-Mail-Versand |
-| `vaultwarden.url` | URL der Admin-Vaultwarden-Instanz |
+Die wichtigsten Felder:
+
+| Feld | Beschreibung | Beispiel |
+|------|-------------|---------|
+| `operator.name` | Dein Name | `"Max Mustermann"` |
+| `operator.email` | Admin-E-Mail (wird PocketID-Admin) | `"admin@example.com"` |
+| `operator.domain` | Basis-Domain | `"example.com"` |
+| `admin.full_domain` | Admin-Subdomain | `"admin.example.com"` |
+| `urls.*` | Subdomains für Admin-Dienste | `id.admin.example.com` etc. |
+| `netbird.manager_url` | URL des Netbird-Management-Servers | `"https://netbird.example.com"` |
+| `netbird.api_token` | Netbird API-Token | — |
+| `smtp.*` | SMTP-Zugangsdaten für E-Mail-Versand | — |
 
 **Wichtig:** `config/lococloudd.yml` ist in `.gitignore` und wird NICHT committet.
 
-## Schritt 4: Master-Inventar konfigurieren
+---
 
-Datei `inventories/master/hosts.yml` bearbeiten:
+## Phase 5: Master-Inventar konfigurieren
+
+### 5.1 hosts.yml bearbeiten
+
+Datei `inventories/master/hosts.yml`:
 
 ```yaml
 all:
   hosts:
-    master:
-      ansible_host: <NETBIRD-IP-DES-MASTERS>
-      ansible_user: root  # Erster Lauf als root, danach srvadmin
-      is_lxc: true        # Falls LXC-Container
+    loco-master:
+      ansible_host: 100.x.x.x      # Netbird-IP des Servers (aus Phase 1.4)
+      ansible_user: root             # Erster Lauf als root, danach srvadmin
       server_roles: [master]
+      is_lxc: true                   # Falls LXC-Container, sonst false
 ```
 
-Datei `inventories/master/group_vars/all.yml` bearbeiten:
+### 5.2 SSH-Keys hinterlegen
+
+Datei `inventories/master/group_vars/all.yml`:
 
 ```yaml
 admin_ssh_pubkeys:
   - "ssh-ed25519 AAAA... admin@workstation"
 ```
 
-## Schritt 5: Master-Playbook ausführen
+### 5.3 Vault-Datei anlegen
+
+Datei `inventories/master/group_vars/vault.yml`:
+
+```yaml
+vault_master_netbird_setup_key: "DEIN-NETBIRD-SETUP-KEY"
+vault_master_netbird_ip: "100.x.x.x"
+```
+
+Verschlüsseln:
+
+```bash
+ansible-vault encrypt inventories/master/group_vars/vault.yml
+```
+
+---
+
+## Phase 6: Master-Playbook ausführen
+
+### 6.1 DNS einrichten
+
+Bevor das Playbook läuft, müssen DNS-Einträge existieren:
+
+- `*.admin.example.com` → A-Record auf die Public IP des Gateway-Servers
+
+### 6.2 Playbook starten
 
 ```bash
 ansible-playbook playbooks/setup-master.yml -i inventories/master/
 ```
 
-Das Playbook führt folgende Rollen in Reihenfolge aus:
+Das Playbook richtet in dieser Reihenfolge ein:
 
 1. **base** — OS-Hardening, Docker, UFW, Fail2ban
 2. **netbird_client** — VPN-Anbindung
@@ -99,9 +191,11 @@ Das Playbook führt folgende Rollen in Reihenfolge aus:
 6. **semaphore** — Ansible Web-UI
 7. **caddy** — Reverse Proxy (kommt zuletzt, braucht alle Backends)
 
-## Schritt 6: PocketID API-Token eintragen
+---
 
-Nach dem ersten Lauf:
+## Phase 7: Nach dem ersten Lauf
+
+### 7.1 PocketID API-Token eintragen
 
 1. PocketID unter `https://id.admin.example.com` öffnen
 2. Admin-Passwort findet sich in der Ansible-Ausgabe (oder in Vaultwarden)
@@ -112,14 +206,14 @@ Nach dem ersten Lauf:
      api_token: "euer-token-hier"
    ```
 
-## Schritt 7: Vaultwarden einrichten
+### 7.2 Vaultwarden einrichten
 
 1. `https://vault.admin.example.com` öffnen
 2. Admin-Account erstellen
 3. Organisation "LocoCloud" anlegen
 4. Organisation-ID in `config/lococloudd.yml` eintragen
 
-## Schritt 8: Vault-Passwort konfigurieren
+### 7.3 Vault-Passwort konfigurieren
 
 ```bash
 # Item in Vaultwarden erstellen: Name = "lococloudd-ansible-vault"
@@ -129,7 +223,7 @@ Nach dem ersten Lauf:
 bash scripts/vault-pass.sh
 ```
 
-## Schritt 9: Playbook erneut ausführen (mit Credentials)
+### 7.4 Playbook erneut ausführen (mit Credentials)
 
 ```bash
 ansible-playbook playbooks/setup-master.yml -i inventories/master/
@@ -171,6 +265,20 @@ DNS: `*.admin.example.com` → A-Record auf die Public IP des Gateway-Servers.
 
 ---
 
+## Nächste Schritte
+
+- **Ersten Kunden onboarden:** Siehe [ONBOARDING.md](ONBOARDING.md)
+- **Neue App-Rolle entwickeln:** Siehe [APP-DEVELOPMENT.md](APP-DEVELOPMENT.md)
+- **Probleme lösen:** Siehe [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+
+---
+
 ## Troubleshooting
 
-Siehe [docs/TROUBLESHOOTING.md](TROUBLESHOOTING.md) für bekannte Probleme und Lösungen.
+| Problem | Lösung |
+|---------|--------|
+| `ansible: command not found` | `export PATH="$PATH:/root/.local/bin"` oder neue Shell öffnen |
+| Netbird Join schlägt fehl | Setup-Key prüfen, Management-URL prüfen |
+| Playbook findet Config nicht | `config/lococloudd.yml` muss existieren (Kopie von `.example`) |
+| SSH-Verbindung abgelehnt | `ansible_user` und SSH-Key in `hosts.yml` prüfen |
+| 502 auf Admin-URLs | Caddy-Config prüfen, `tls_server_name` gesetzt? |
