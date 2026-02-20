@@ -1,0 +1,80 @@
+---
+# playbooks/add-user.yml
+# Add a user to a customer's PocketID + Tinyauth whitelist.
+# Usage: ansible-playbook playbooks/add-user.yml -i inventories/kunde-abc/ \
+#        -e "username=m.mueller email=m.mueller@firma-abc.de display_name='Max Mueller'"
+
+- name: "Add User"
+  hosts: all:!localhost:!*proxmox*
+  become: true
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - username is defined and username | length > 0
+          - email is defined and email | length > 0
+          - display_name is defined and display_name | length > 0
+        fail_msg: "Required: -e 'username=... email=... display_name=...'"
+
+  tasks:
+    # Only run on entry-point (where PocketID + Tinyauth live)
+    - name: Create user in PocketID
+      ansible.builtin.uri:
+        url: "https://id.{{ kunde_domain }}/api/users"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ loco.pocketid.api_token }}"
+        body_format: json
+        body:
+          username: "{{ username }}"
+          email: "{{ email }}"
+          first_name: "{{ display_name.split(' ') | first }}"
+          last_name: "{{ display_name.split(' ')[1:] | join(' ') | default('') }}"
+        status_code: [200, 201]
+      register: pocketid_user_result
+      when: server_role in ['online', 'gateway', 'all_in_one']
+
+    # Update Tinyauth whitelist
+    - name: Read current Tinyauth .env
+      ansible.builtin.slurp:
+        src: "/opt/stacks/tinyauth/.env"
+      register: tinyauth_env_raw
+      when: server_role in ['online', 'gateway', 'all_in_one']
+
+    - name: Parse current whitelist
+      ansible.builtin.set_fact:
+        current_whitelist: "{{ (tinyauth_env_raw.content | b64decode).split('\n') | select('match', '^OAUTH_WHITELIST=') | first | regex_replace('^OAUTH_WHITELIST=', '') }}"
+      when: server_role in ['online', 'gateway', 'all_in_one']
+
+    - name: Add email to whitelist
+      ansible.builtin.set_fact:
+        updated_whitelist: "{{ current_whitelist + ',' + email }}"
+      when:
+        - server_role in ['online', 'gateway', 'all_in_one']
+        - email not in current_whitelist
+
+    - name: Update Tinyauth .env with new whitelist
+      ansible.builtin.lineinfile:
+        path: "/opt/stacks/tinyauth/.env"
+        regexp: "^OAUTH_WHITELIST="
+        line: "OAUTH_WHITELIST={{ updated_whitelist }}"
+      when: updated_whitelist is defined
+      notify: restart tinyauth
+
+    - name: User added
+      ansible.builtin.debug:
+        msg: |
+          User {{ username }} ({{ email }}) added.
+          PocketID will send a setup email to {{ email }}.
+          User must register their passkey manually.
+
+  handlers:
+    - name: restart tinyauth
+      ansible.builtin.command: docker restart tinyauth
+      changed_when: true

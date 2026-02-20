@@ -1,0 +1,26 @@
+---
+# roles/netbird-client/tasks/api_setup_key.yml
+# Generate a Netbird setup key for a customer via REST API
+# Required vars: netbird_api_url, netbird_api_token, nb_group_id, kunde_id
+# Optional vars: nb_setup_key_usage_limit (default 20), nb_setup_key_expires (default 86400)
+
+- name: Create Netbird setup key
+  ansible.builtin.uri:
+    url: "{{ netbird_api_url }}/api/setup-keys"
+    method: POST
+    headers:
+      Authorization: "Token {{ netbird_api_token }}"
+    body_format: json
+    body:
+      name: "kunde-{{ kunde_id }}-onboarding"
+      type: "reusable"
+      auto_groups:
+        - "{{ nb_group_id }}"
+      usage_limit: "{{ nb_setup_key_usage_limit | default(20) }}"
+      expires_in: "{{ nb_setup_key_expires | default(86400) }}"
+    status_code: 200
+  register: nb_setup_key_result
+
+- name: Set setup key fact
+  ansible.builtin.set_fact:
+    nb_generated_setup_key: "{{ nb_setup_key_result.json.key }}"

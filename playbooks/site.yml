@@ -1,0 +1,72 @@
+---
+# playbooks/site.yml
+# Full deploy — base + auth stack + all enabled apps for a customer.
+# Idempotent: safe to run multiple times.
+# Usage: ansible-playbook playbooks/site.yml -i inventories/kunde-abc/
+
+- name: "Full Deploy — Base + Auth + Apps"
+  hosts: all:!localhost:!*proxmox*
+  become: true
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+  roles:
+    # OS hardening + Docker
+    - role: base
+      tags: [base]
+
+    # Netbird VPN
+    - role: netbird-client
+      vars:
+        netbird_setup_key: "{{ netbird_setup_keys.online | default(netbird_setup_keys.lokal | default('')) }}"
+        netbird_management_url: "{{ loco.netbird.manager_url }}"
+      tags: [netbird]
+
+    # Auth stack (only on entry-point servers)
+    - role: pocketid
+      vars:
+        pocketid_domain: "id.{{ kunde_domain }}"
+        pocketid_api_token: "{{ loco.pocketid.api_token | default('') }}"
+      tags: [pocketid]
+      when: server_role in ['online', 'gateway', 'all_in_one']
+
+    - role: tinyauth
+      vars:
+        tinyauth_domain: "auth.{{ kunde_domain }}"
+        tinyauth_oidc_issuer_url: "https://id.{{ kunde_domain }}"
+        tinyauth_oauth_whitelist: "{{ [loco.operator.email] + (kunden_emails | default([])) }}"
+        pocketid_api_token: "{{ loco.pocketid.api_token | default('') }}"
+      tags: [tinyauth]
+      when: server_role in ['online', 'gateway', 'all_in_one']
+
+  tasks:
+    # Deploy each enabled app
+    - name: Deploy apps
+      ansible.builtin.include_role:
+        name: "apps/{{ item.name | lower | replace('-', '_') | replace(' ', '_') }}"
+      vars:
+        app: "{{ item }}"
+        app_name: "{{ item.name }}"
+        app_subdomain: "{{ item.subdomain }}"
+        app_port: "{{ item.port }}"
+        app_domain: "{{ item.subdomain }}.{{ kunde_domain }}"
+      loop: "{{ apps_enabled | default([]) }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: >
+        (item.target == 'online' and server_role in ['online', 'all_in_one'])
+        or (item.target == 'lokal' and server_role in ['app', 'apps', 'all_in_one'])
+      tags: [apps]
+
+    # Regenerate Caddyfile after all apps are deployed
+    - name: Deploy Caddy with updated Caddyfile
+      ansible.builtin.include_role:
+        name: caddy
+      vars:
+        caddy_mode: "customer"
+      when: server_role in ['online', 'gateway', 'all_in_one']
+      tags: [caddy]

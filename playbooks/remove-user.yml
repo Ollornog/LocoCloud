@@ -1,0 +1,83 @@
+---
+# playbooks/remove-user.yml
+# Remove a user from a customer's Tinyauth whitelist + deactivate in PocketID.
+# Usage: ansible-playbook playbooks/remove-user.yml -i inventories/kunde-abc/ \
+#        -e "email=m.mueller@firma-abc.de"
+
+- name: "Remove User"
+  hosts: all:!localhost:!*proxmox*
+  become: true
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - email is defined and email | length > 0
+        fail_msg: "Required: -e 'email=...'"
+
+  tasks:
+    # Remove from Tinyauth whitelist (immediate session revocation)
+    - name: Read current Tinyauth .env
+      ansible.builtin.slurp:
+        src: "/opt/stacks/tinyauth/.env"
+      register: tinyauth_env_raw
+      when: server_role in ['online', 'gateway', 'all_in_one']
+
+    - name: Parse current whitelist
+      ansible.builtin.set_fact:
+        current_whitelist: "{{ (tinyauth_env_raw.content | b64decode).split('\n') | select('match', '^OAUTH_WHITELIST=') | first | regex_replace('^OAUTH_WHITELIST=', '') }}"
+      when: server_role in ['online', 'gateway', 'all_in_one']
+
+    - name: Remove email from whitelist
+      ansible.builtin.set_fact:
+        updated_whitelist: "{{ current_whitelist.split(',') | reject('equalto', email) | join(',') }}"
+      when: server_role in ['online', 'gateway', 'all_in_one']
+
+    - name: Update Tinyauth .env without user
+      ansible.builtin.lineinfile:
+        path: "/opt/stacks/tinyauth/.env"
+        regexp: "^OAUTH_WHITELIST="
+        line: "OAUTH_WHITELIST={{ updated_whitelist }}"
+      when: updated_whitelist is defined
+      notify: restart tinyauth
+
+    # Deactivate in PocketID
+    - name: List PocketID users
+      ansible.builtin.uri:
+        url: "https://id.{{ kunde_domain }}/api/users"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ loco.pocketid.api_token }}"
+        status_code: 200
+      register: pid_users
+      when:
+        - server_role in ['online', 'gateway', 'all_in_one']
+        - loco.pocketid.api_token | default('') | length > 0
+
+    - name: Find user ID
+      ansible.builtin.set_fact:
+        pid_user_id: "{{ pid_users.json | selectattr('email', 'equalto', email) | map(attribute='id') | first | default('') }}"
+      when: pid_users is defined and pid_users.json is defined
+
+    - name: Delete user from PocketID
+      ansible.builtin.uri:
+        url: "https://id.{{ kunde_domain }}/api/users/{{ pid_user_id }}"
+        method: DELETE
+        headers:
+          Authorization: "Bearer {{ loco.pocketid.api_token }}"
+        status_code: [200, 204, 404]
+      when: pid_user_id is defined and pid_user_id | length > 0
+
+    - name: User removed
+      ansible.builtin.debug:
+        msg: "User {{ email }} removed from Tinyauth whitelist and PocketID. Session revoked immediately."
+
+  handlers:
+    - name: restart tinyauth
+      ansible.builtin.command: docker restart tinyauth
+      changed_when: true
