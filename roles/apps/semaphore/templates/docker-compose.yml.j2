@@ -16,8 +16,6 @@ services:
     depends_on:
       semaphore-db:
         condition: service_healthy
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   semaphore-db:
     image: {{ semaphore_db_image }}

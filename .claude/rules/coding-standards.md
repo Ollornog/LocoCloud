@@ -43,8 +43,16 @@
 - **`import public`** auf jeder Domain (Security Headers)
 - **`import auth`** als Default auf jedem geschützten Pfad
 - **Öffentliche Pfade:** Spezifische `handle @matcher`-Blöcke VOR dem Fallback `handle {}`
+- **Pfad-Matching:** `handle /path*` (NICHT `handle /path/*`). Mit Slash matcht nur `/path/foo`, ohne Slash matcht auch `/path` allein. Relevant z.B. für Netbird `/relay`.
+- **Reverse Proxy über Netbird (TLS):** `tls_server_name` pro Route setzen. `reverse_proxy https://100.x.x.x` ohne `tls_server_name` sendet die IP als SNI → Backend hat kein Zert dafür → 502.
 - **CSP:** Nur für Apps OHNE eigenen CSP setzen. Vaultwarden, Nextcloud, PocketID, Paperless setzen ihren eigenen.
 - **Nach Änderungen:** `docker restart caddy` (NICHT `caddy reload` — Inode-Problem bei Bind-Mounts)
+
+## Docker Compose — Watchtower-Labels
+
+- **Kunden-Apps** (Nextcloud, Paperless, Vaultwarden-Kunde, Uptime Kuma): `com.centurylinklabs.watchtower.enable=true`
+- **Infrastruktur-Container** (Caddy, Netbird, PocketID, Tinyauth, Semaphore, Zabbix): **KEIN Watchtower-Label**. Updates nur über Ansible.
+- Grund: Watchtower hat Netbird-Server aktualisiert → Relay-Endpoint geändert → VPN-Ausfall.
 
 ## Secrets
 

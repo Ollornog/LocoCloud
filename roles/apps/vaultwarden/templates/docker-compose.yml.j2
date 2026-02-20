@@ -15,5 +15,7 @@ services:
       - {{ vaultwarden_data_path }}:/data
     env_file:
       - .env
+{% if caddy_mode | default('') != 'master' %}
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
+{% endif %}
