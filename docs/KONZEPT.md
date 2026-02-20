@@ -190,15 +190,34 @@ Das ist die pragmatischste Lösung:
 
 ### 3.5 Repo auf dem Master
 
+Das Repo ist öffentlich auf GitHub. Setup-Flow für den Master:
+
 ```bash
-# Initialer Clone (SSH-Key für GitHub, Deploy-Key oder Personal Access Token)
-git clone git@github.com:Ollornog/LocoCloud.git /opt/lococloudd
-# oder mit Deploy-Key:
-GIT_SSH_COMMAND="ssh -i /root/.ssh/github-deploy-key" \
-  git clone git@github.com:Ollornog/LocoCloud.git /opt/lococloudd
+# 1. Repo klonen (öffentlich, kein Key nötig für read-only)
+git clone https://github.com/Ollornog/LocoCloud.git /opt/lococloudd
+
+# 2. Config aus Example erstellen und anpassen
+cd /opt/lococloudd
+cp config/lococloudd.yml.example config/lococloudd.yml
+nano config/lococloudd.yml  # Domain, E-Mail, Tokens ausfüllen
+
+# 3. Master-Inventar anpassen
+nano inventories/master/hosts.yml         # Netbird-IP eintragen
+nano inventories/master/group_vars/all.yml  # SSH-Keys eintragen
+
+# 4. Vault-Datei für Secrets erstellen
+ansible-vault create inventories/master/group_vars/vault.yml
+
+# 5. Setup ausführen
+ansible-playbook playbooks/setup-master.yml -i inventories/master/
 ```
 
-Das Repo wird per Deploy-Key geklont (read-only reicht für den Master). Änderungen werden lokal auf Daniels Rechner gemacht, gepusht, und auf dem Master per `git pull` aktualisiert (manuell oder per Semaphore-Task).
+Für Push-Zugriff (Änderungen vom Master aus committen) wird ein Deploy-Key oder SSH-Key benötigt:
+```bash
+GIT_SSH_COMMAND="ssh -i /root/.ssh/github-deploy-key" git pull origin main
+```
+
+Änderungen werden primär lokal gemacht, gepusht, und auf dem Master per `git pull` aktualisiert (manuell oder per Semaphore-Task).
 
 ### 3.6 Backup-Server (Admin-Seite)
 
@@ -1847,7 +1866,7 @@ Identisch für alle Server (Master + Kunden):
 | Kernel-Hardening | sysctl (rp_filter, syncookies, etc.) — **LXC-kompatible Params beachten!** |
 | Fail2ban | SSH (10 Versuche, 3600s Ban) |
 | Unattended-upgrades | Automatische Sicherheitsupdates |
-| Watchtower | Docker-Image-Patches täglich 04:00 (Label-basiert, nur Minor/Patch) |
+| Watchtower | Docker-Image-Patches täglich 04:00 — NUR Kunden-Apps (Label-basiert, Major gepinnt). Infra-Container OHNE Label, Updates nur über Ansible |
 | USB deaktiviert | Nur auf physischen Servern (`is_lxc`-Check!) |
 | .env chmod 600 | Alle Secrets-Files |
 | Docker Port-Bind | Entry-Point: `127.0.0.1:PORT` / App-LXCs: `0.0.0.0:PORT` + UFW auf wt0 |
@@ -1870,47 +1889,48 @@ admin_user_nopasswd: true  # NOPASSWD für Ansible-Kompatibilität
 
 ## 17. Wartung & Updates
 
-### 17.1 Automatisch
+### 17.1 Grundregel: Alle Updates über Ansible
 
-| Task | Frequenz | Tool |
-|------|----------|------|
-| OS-Sicherheitsupdates | Täglich | unattended-upgrades |
-| Docker-Image-Updates (Patches) | Täglich 04:00 | Watchtower (Label-basiert) |
-| Backup | Konfigurierbar (default: 6h) | Restic Cron |
-| Health-Checks | Alle 5 min | Zabbix |
-| SSL-Erneuerung | Automatisch | Caddy |
+**Kein automatisches Update darf Infrastruktur kaputt machen.** Erfahrung: Watchtower hat den Netbird-Server automatisch aktualisiert → neuer Relay-Endpoint `/relay` (ohne Slash) → Caddy-Route `handle /relay/*` hat nicht mehr gematcht → VPN-Tunnel weg → alle Dienste unerreichbar.
 
-### 17.2 Watchtower-Strategie: Nur Security-Patches automatisch
+**Konsequenz:** Updates werden in zwei Kategorien eingeteilt:
 
-**Problem:** Watchtower mit `:latest`-Tags kann bei Major-Updates Apps kaputt machen (z.B. Nextcloud 29 → 30, Breaking Changes in Paperless, DB-Migrationen die fehlschlagen).
+| Kategorie | Automatisch? | Methode |
+|-----------|-------------|---------|
+| OS-Sicherheitspatches | Ja | `unattended-upgrades` (apt, niedrig-riskant) |
+| Backup | Ja | Restic Cron |
+| Health-Checks | Ja | Zabbix |
+| SSL-Erneuerung | Ja | Caddy (ACME) |
+| **Infrastruktur-Container** (Netbird, Caddy, PocketID, Tinyauth, Semaphore, Zabbix) | **NEIN** | **Nur über Ansible** (`update-all.yml` / `update-app.yml`) |
+| **Kunden-App-Container** (Nextcloud, Paperless, Vaultwarden, etc.) | Ja (Patches) | Watchtower (Label-basiert, Major-Version gepinnt) |
 
-**Lösung:** Label-basiertes Watchtower mit konservativen Image-Tags.
+### 17.2 Watchtower-Strategie: Nur Kunden-Apps, nie Infrastruktur
+
+**Watchtower darf NUR Kunden-App-Container updaten.** Infrastruktur-Container (alles was Netzwerk, Auth oder Routing betrifft) bekommen KEIN Watchtower-Label.
+
+**Container OHNE Watchtower-Label (Updates nur über Ansible):**
+- Caddy
+- Netbird (Server + Client via apt)
+- PocketID
+- Tinyauth
+- Semaphore
+- Zabbix
+- Watchtower selbst
+
+**Container MIT Watchtower-Label (Patches automatisch):**
+- Nextcloud (gepinnt auf Major: `nextcloud:29`)
+- Paperless-NGX (gepinnt auf Major: `ghcr.io/paperless-ngx/paperless-ngx:2`)
+- Vaultwarden (Kunden-Instanz)
+- Uptime Kuma
+- Weitere Kunden-Apps
 
 ```yaml
-# Docker Compose Template für jede App:
+# Docker Compose Template für Kunden-Apps:
 services:
   app:
     image: "nextcloud:29"          # Pinned auf Major-Version, Patches automatisch
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
-    # ...
-
-  watchtower:
-    image: containrrr/watchtower
-    container_name: watchtower
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - WATCHTOWER_LABEL_ENABLE=true      # Nur gelabelte Container updaten
-      - WATCHTOWER_SCHEDULE=0 0 4 * * *   # Täglich 04:00
-      - WATCHTOWER_CLEANUP=true           # Alte Images entfernen
-      - WATCHTOWER_NOTIFICATIONS=email    # Optional: Benachrichtigung bei Update
-      - WATCHTOWER_NOTIFICATION_EMAIL_FROM={{ loco.smtp.from }}
-      - WATCHTOWER_NOTIFICATION_EMAIL_TO={{ loco.operator.email }}
-      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER={{ loco.smtp.host }}
-      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PORT={{ loco.smtp.port }}
-      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_USER={{ loco.smtp.user }}
 ```
 
 **Image-Tag-Strategie:**
@@ -1927,6 +1947,7 @@ services:
 
 | Task | Playbook |
 |------|----------|
+| Infra-Updates (Netbird, Caddy, PocketID, etc.) | `update-all.yml` — kontrolliertes Ansible-Rollout |
 | Major App-Updates | `update-app.yml` — Image-Tag im Inventar ändern, dann ausführen |
 | Full OS-Update | `update-all.yml` |
 | Backup-Test | `backup-test.yml` |
@@ -2296,7 +2317,7 @@ Microsoft 365 / Google Workspace.
 | Isolation auf Proxmox | `lxc_per_app` empfohlen, `single_lxc` als Option | Kap. 5 |
 | LXC-Bootstrap-Methode | `pct exec` via Proxmox-Host (SSH-Key + Netbird injizieren, dann direkte Verbindung) | Kap. 5.6 |
 | Netbird-Gruppen/Keys/Policies | Vollautomatisch via Netbird REST-API durch Ansible (kein manueller Eingriff) | Kap. 6.3 |
-| Watchtower-Strategie | Label-basiert + gepinnte Major-Versionen. Patches automatisch, Major-Updates manuell via Semaphore | Kap. 17.2 |
+| Watchtower-Strategie | NUR für Kunden-Apps (Label-basiert + gepinnte Major-Versionen). Infra-Container (Netbird, Caddy, PocketID, Tinyauth, Semaphore, Zabbix) OHNE Label — Updates nur über Ansible. Vorfall: Watchtower hat Netbird aktualisiert → Relay kaputt → VPN-Ausfall | Kap. 17.2 |
 | LXC-Template auf Proxmox | Ansible lädt Template via `pveam download` automatisch herunter wenn fehlend | Kap. 5.6 |
 | Offboarding-Strategie | Gestuft: Archivieren (Standard) oder komplett löschen. Hetzner-Server manuell. Credentials archiviert | Kap. 15.4 |
 | Tinyauth vs. Authelia | Tinyauth — reicht aus, da nur OIDC via PocketID (kein direkter Login, kein Brute-Force-Risiko). Austauschbar bauen, bei Problemen auf Authelia wechseln | Kap. 7.8 |

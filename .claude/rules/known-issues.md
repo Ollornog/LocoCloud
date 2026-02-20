@@ -14,6 +14,7 @@
 | LXC Bootstrap Chicken-and-Egg | Frische LXCs haben kein SSH/Netbird. Lösung: `pct exec` via Proxmox-Host (delegiert). |
 | Netbird-IP erst nach Join bekannt | Bootstrap via `pct exec`, Netbird-IP aus `netbird status --json` lesen, dann `hosts.yml` updaten. |
 | Watchtower + `:latest` = Breaking Changes | Image-Tags auf Major-Version pinnen (`nextcloud:29`). Watchtower nur Label-basiert. Major-Updates manuell. |
+| Watchtower darf KEINE Infra-Container updaten | Netbird, Caddy, PocketID, Tinyauth, Semaphore, Zabbix: KEIN Watchtower-Label. Updates NUR über Ansible. Vorfall: Watchtower hat Netbird-Server aktualisiert → Relay-Endpoint geändert → Tunnel kaputt. |
 | LXC-Template fehlt auf Proxmox | Ansible muss Template via `pveam download` herunterladen bevor LXC-Erstellung. |
 
 ## App-spezifisch
@@ -32,6 +33,8 @@
 | handle-Reihenfolge | Spezifische Matcher VOR Fallback `handle {}`. Sonst blockt Auth public Pfade. |
 | CSP per App | Nicht global setzen. VW, NC, PocketID, Paperless setzen eigenen CSP. |
 | Inode nach Template-Write | Immer `docker restart caddy`, nie `caddy reload`. |
+| Caddy `handle` Pfad-Matching | `handle /path*` matcht `/path` UND `/path/foo`. `handle /path/*` matcht NUR `/path/foo`, NICHT `/path` allein. Für Endpoints die beides brauchen (z.B. Netbird `/relay`): immer `handle /path*` ohne Slash. |
+| TLS SNI bei Reverse Proxy über Netbird | `reverse_proxy https://100.x.x.x` sendet die IP als SNI → Backend-Caddy hat kein Zert dafür → 502. Lösung: `tls_server_name domain.de` pro Route setzen, kein generisches Snippet. |
 
 ## Ansible-spezifisch
 
