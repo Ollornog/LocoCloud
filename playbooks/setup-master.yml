@@ -1,0 +1,34 @@
+---
+# playbooks/setup-master.yml
+# Initial setup of the Master-LXC with all admin services.
+# Usage: ansible-playbook playbooks/setup-master.yml -i inventories/master/
+
+- name: Setup Master Server
+  hosts: all
+  become: true
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+  roles:
+    - role: base
+      tags: [base]
+
+    # Phase 2 roles (added later):
+    # - role: netbird-client
+    #   tags: [netbird]
+    # - role: pocketid
+    #   tags: [pocketid]
+    # - role: tinyauth
+    #   tags: [tinyauth]
+    # - role: apps/vaultwarden
+    #   tags: [vaultwarden]
+    # - role: credentials
+    #   tags: [credentials]
+    # - role: apps/semaphore
+    #   tags: [semaphore]
+    # - role: caddy
+    #   tags: [caddy]

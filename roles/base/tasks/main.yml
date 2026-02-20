@@ -1,0 +1,32 @@
+---
+# roles/base/tasks/main.yml
+# Dispatcher — includes all hardening subtasks in order
+
+- name: Install base packages
+  ansible.builtin.import_tasks: packages.yml
+  tags: [base, packages]
+
+- name: Configure admin user
+  ansible.builtin.import_tasks: user.yml
+  tags: [base, user]
+
+- name: Harden SSH
+  ansible.builtin.import_tasks: ssh.yml
+  tags: [base, ssh]
+
+- name: Configure firewall (UFW)
+  ansible.builtin.import_tasks: firewall.yml
+  tags: [base, firewall]
+
+- name: Apply kernel hardening
+  ansible.builtin.import_tasks: hardening.yml
+  tags: [base, hardening]
+
+- name: Configure fail2ban
+  ansible.builtin.import_tasks: fail2ban.yml
+  tags: [base, fail2ban]
+
+- name: Install Docker
+  ansible.builtin.import_tasks: docker.yml
+  when: docker_install
+  tags: [base, docker]

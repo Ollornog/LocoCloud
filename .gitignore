@@ -1,0 +1,22 @@
+# Operator-specific config (NEVER commit)
+config/lococloudd.yml
+
+# Customer secrets (encrypted via Ansible Vault)
+inventories/*/group_vars/vault.yml
+
+# Local keys/tokens
+*.key
+*.pem
+*.token
+
+# Ansible retry files
+*.retry
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db

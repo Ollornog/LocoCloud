@@ -1,0 +1,40 @@
+---
+# roles/base/defaults/main.yml
+# OS-Hardening, Docker, UFW, Fail2ban — runs on every server/LXC
+
+# --- Admin user ---
+admin_user: "srvadmin"
+admin_user_shell: "/bin/bash"
+admin_ssh_pubkeys: []  # List of public SSH keys for the admin user
+
+# --- SSH ---
+ssh_port: 22
+ssh_permit_root_login: "no"
+ssh_password_auth: "no"
+
+# --- Environment detection ---
+is_lxc: false  # Set to true for LXC containers (disables kernel params, USB)
+
+# --- Firewall (UFW) ---
+ufw_default_incoming: "deny"
+ufw_default_outgoing: "allow"
+# Additional ports to open (beyond SSH on wt0)
+# Format: [{ port: 443, proto: tcp, iface: "" }, ...]
+ufw_extra_rules: []
+
+# --- Fail2ban ---
+fail2ban_ssh_maxretry: 10
+fail2ban_ssh_bantime: 3600
+
+# --- Docker ---
+docker_install: true
+
+# --- Unattended upgrades ---
+unattended_upgrades_enabled: true
+
+# --- Server role ---
+# Determines firewall rules: online, app, gateway, all_in_one, infra, proxmox
+server_role: "app"
+
+# --- Netbird interface ---
+netbird_interface: "wt0"

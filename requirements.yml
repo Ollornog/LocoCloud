@@ -1,0 +1,5 @@
+---
+collections:
+  - name: community.general      # Proxmox LXC, Bitwarden Lookup-Plugin
+  - name: community.docker        # Docker Compose Management
+  - name: ansible.posix           # sysctl, authorized_key, etc.

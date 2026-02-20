@@ -1,0 +1,30 @@
+---
+# roles/base/tasks/packages.yml
+# Install essential system packages
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - curl
+      - wget
+      - git
+      - gnupg
+      - apt-transport-https
+      - ca-certificates
+      - software-properties-common
+      - htop
+      - jq
+      - unzip
+      - sudo
+      - ufw
+      - fail2ban
+      - msmtp
+      - msmtp-mta
+      - unattended-upgrades
+      - apt-listchanges
+    state: present
