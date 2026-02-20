@@ -53,7 +53,7 @@
 - name: Allow Zabbix Agent port on wt0 (Netbird)
   community.general.ufw:
     rule: allow
-    port: "10050"
+    port: "{{ zabbix_agent_port }}"
     proto: tcp
     interface: wt0
     direction: in

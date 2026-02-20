@@ -59,6 +59,14 @@
   changed_when: "'enabled' in nc_oidc_enable.stdout"
   failed_when: false
 
+- name: Check if OIDC provider already configured
+  ansible.builtin.command: >
+    docker exec -u www-data nextcloud
+    php occ user_oidc:provider PocketID
+  register: nc_oidc_check
+  changed_when: false
+  failed_when: false
+
 - name: Configure OIDC provider in Nextcloud
   ansible.builtin.command: >
     docker exec -u www-data nextcloud
@@ -74,11 +82,20 @@
     --mapping-display-name=name
     --mapping-email=email
   register: nc_oidc_provider
-  changed_when: nc_oidc_provider.rc == 0
+  changed_when: "'updated' in nc_oidc_provider.stdout or 'created' in nc_oidc_provider.stdout"
+
+- name: Check current login backend setting
+  ansible.builtin.command: >
+    docker exec -u www-data nextcloud
+    php occ config:app:get user_oidc allow_multiple_user_backends
+  register: nc_backends_check
+  changed_when: false
+  failed_when: false
 
 - name: Disable local login (redirect to OIDC)
   ansible.builtin.command: >
     docker exec -u www-data nextcloud
     php occ config:app:set --value=0 user_oidc allow_multiple_user_backends
   register: nc_disable_local
-  changed_when: nc_disable_local.rc == 0
+  changed_when: nc_backends_check.stdout | default('1') | trim != '0'
+  when: nc_backends_check.stdout | default('1') | trim != '0'

@@ -17,6 +17,9 @@ zabbix_psk_key: ""       # 64-char hex string, generated if empty
 # Agent hostname in Zabbix
 zabbix_agent_hostname: ""  # e.g. "kunde-abc-hetzner-01"
 
+# Agent listen port
+zabbix_agent_port: 10050
+
 # Zabbix repo version
 zabbix_repo_version: "7.2"
 zabbix_repo_url: "https://repo.zabbix.com/zabbix/{{ zabbix_repo_version }}/release/debian/pool/main/z/zabbix-release/zabbix-release_latest_{{ zabbix_repo_version }}+debian13_all.deb"
