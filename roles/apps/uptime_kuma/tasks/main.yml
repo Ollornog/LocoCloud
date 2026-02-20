@@ -1,0 +1,6 @@
+---
+# roles/apps/uptime_kuma/tasks/main.yml
+
+- name: Deploy Uptime Kuma
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [uptime_kuma, deploy]

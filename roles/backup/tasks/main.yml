@@ -1,0 +1,18 @@
+---
+# roles/backup/tasks/main.yml
+
+- name: Install Restic
+  ansible.builtin.import_tasks: install.yml
+  tags: [backup, install]
+
+- name: Initialize Restic repos
+  ansible.builtin.import_tasks: init.yml
+  tags: [backup, init]
+
+- name: Deploy backup scripts
+  ansible.builtin.import_tasks: scripts.yml
+  tags: [backup, scripts]
+
+- name: Setup backup cron
+  ansible.builtin.import_tasks: cron.yml
+  tags: [backup, cron]

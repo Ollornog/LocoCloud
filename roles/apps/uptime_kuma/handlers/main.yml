@@ -1,0 +1,6 @@
+---
+# roles/apps/uptime_kuma/handlers/main.yml
+
+- name: restart caddy
+  ansible.builtin.command: docker restart caddy
+  changed_when: true

@@ -1,0 +1,22 @@
+---
+# roles/monitoring/defaults/main.yml
+# Zabbix Agent 2 — reports to central Zabbix server on master
+
+zabbix_agent_package: "zabbix-agent2"
+zabbix_agent_config: "/etc/zabbix/zabbix_agent2.conf"
+zabbix_agent_psk_file: "/etc/zabbix/zabbix_agent2.psk"
+zabbix_agent_service: "zabbix-agent2"
+
+# Zabbix server (master) — Netbird IP
+zabbix_server_ip: ""  # e.g. "100.64.0.1" (master Netbird IP)
+
+# PSK identity and key (generated if empty)
+zabbix_psk_identity: ""  # e.g. "kunde-abc-hetzner-01"
+zabbix_psk_key: ""       # 64-char hex string, generated if empty
+
+# Agent hostname in Zabbix
+zabbix_agent_hostname: ""  # e.g. "kunde-abc-hetzner-01"
+
+# Zabbix repo version
+zabbix_repo_version: "7.2"
+zabbix_repo_url: "https://repo.zabbix.com/zabbix/{{ zabbix_repo_version }}/release/debian/pool/main/z/zabbix-release/zabbix-release_latest_{{ zabbix_repo_version }}+debian13_all.deb"

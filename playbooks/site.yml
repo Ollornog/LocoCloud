@@ -50,6 +50,18 @@
     - role: watchtower
       tags: [watchtower]
 
+    # Monitoring (Zabbix Agent)
+    - role: monitoring
+      vars:
+        zabbix_server_ip: "{{ loco.monitoring.zabbix_server_ip | default('') }}"
+      tags: [monitoring]
+      when: loco.monitoring.zabbix_server_ip | default('') | length > 0
+
+    # Backup (Restic)
+    - role: backup
+      tags: [backup]
+      when: backup.enabled | default(false)
+
   tasks:
     # Deploy each enabled app
     - name: Deploy apps

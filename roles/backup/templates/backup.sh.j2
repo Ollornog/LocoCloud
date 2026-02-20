@@ -1,0 +1,50 @@
+#!/bin/bash
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# LocoCloud Backup Script
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+set -euo pipefail
+
+PASSWORD_FILE="{{ backup_script_path }}/.restic-password"
+LOG_FILE="/var/log/lococloudd-backup.log"
+
+log() {
+    echo "$(date -Iseconds) $1" | tee -a "$LOG_FILE"
+}
+
+log "=== Backup started ==="
+
+# Phase 1: Pre-backup (DB dumps)
+log "Running pre-backup dumps..."
+{{ backup_script_path }}/pre-backup.sh 2>&1 | tee -a "$LOG_FILE"
+
+# Phase 2: Restic backup to each target
+{% for target in backup.targets | default([]) %}
+REPO="{{ target.type }}:{{ target.user }}@{{ target.host }}:{{ target.port | default(22) }}{{ target.path }}"
+log "Backing up to $REPO..."
+restic -r "$REPO" backup \
+    --password-file "$PASSWORD_FILE" \
+    --tag "{{ kunde_id }}" \
+{% for app in apps_enabled | default([]) %}
+{% for bpath in app.backup_paths | default([]) %}
+    {{ bpath }} \
+{% endfor %}
+{% endfor %}
+    {{ backup_dump_path }} \
+    /opt/stacks \
+    2>&1 | tee -a "$LOG_FILE"
+
+# Apply retention policy
+log "Applying retention policy on $REPO..."
+restic -r "$REPO" forget \
+    --password-file "$PASSWORD_FILE" \
+    --keep-daily {{ backup.retention.keep_daily | default(backup_retention_keep_daily) }} \
+    --keep-weekly {{ backup.retention.keep_weekly | default(backup_retention_keep_weekly) }} \
+    --keep-monthly {{ backup.retention.keep_monthly | default(backup_retention_keep_monthly) }} \
+    --prune \
+    2>&1 | tee -a "$LOG_FILE"
+
+{% endfor %}
+
+log "=== Backup complete ==="

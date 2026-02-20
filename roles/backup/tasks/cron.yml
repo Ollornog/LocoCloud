@@ -1,0 +1,28 @@
+---
+# roles/backup/tasks/cron.yml
+
+- name: Setup backup cron job
+  ansible.builtin.cron:
+    name: "lococloudd-backup"
+    job: "{{ backup_script_path }}/backup.sh >> /var/log/lococloudd-backup.log 2>&1"
+    minute: "{{ backup.schedule | default(backup_schedule) | split(' ') | first }}"
+    hour: "{{ backup.schedule | default(backup_schedule) | split(' ') | list | slice(1) | first | first }}"
+    day: "{{ backup.schedule | default(backup_schedule) | split(' ') | list | slice(2) | first | first }}"
+    month: "{{ backup.schedule | default(backup_schedule) | split(' ') | list | slice(3) | first | first }}"
+    weekday: "{{ backup.schedule | default(backup_schedule) | split(' ') | last }}"
+    user: root
+    state: present
+  when: backup.enabled | default(false)
+
+- name: Setup logrotate for backup log
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/lococloudd-backup
+    mode: "0644"
+    content: |
+      /var/log/lococloudd-backup.log {
+          weekly
+          rotate 4
+          compress
+          missingok
+          notifempty
+      }

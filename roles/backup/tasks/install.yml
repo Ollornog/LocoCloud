@@ -1,0 +1,39 @@
+---
+# roles/backup/tasks/install.yml
+
+- name: Install Restic
+  ansible.builtin.apt:
+    name: restic
+    state: present
+
+- name: Create backup directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - "{{ backup_script_path }}"
+    - "{{ backup_dump_path }}"
+
+- name: Generate Restic password
+  ansible.builtin.set_fact:
+    backup_restic_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=48') }}"
+  when: backup_restic_password | length == 0
+
+- name: Deploy Restic password file
+  ansible.builtin.copy:
+    content: "{{ backup_restic_password }}"
+    dest: "{{ backup_script_path }}/.restic-password"
+    mode: "0600"
+
+- name: Store Restic encryption key in Vaultwarden
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name | default(kunde_id) }} — Restic Encryption Key"
+    credential_username: "restic"
+    credential_password: "{{ backup_restic_password }}"
+    credential_notes: "Restic backup encryption key. KEEP THIS SAFE — data is unrecoverable without it. Deployed: {{ ansible_date_time.iso8601 }}"
+  when: loco is defined

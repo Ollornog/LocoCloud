@@ -1,0 +1,10 @@
+---
+# roles/monitoring/tasks/main.yml
+
+- name: Install Zabbix Agent
+  ansible.builtin.import_tasks: agent.yml
+  tags: [monitoring, zabbix]
+
+- name: Deploy monitoring scripts
+  ansible.builtin.import_tasks: scripts.yml
+  tags: [monitoring, scripts]

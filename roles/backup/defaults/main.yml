@@ -1,0 +1,20 @@
+---
+# roles/backup/defaults/main.yml
+# Restic-based backup with pre-backup DB dumps
+
+backup_script_path: "/opt/scripts/backup"
+backup_dump_path: "/opt/backups/dumps"
+
+# Restic encryption password (generated if empty, stored in Vaultwarden)
+backup_restic_password: ""
+
+# Schedule (cron format)
+backup_schedule: "0 */6 * * *"  # Every 6 hours
+
+# Retention policy
+backup_retention_keep_daily: 7
+backup_retention_keep_weekly: 4
+backup_retention_keep_monthly: 6
+
+# Backup targets (from customer inventory: backup.targets)
+# Each target: { type: "sftp", host: "...", port: 22, user: "...", path: "..." }

@@ -1,0 +1,3 @@
+---
+# roles/backup/handlers/main.yml
+# No handlers needed — backup is cron-based
