@@ -1,5 +1,5 @@
 ---
-# roles/netbird-client/tasks/api_group.yml
+# roles/netbird_client/tasks/api_group.yml
 # Create a Netbird group for a customer via REST API
 # Required vars: netbird_api_url, netbird_api_token, netbird_group_name
 

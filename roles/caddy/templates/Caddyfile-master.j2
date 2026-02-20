@@ -46,21 +46,21 @@
 {{ loco.urls.vaultwarden }} {
 	import public
 	import auth
-	reverse_proxy 127.0.0.1:8222
+	reverse_proxy 127.0.0.1:{{ vaultwarden_port }}
 }
 
 # --- Semaphore (Ansible UI) ---
 {{ loco.urls.semaphore }} {
 	import public
 	import auth
-	reverse_proxy 127.0.0.1:3000
+	reverse_proxy 127.0.0.1:{{ semaphore_port }}
 }
 
 # --- Zabbix (Monitoring) ---
 {{ loco.urls.zabbix }} {
 	import public
 	import auth
-	reverse_proxy 127.0.0.1:8080
+	reverse_proxy 127.0.0.1:{{ zabbix_web_port }}
 }
 
 # --- Catch-All ---

@@ -1,5 +1,5 @@
 ---
-# roles/lxc-create/defaults/main.yml
+# roles/lxc_create/defaults/main.yml
 # Create and bootstrap LXC containers on Proxmox
 
 # Proxmox connection (from inventory)

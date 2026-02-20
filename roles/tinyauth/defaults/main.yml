@@ -3,7 +3,7 @@
 # Tinyauth forward-auth proxy — deployed as Docker container
 
 tinyauth_stack_path: "/opt/stacks/tinyauth"
-tinyauth_image: "ghcr.io/steveiliop56/tinyauth:latest"
+tinyauth_image: "ghcr.io/steveiliop56/tinyauth:v4"
 tinyauth_port: 9090
 
 # Domain where Tinyauth is reachable

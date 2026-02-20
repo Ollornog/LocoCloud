@@ -23,7 +23,7 @@ paperless_redis_image: "redis:7-alpine"
 paperless_gotenberg_image: "gotenberg/gotenberg:8"
 
 # Tika (OCR for Office docs)
-paperless_tika_image: "apache/tika:3"
+paperless_tika_image: "apache/tika:3.2.3.0"
 
 # Admin
 paperless_admin_user: "admin"

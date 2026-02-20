@@ -1403,11 +1403,11 @@ LocoCloud/
 │   ├── caddy/                        # Reverse Proxy + TLS
 │   ├── pocketid/                     # OIDC Provider
 │   ├── tinyauth/                     # Forward Auth
-│   ├── netbird-client/               # Netbird Installation + Join
+│   ├── netbird_client/               # Netbird Installation + Join
 │   ├── monitoring/                   # Zabbix Agent
 │   ├── backup/                       # Restic
 │   ├── credentials/                  # Vaultwarden API
-│   ├── lxc-create/                   # Proxmox LXC erstellen (bei LXC-pro-App)
+│   ├── lxc_create/                   # Proxmox LXC erstellen (bei LXC-pro-App)
 │   └── apps/
 │       ├── _template/
 │       ├── nextcloud/

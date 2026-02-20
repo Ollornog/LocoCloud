@@ -1,0 +1,27 @@
+---
+# roles/netbird_client/tasks/install.yml
+# Install Netbird client from official repository
+
+- name: Ensure keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Download Netbird apt signing key
+  ansible.builtin.get_url:
+    url: https://pkgs.netbird.io/debian/public.key
+    dest: /etc/apt/keyrings/netbird.asc
+    mode: "0644"
+
+- name: Add Netbird apt repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/netbird.asc] https://pkgs.netbird.io/debian stable main"
+    filename: netbird
+    state: present
+
+- name: Install Netbird
+  ansible.builtin.apt:
+    name: netbird
+    state: present
+    update_cache: true

@@ -40,7 +40,7 @@
     # Create customer group
     - name: Create Netbird customer group
       ansible.builtin.include_role:
-        name: netbird-client
+        name: netbird_client
         tasks_from: api_group.yml
       vars:
         netbird_api_url: "{{ loco.netbird.manager_url }}"
@@ -50,7 +50,7 @@
     # Create policies
     - name: Create Netbird policies
       ansible.builtin.include_role:
-        name: netbird-client
+        name: netbird_client
         tasks_from: api_policies.yml
       vars:
         netbird_api_url: "{{ loco.netbird.manager_url }}"
@@ -60,7 +60,7 @@
     # Generate setup key
     - name: Generate Netbird setup key
       ansible.builtin.include_role:
-        name: netbird-client
+        name: netbird_client
         tasks_from: api_setup_key.yml
       vars:
         netbird_api_url: "{{ loco.netbird.manager_url }}"
@@ -97,7 +97,7 @@
       tags: [base]
 
     # 2. Netbird VPN
-    - role: netbird-client
+    - role: netbird_client
       vars:
         netbird_setup_key: "{{ netbird_setup_keys.online | default('') }}"
         netbird_management_url: "{{ loco.netbird.manager_url }}"
@@ -245,7 +245,7 @@
     # Create LXCs for each app with target=lokal (lxc_per_app mode)
     - name: Create app LXCs (lxc_per_app)
       ansible.builtin.include_role:
-        name: lxc-create
+        name: lxc_create
       vars:
         lxc_vmid: "{{ item.lxc_vmid }}"
         lxc_hostname: "{{ kunde_id }}-{{ item.name | lower | replace(' ', '-') }}"
@@ -266,7 +266,7 @@
     # Create single LXC for all local apps (single_lxc mode)
     - name: Create single LXC for all apps
       ansible.builtin.include_role:
-        name: lxc-create
+        name: lxc_create
       vars:
         lxc_vmid: "{{ single_lxc_vmid | default(200) }}"
         lxc_hostname: "{{ kunde_id }}-apps"
@@ -284,7 +284,7 @@
     # Create Gateway-LXC for lokal_only variant
     - name: Create Gateway LXC (lokal_only)
       ansible.builtin.include_role:
-        name: lxc-create
+        name: lxc_create
       vars:
         lxc_vmid: "{{ gateway_lxc_vmid | default(100) }}"
         lxc_hostname: "{{ kunde_id }}-gateway"

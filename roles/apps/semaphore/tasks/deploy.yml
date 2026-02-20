@@ -21,6 +21,25 @@
     semaphore_admin_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
   when: semaphore_admin_password | length == 0
 
+- name: Read existing Semaphore .env for access key
+  ansible.builtin.slurp:
+    src: "{{ semaphore_stack_path }}/.env"
+  register: semaphore_existing_env
+  failed_when: false
+
+- name: Extract existing access key encryption
+  ansible.builtin.set_fact:
+    semaphore_access_key_encryption: "{{ semaphore_existing_env.content | b64decode | regex_search('SEMAPHORE_ACCESS_KEY_ENCRYPTION=(.+)', '\\1') | first }}"
+  when:
+    - semaphore_access_key_encryption | length == 0
+    - semaphore_existing_env is not failed
+    - semaphore_existing_env.content is defined
+
+- name: Generate Semaphore access key encryption
+  ansible.builtin.set_fact:
+    semaphore_access_key_encryption: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: semaphore_access_key_encryption | length == 0
+
 - name: Deploy Semaphore docker-compose.yml
   ansible.builtin.template:
     src: docker-compose.yml.j2

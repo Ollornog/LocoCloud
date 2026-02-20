@@ -1,5 +1,5 @@
 ---
-# roles/lxc-create/tasks/tun.yml
+# roles/lxc_create/tasks/tun.yml
 # Configure TUN device access for Netbird inside LXC
 # Must be done BEFORE the LXC is started
 

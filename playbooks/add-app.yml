@@ -41,7 +41,7 @@
 
     - name: Create LXC for app
       ansible.builtin.include_role:
-        name: lxc-create
+        name: lxc_create
       vars:
         lxc_vmid: "{{ target_app.lxc_vmid }}"
         lxc_hostname: "{{ kunde_id }}-{{ target_app.name | lower | replace(' ', '-') }}"

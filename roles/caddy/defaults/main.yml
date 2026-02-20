@@ -19,3 +19,8 @@ tinyauth_port: 9090
 
 # PocketID port
 pocketid_port: 1411
+
+# Backend ports for master Caddyfile
+vaultwarden_port: 8222
+semaphore_port: 3000
+zabbix_web_port: 8080

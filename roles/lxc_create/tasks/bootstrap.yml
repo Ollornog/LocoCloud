@@ -1,5 +1,5 @@
 ---
-# roles/lxc-create/tasks/bootstrap.yml
+# roles/lxc_create/tasks/bootstrap.yml
 # Bootstrap a fresh LXC: inject SSH key, install Netbird, retrieve IP.
 # All commands run via pct exec on the Proxmox host (delegated).
 
