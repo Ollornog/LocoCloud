@@ -69,7 +69,7 @@ LocoCloud/
 ## Architektur-Essenz
 
 - **Netbird überall.** Jeder LXC eigener Netbird-Client + eigene IP. Keine Proxmox-Bridge.
-- **PocketID + Tinyauth pro Kunde.** Eigene Instanzen, kein Sharing. Tinyauth reicht (nur OIDC, kein Brute-Force-Risiko), austauschbar auf Authelia. PocketID REST-API für User/Gruppen/OIDC-Client-Automation via `uri`-Modul.
+- **PocketID + Tinyauth pro Kunde.** Eigene Instanzen, kein Sharing. Tinyauth als OIDC-Forward-Auth (Login nur über PocketID Passkeys, kein Brute-Force-Risiko). PocketID REST-API für User/Gruppen/OIDC-Client-Automation via `uri`-Modul.
 - **Caddy als Entry-Point.** Default: alles blockiert. Öffentliche Pfade explizit gewhitelistet.
 - **Port-Binding:** Entry-Point `127.0.0.1:PORT`, App-LXCs `0.0.0.0:PORT` + UFW auf `wt0`.
 - **Secrets:** Ansible Vault für Repo-Encryption, Vaultwarden als Credential-Store. `community.general.bitwarden` Lookup-Plugin für Laufzeit-Secrets. `scripts/vault-pass.sh` holt Vault-Passwort aus Vaultwarden.

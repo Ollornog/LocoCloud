@@ -10,7 +10,7 @@
 | USB in LXC | NICHT deaktivieren (existiert nicht). `is_lxc`-Check. |
 | Docker UFW-Bypass | Docker umgeht UFW. Für App-LXCs mit `0.0.0.0`-Bind: UFW App-Port nur auf `wt0` erlauben. |
 | Netbird DNS Konflikte | Custom DNS Zones NUR für interne Domains. Öffentliche Domains NICHT eintragen. |
-| Tinyauth nicht prod-ready | Entschieden: Tinyauth reicht (nur OIDC, kein Brute-Force-Risiko). Austauschbar bauen, Fallback auf Authelia. |
+| Tinyauth nicht prod-ready | Im Betrieb bewährt: Nur OIDC-Forward-Auth via PocketID (kein direkter Login, kein Brute-Force-Risiko). Kein Fallback nötig. |
 | LXC Bootstrap Chicken-and-Egg | Frische LXCs haben kein SSH/Netbird. Lösung: `pct exec` via Proxmox-Host (delegiert). |
 | Netbird-IP erst nach Join bekannt | Bootstrap via `pct exec`, Netbird-IP aus `netbird status --json` lesen, dann `hosts.yml` updaten. |
 | Watchtower + `:latest` = Breaking Changes | Image-Tags auf Major-Version pinnen (`nextcloud:29`). Watchtower nur Label-basiert. Major-Updates manuell. |
