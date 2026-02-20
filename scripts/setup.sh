@@ -273,11 +273,19 @@ fi
 if [ -n "$NETBIRD_URL" ] && [ -n "$NETBIRD_SETUP_KEY" ]; then
   netbird up --management-url "$NETBIRD_URL" --setup-key "$NETBIRD_SETUP_KEY"
   ok "Netbird verbunden"
-  sleep 2
-  # Try to get IP automatically
-  NETBIRD_IP=$(netbird status --json 2>/dev/null | jq -r '.localPeerState.ip // empty' 2>/dev/null || true)
+  sleep 3
+  # Try to get IP automatically — Netbird uses uppercase "IP" in JSON
+  NB_JSON=$(netbird status --json 2>/dev/null || true)
+  if [ -n "$NB_JSON" ]; then
+    NETBIRD_IP=$(echo "$NB_JSON" | jq -r '.localPeerState.IP // .localPeerState.ip // empty' 2>/dev/null || true)
+  fi
+  # Strip CIDR suffix (/16 or /32)
+  NETBIRD_IP="${NETBIRD_IP%/*}"
+  # Fallback: read IP from wt0 interface
+  if [ -z "$NETBIRD_IP" ]; then
+    NETBIRD_IP=$(ip -4 addr show wt0 2>/dev/null | grep -oP 'inet \K[0-9.]+' || true)
+  fi
   if [ -n "$NETBIRD_IP" ]; then
-    NETBIRD_IP="${NETBIRD_IP%/32}"
     ok "Netbird-IP: $NETBIRD_IP"
   else
     warn "Netbird-IP konnte nicht automatisch ermittelt werden."
