@@ -1,0 +1,52 @@
+---
+# roles/apps/paperless/tasks/oidc.yml
+# Register OIDC client in PocketID for Paperless-NGX
+
+- name: Create OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ paperless_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc-clients"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ loco.pocketid.api_token }}"
+    body_format: json
+    body:
+      name: "Paperless ({{ kunde_name }})"
+      callback_urls:
+        - "https://{{ paperless_domain }}/accounts/oidc/callback/"
+    status_code: [200, 201]
+  register: pl_oidc_client
+  when:
+    - paperless_oidc_client_id | length == 0
+    - loco.pocketid.api_token | default('') | length > 0
+
+- name: Set OIDC credentials from API response
+  ansible.builtin.set_fact:
+    paperless_oidc_client_id: "{{ pl_oidc_client.json.client_id }}"
+    paperless_oidc_client_secret: "{{ pl_oidc_client.json.client_secret }}"
+  when: pl_oidc_client is not skipped and pl_oidc_client is changed
+
+- name: Store Paperless OIDC credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — Paperless OIDC Client"
+    credential_username: "{{ paperless_oidc_client_id }}"
+    credential_password: "{{ paperless_oidc_client_secret }}"
+    credential_uri: "https://{{ paperless_domain }}"
+    credential_notes: "PocketID OIDC client for Paperless. Deployed: {{ ansible_date_time.iso8601 }}"
+  when:
+    - loco is defined
+    - paperless_oidc_client_id | length > 0
+
+- name: Redeploy Paperless .env with OIDC credentials
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ paperless_stack_path }}/.env"
+    mode: "0600"
+  notify: restart paperless
+
+- name: Restart Paperless to apply OIDC config
+  ansible.builtin.command: docker restart paperless
+  changed_when: true

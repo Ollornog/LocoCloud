@@ -1,0 +1,53 @@
+---
+# roles/apps/nextcloud/defaults/main.yml
+# Nextcloud — Self-hosted cloud storage and collaboration
+
+nextcloud_stack_path: "/opt/stacks/nextcloud"
+nextcloud_data_path: "/mnt/data/nextcloud"
+nextcloud_image: "nextcloud:29"
+nextcloud_port: 8080
+
+# Domain for Nextcloud
+nextcloud_domain: ""  # e.g. "cloud.firma-abc.de"
+
+# MariaDB
+nextcloud_db_image: "mariadb:11"
+nextcloud_db_name: "nextcloud"
+nextcloud_db_user: "nextcloud"
+nextcloud_db_password: ""  # Generated if empty
+nextcloud_db_root_password: ""  # Generated if empty
+
+# Redis (session + file locking)
+nextcloud_redis_image: "redis:7-alpine"
+nextcloud_redis_db: 0  # DB number for single_lxc shared Redis
+
+# Admin
+nextcloud_admin_user: "admin"
+nextcloud_admin_password: ""  # Generated if empty
+
+# OIDC via PocketID
+nextcloud_oidc_enabled: false
+nextcloud_oidc_client_id: ""
+nextcloud_oidc_client_secret: ""
+nextcloud_oidc_provider_url: ""  # e.g. "https://id.firma-abc.de"
+
+# SMTP
+nextcloud_smtp_host: ""
+nextcloud_smtp_port: 587
+nextcloud_smtp_user: ""
+nextcloud_smtp_from: ""
+
+# Public paths (accessible without Tinyauth)
+nextcloud_public_paths:
+  - "/index.php/s/*"
+  - "/s/*"
+  - "/remote.php/*"
+  - "/ocs/*"
+
+# Backup paths
+nextcloud_backup_paths:
+  - "/mnt/data/nextcloud"
+  - "/opt/stacks/nextcloud"
+
+# Health check
+nextcloud_health_path: "/status.php"

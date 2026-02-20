@@ -1,0 +1,6 @@
+---
+# roles/watchtower/handlers/main.yml
+
+- name: restart watchtower
+  ansible.builtin.command: docker restart watchtower
+  changed_when: true

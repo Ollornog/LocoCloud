@@ -1,0 +1,11 @@
+---
+# roles/apps/nextcloud/tasks/main.yml
+
+- name: Deploy Nextcloud
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [nextcloud, deploy]
+
+- name: Configure OIDC for Nextcloud
+  ansible.builtin.import_tasks: oidc.yml
+  tags: [nextcloud, oidc]
+  when: nextcloud_oidc_enabled | default(false)

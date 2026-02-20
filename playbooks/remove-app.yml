@@ -1,0 +1,51 @@
+---
+# playbooks/remove-app.yml
+# Remove (archive) an app from a customer server.
+# Usage: ansible-playbook playbooks/remove-app.yml -i inventories/kunde-abc/ \
+#        -e "app_name=nextcloud"
+#
+# Data is ARCHIVED, not deleted. Containers are stopped.
+
+- name: "Remove App"
+  hosts: all:!localhost:!*proxmox*
+  become: true
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - app_name is defined and app_name | length > 0
+        fail_msg: "Required: -e 'app_name=nextcloud'"
+
+    - name: Ensure archive directory exists
+      ansible.builtin.file:
+        path: /opt/archives
+        state: directory
+        mode: "0700"
+
+  tasks:
+    - name: Run app removal tasks
+      ansible.builtin.include_role:
+        name: "apps/{{ app_name | lower | replace('-', '_') | replace(' ', '_') }}"
+        tasks_from: remove.yml
+      tags: [apps, remove]
+
+    # Regenerate Caddyfile without the removed app
+    - name: Update Caddy config
+      ansible.builtin.include_role:
+        name: caddy
+      vars:
+        caddy_mode: "customer"
+      when: server_role in ['online', 'gateway', 'all_in_one']
+      tags: [caddy]
+
+    - name: App removed
+      ansible.builtin.debug:
+        msg: |
+          App {{ app_name }} stopped and archived.
+          Remember to remove it from apps_enabled in group_vars/all.yml.

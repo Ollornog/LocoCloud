@@ -1,0 +1,25 @@
+---
+# roles/apps/paperless/tasks/remove.yml
+# Archive Paperless data, stop containers — do NOT delete data.
+
+- name: Export Paperless documents before removal
+  ansible.builtin.command: >
+    docker exec paperless document_exporter /usr/src/paperless/export
+  ignore_errors: true
+
+- name: Stop Paperless containers
+  community.docker.docker_compose_v2:
+    project_src: "{{ paperless_stack_path }}"
+    state: absent
+  ignore_errors: true
+
+- name: Archive Paperless data
+  ansible.builtin.command: >
+    tar czf /opt/archives/paperless-{{ ansible_date_time.date }}.tar.gz
+    -C {{ paperless_data_path }} .
+  args:
+    creates: "/opt/archives/paperless-{{ ansible_date_time.date }}.tar.gz"
+
+- name: Archive complete
+  ansible.builtin.debug:
+    msg: "Paperless stopped. Data archived to /opt/archives/paperless-{{ ansible_date_time.date }}.tar.gz."

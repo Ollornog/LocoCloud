@@ -1,0 +1,72 @@
+---
+# roles/apps/paperless/tasks/deploy.yml
+
+- name: Create Paperless directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ paperless_stack_path }}"
+    - "{{ paperless_stack_path }}/db"
+    - "{{ paperless_stack_path }}/redis"
+    - "{{ paperless_data_path }}"
+    - "{{ paperless_data_path }}/data"
+    - "{{ paperless_data_path }}/media"
+    - "{{ paperless_data_path }}/consume"
+    - "{{ paperless_data_path }}/export"
+
+- name: Generate Paperless DB password
+  ansible.builtin.set_fact:
+    paperless_db_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: paperless_db_password | length == 0
+
+- name: Generate Paperless admin password
+  ansible.builtin.set_fact:
+    paperless_admin_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: paperless_admin_password | length == 0
+
+- name: Generate Paperless secret key
+  ansible.builtin.set_fact:
+    paperless_secret_key: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=64') }}"
+  when: paperless_secret_key | length == 0
+
+- name: Deploy Paperless docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ paperless_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Deploy Paperless .env
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ paperless_stack_path }}/.env"
+    mode: "0600"
+
+- name: Start Paperless
+  community.docker.docker_compose_v2:
+    project_src: "{{ paperless_stack_path }}"
+    state: present
+
+- name: Wait for Paperless to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ paperless_port }}/api/"
+    method: GET
+    status_code: [200, 403]
+  register: pl_health
+  until: pl_health.status in [200, 403]
+  retries: 60
+  delay: 10
+
+- name: Store Paperless credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — Paperless Admin"
+    credential_username: "{{ paperless_admin_user }}"
+    credential_password: "{{ paperless_admin_password }}"
+    credential_uri: "https://{{ paperless_domain }}"
+    credential_notes: "Paperless-NGX admin. Deployed: {{ ansible_date_time.iso8601 }}"
+  when: loco is defined

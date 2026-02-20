@@ -1,0 +1,57 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Nextcloud
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  nextcloud:
+    image: {{ nextcloud_image }}
+    container_name: nextcloud
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if server_role | default('app') in ['online', 'gateway', 'all_in_one'] else '0.0.0.0' }}:{{ nextcloud_port }}:80"
+    volumes:
+      - {{ nextcloud_stack_path }}/html:/var/www/html
+      - {{ nextcloud_data_path }}:/var/www/html/data
+{% if nextcloud_security_conf is defined %}
+      - {{ nextcloud_stack_path }}/security.conf:/etc/apache2/conf-enabled/security.conf:ro
+{% endif %}
+    env_file:
+      - .env
+    depends_on:
+      nextcloud-db:
+        condition: service_healthy
+      nextcloud-redis:
+        condition: service_started
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  nextcloud-db:
+    image: {{ nextcloud_db_image }}
+    container_name: nextcloud-db
+    restart: unless-stopped
+    volumes:
+      - {{ nextcloud_stack_path }}/db:/var/lib/mysql
+    environment:
+      MYSQL_DATABASE: {{ nextcloud_db_name }}
+      MYSQL_USER: {{ nextcloud_db_user }}
+      MYSQL_PASSWORD: {{ nextcloud_db_password }}
+      MYSQL_ROOT_PASSWORD: {{ nextcloud_db_root_password }}
+    healthcheck:
+      test: ["CMD-SHELL", "healthcheck.sh --connect --innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  nextcloud-redis:
+    image: {{ nextcloud_redis_image }}
+    container_name: nextcloud-redis
+    restart: unless-stopped
+    command: redis-server --save 60 1
+    volumes:
+      - {{ nextcloud_stack_path }}/redis:/data
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"

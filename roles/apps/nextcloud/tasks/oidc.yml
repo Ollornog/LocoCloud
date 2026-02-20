@@ -1,0 +1,84 @@
+---
+# roles/apps/nextcloud/tasks/oidc.yml
+# Configure OIDC for Nextcloud via PocketID API + occ commands
+
+# 1. Register OIDC client in PocketID
+- name: Create OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ nextcloud_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc-clients"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ loco.pocketid.api_token }}"
+    body_format: json
+    body:
+      name: "Nextcloud ({{ kunde_name }})"
+      callback_urls:
+        - "https://{{ nextcloud_domain }}/apps/user_oidc/code"
+    status_code: [200, 201]
+  register: nc_oidc_client
+  when:
+    - nextcloud_oidc_client_id | length == 0
+    - loco.pocketid.api_token | default('') | length > 0
+
+- name: Set OIDC credentials from API response
+  ansible.builtin.set_fact:
+    nextcloud_oidc_client_id: "{{ nc_oidc_client.json.client_id }}"
+    nextcloud_oidc_client_secret: "{{ nc_oidc_client.json.client_secret }}"
+  when: nc_oidc_client is not skipped and nc_oidc_client is changed
+
+# 2. Store OIDC credentials in Vaultwarden
+- name: Store Nextcloud OIDC credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — Nextcloud OIDC Client"
+    credential_username: "{{ nextcloud_oidc_client_id }}"
+    credential_password: "{{ nextcloud_oidc_client_secret }}"
+    credential_uri: "https://{{ nextcloud_domain }}"
+    credential_notes: "PocketID OIDC client for Nextcloud. Deployed: {{ ansible_date_time.iso8601 }}"
+  when:
+    - loco is defined
+    - nextcloud_oidc_client_id | length > 0
+
+# 3. Configure Nextcloud via occ
+- name: Install user_oidc app
+  ansible.builtin.command: >
+    docker exec -u www-data nextcloud
+    php occ app:install user_oidc
+  register: nc_oidc_install
+  changed_when: "'installed' in nc_oidc_install.stdout"
+  failed_when: false
+
+- name: Enable user_oidc app
+  ansible.builtin.command: >
+    docker exec -u www-data nextcloud
+    php occ app:enable user_oidc
+  register: nc_oidc_enable
+  changed_when: "'enabled' in nc_oidc_enable.stdout"
+  failed_when: false
+
+- name: Configure OIDC provider in Nextcloud
+  ansible.builtin.command: >
+    docker exec -u www-data nextcloud
+    php occ user_oidc:provider PocketID
+    --clientid="{{ nextcloud_oidc_client_id }}"
+    --clientsecret="{{ nextcloud_oidc_client_secret }}"
+    --discoveryuri="{{ nextcloud_oidc_provider_url }}/.well-known/openid-configuration"
+    --scope="openid email profile"
+    --unique-uid=0
+    --check-bearer=0
+    --send-id-token-hint=0
+    --mapping-uid=preferred_username
+    --mapping-display-name=name
+    --mapping-email=email
+  register: nc_oidc_provider
+  changed_when: nc_oidc_provider.rc == 0
+
+- name: Disable local login (redirect to OIDC)
+  ansible.builtin.command: >
+    docker exec -u www-data nextcloud
+    php occ config:app:set --value=0 user_oidc allow_multiple_user_backends
+  register: nc_disable_local
+  changed_when: nc_disable_local.rc == 0
