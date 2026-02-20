@@ -3,6 +3,9 @@
 # Full deploy — base + auth stack + all enabled apps for a customer.
 # Idempotent: safe to run multiple times.
 # Usage: ansible-playbook playbooks/site.yml -i inventories/kunde-abc/
+#
+# Handles all variants: cloud_only, hybrid, lokal_only.
+# For hybrid/lokal_only: LXCs must already exist (run onboard-customer.yml first).
 
 - name: "Full Deploy — Base + Auth + Apps"
   hosts: all:!localhost:!*proxmox*
@@ -42,6 +45,10 @@
         pocketid_api_token: "{{ loco.pocketid.api_token | default('') }}"
       tags: [tinyauth]
       when: server_role in ['online', 'gateway', 'all_in_one']
+
+    # Watchtower on all servers with Docker
+    - role: watchtower
+      tags: [watchtower]
 
   tasks:
     # Deploy each enabled app

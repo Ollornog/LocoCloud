@@ -1,0 +1,23 @@
+---
+# roles/lxc-create/tasks/start.yml
+# Start the LXC container
+
+- name: Start LXC container
+  community.general.proxmox:
+    vmid: "{{ lxc_vmid }}"
+    node: "{{ proxmox_node }}"
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    state: started
+
+- name: Wait for LXC to be ready
+  ansible.builtin.command: >
+    pct exec {{ lxc_vmid }} -- bash -c "echo ready"
+  delegate_to: "{{ proxmox_host }}"
+  register: lxc_ready
+  until: lxc_ready.rc == 0
+  retries: 30
+  delay: 5
+  changed_when: false

@@ -1,0 +1,10 @@
+---
+# roles/lxc-create/tasks/template.yml
+# Ensure LXC template is downloaded on the Proxmox host
+
+- name: Download LXC template if missing
+  ansible.builtin.command: >
+    pveam download {{ lxc_template_storage }} {{ lxc_template }}
+  args:
+    creates: "/var/lib/vz/template/cache/{{ lxc_template }}"
+  delegate_to: "{{ proxmox_host }}"

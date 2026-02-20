@@ -3,11 +3,10 @@
 # Onboard a new customer — creates Netbird resources, deploys auth stack + Caddy.
 # Usage: ansible-playbook playbooks/onboard-customer.yml -i inventories/kunde-abc/
 #
-# Supports: cloud_only (Phase 3), hybrid + lokal_only (Phase 5)
-# This playbook assumes the target server already has:
-#   - Debian 13 installed
-#   - SSH access from the master (key deployed)
-#   - Netbird client installed and joined (for Hybrid: on Hetzner)
+# Supports all three variants:
+#   - cloud_only:  Play 1 (Netbird API) → Play 2 (Entry-Point on Hetzner)
+#   - hybrid:      Play 1 → Play 2 (Hetzner) → Play 3 (LXCs on Proxmox)
+#   - lokal_only:  Play 1 → Play 3 (LXCs) → Play 4 (Gateway-LXC as entry-point)
 
 # =====================================================
 # Play 1: Netbird API setup (runs on localhost/master)
@@ -211,11 +210,150 @@
         status_code: 200
       tags: [test]
 
-    - name: Onboarding complete
+    - name: Entry-point onboarding complete
       ansible.builtin.debug:
         msg: |
-          Customer onboarding complete!
+          Entry-point onboarding complete!
           Customer: {{ kunde_name }} ({{ kunde_domain }})
           PocketID:  https://id.{{ kunde_domain }}
           Tinyauth:  https://auth.{{ kunde_domain }}
           Next: Deploy apps with site.yml or add-app.yml
+
+# =====================================================
+# Play 3: Create LXCs on Proxmox (hybrid + lokal_only)
+# =====================================================
+- name: "Onboarding — Proxmox LXC Creation"
+  hosts: "*proxmox*"
+  become: true
+  gather_facts: false
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+    - name: Load customer config
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/group_vars/all.yml"
+
+  tasks:
+    - name: Skip if cloud_only
+      ansible.builtin.meta: end_play
+      when: variante | default('cloud_only') == 'cloud_only'
+
+    # Create LXCs for each app with target=lokal (lxc_per_app mode)
+    - name: Create app LXCs (lxc_per_app)
+      ansible.builtin.include_role:
+        name: lxc-create
+      vars:
+        lxc_vmid: "{{ item.lxc_vmid }}"
+        lxc_hostname: "{{ kunde_id }}-{{ item.name | lower | replace(' ', '-') }}"
+        lxc_disk_size: "{{ item.disk_size | default(16) }}"
+        lxc_cores: "{{ item.cores | default(2) }}"
+        lxc_memory: "{{ item.memory | default(2048) }}"
+        proxmox_host: "{{ inventory_hostname }}"
+        netbird_setup_key: "{{ hostvars['localhost']['nb_generated_setup_key'] | default(netbird_setup_keys.lokal | default('')) }}"
+        netbird_management_url: "{{ loco.netbird.manager_url }}"
+      loop: "{{ apps_enabled | selectattr('target', 'equalto', 'lokal') | list }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when:
+        - isolation_mode | default('single_lxc') == 'lxc_per_app'
+        - item.lxc_vmid is defined
+      tags: [lxc, proxmox]
+
+    # Create single LXC for all local apps (single_lxc mode)
+    - name: Create single LXC for all apps
+      ansible.builtin.include_role:
+        name: lxc-create
+      vars:
+        lxc_vmid: "{{ single_lxc_vmid | default(200) }}"
+        lxc_hostname: "{{ kunde_id }}-apps"
+        lxc_disk_size: "{{ single_lxc_disk | default(32) }}"
+        lxc_cores: "{{ single_lxc_cores | default(4) }}"
+        lxc_memory: "{{ single_lxc_memory | default(4096) }}"
+        proxmox_host: "{{ inventory_hostname }}"
+        netbird_setup_key: "{{ hostvars['localhost']['nb_generated_setup_key'] | default(netbird_setup_keys.lokal | default('')) }}"
+        netbird_management_url: "{{ loco.netbird.manager_url }}"
+      when:
+        - isolation_mode | default('single_lxc') == 'single_lxc'
+        - apps_enabled | selectattr('target', 'equalto', 'lokal') | list | length > 0
+      tags: [lxc, proxmox]
+
+    # Create Gateway-LXC for lokal_only variant
+    - name: Create Gateway LXC (lokal_only)
+      ansible.builtin.include_role:
+        name: lxc-create
+      vars:
+        lxc_vmid: "{{ gateway_lxc_vmid | default(100) }}"
+        lxc_hostname: "{{ kunde_id }}-gateway"
+        lxc_disk_size: "{{ gateway_lxc_disk | default(8) }}"
+        lxc_cores: "{{ gateway_lxc_cores | default(2) }}"
+        lxc_memory: "{{ gateway_lxc_memory | default(2048) }}"
+        proxmox_host: "{{ inventory_hostname }}"
+        netbird_setup_key: "{{ hostvars['localhost']['nb_generated_setup_key'] | default(netbird_setup_keys.lokal | default('')) }}"
+        netbird_management_url: "{{ loco.netbird.manager_url }}"
+      when: variante == 'lokal_only'
+      tags: [lxc, proxmox, gateway]
+
+    - name: LXC creation complete
+      ansible.builtin.debug:
+        msg: |
+          Proxmox LXC creation complete for {{ kunde_name }}.
+          Created LXCs are now reachable via Netbird.
+          Next: Run base + app roles on each LXC via site.yml.
+
+# =====================================================
+# Play 4: Setup Gateway-LXC (lokal_only only)
+# =====================================================
+- name: "Onboarding — Gateway LXC Setup (lokal_only)"
+  hosts: "*gateway*"
+  become: true
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+    - name: Skip if not lokal_only
+      ansible.builtin.meta: end_play
+      when: variante | default('cloud_only') != 'lokal_only'
+
+  roles:
+    - role: base
+      tags: [base]
+
+    - role: pocketid
+      vars:
+        pocketid_domain: "id.{{ kunde_domain }}"
+        pocketid_api_token: "{{ loco.pocketid.api_token | default('') }}"
+      tags: [pocketid]
+
+    - role: tinyauth
+      vars:
+        tinyauth_domain: "auth.{{ kunde_domain }}"
+        tinyauth_oidc_issuer_url: "https://id.{{ kunde_domain }}"
+        tinyauth_oauth_whitelist: "{{ [loco.operator.email] + (kunden_emails | default([])) }}"
+        pocketid_api_token: "{{ loco.pocketid.api_token | default('') }}"
+      tags: [tinyauth]
+
+    - role: caddy
+      vars:
+        caddy_mode: "customer"
+      tags: [caddy]
+
+  post_tasks:
+    - name: Gateway setup complete
+      ansible.builtin.debug:
+        msg: |
+          Gateway-LXC setup complete for lokal_only customer {{ kunde_name }}.
+          PocketID: https://id.{{ kunde_domain }}
+          Tinyauth: https://auth.{{ kunde_domain }}
+          IMPORTANT: Configure port-forward 80/443 on customer router to this LXC.
+          {% if dyndns.enabled | default(false) %}
+          DynDNS is enabled — DNS will be updated automatically.
+          {% else %}
+          DynDNS is NOT enabled — configure a static IP or DynDNS manually.
+          {% endif %}
