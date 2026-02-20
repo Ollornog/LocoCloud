@@ -1,0 +1,20 @@
+---
+# roles/apps/vaultwarden/tasks/remove.yml
+# Archive Vaultwarden data, stop containers — do NOT delete data.
+
+- name: Stop Vaultwarden containers
+  community.docker.docker_compose_v2:
+    project_src: "{{ vaultwarden_stack_path }}"
+    state: absent
+  ignore_errors: true
+
+- name: Archive Vaultwarden data
+  ansible.builtin.command: >
+    tar czf /opt/archives/vaultwarden-{{ ansible_date_time.date }}.tar.gz
+    -C {{ vaultwarden_data_path }} .
+  args:
+    creates: "/opt/archives/vaultwarden-{{ ansible_date_time.date }}.tar.gz"
+
+- name: Archive complete
+  ansible.builtin.debug:
+    msg: "Vaultwarden stopped. Data archived to /opt/archives/vaultwarden-{{ ansible_date_time.date }}.tar.gz. Stack dir preserved at {{ vaultwarden_stack_path }}."
