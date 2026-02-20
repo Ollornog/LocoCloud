@@ -52,7 +52,7 @@ repo:
 # --- Vaultwarden (Admin-Instanz) ---
 vaultwarden:
   url: "https://vault.admin.example.com"
-  api_token_path: "/root/.vaultwarden-token"   # Pfad zum API-Token auf dem Master
+  api_token_path: "/root/.loco-vaultwarden-token"  # Pfad zum API-Token auf dem Master
   organization_id: ""                          # Wird nach Setup eingetragen
 
 # --- Bitwarden CLI (fuer Ansible Vault Passwort + Lookup-Plugin) ---
