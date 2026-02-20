@@ -3,7 +3,7 @@
 ## Konzept & Bauplan für das GitHub-Repository
 
 **Repo:** `github.com/Ollornog/LocoCloud` (privat, Ziel: public)
-**Version:** 3.2 — Februar 2026
+**Version:** 3.3 — Februar 2026
 **Autor:** Daniel (ollornog.de)
 
 ---
@@ -450,12 +450,75 @@ Ansible erstellt LXCs auf Proxmox über das `community.general.proxmox`-Modul:
 
 > **Voraussetzung:** Proxmox API-Token mit LXC-Erstellungsrechten. Wird beim Kunden-Onboarding einmalig konfiguriert.
 
-**Nach LXC-Erstellung:**
-1. SSH-Key deployen (Ansible `authorized_key`)
-2. base-Rolle (Hardening, Docker)
-3. Netbird-Client installieren + joinen (eigener Setup-Key, eigene Gruppe)
-4. TUN-Device konfigurieren: `lxc.cgroup2.devices.allow: c 10:200 rwm` + `lxc.mount.entry: /dev/net/tun`
-5. App deployen
+**LXC-Template sicherstellen:**
+
+Ansible stellt vor der LXC-Erstellung sicher, dass das benötigte Template auf dem Proxmox vorhanden ist:
+
+```yaml
+- name: Download LXC template if missing
+  command: >
+    pveam download local debian-13-standard_13.0-1_amd64.tar.zst
+  args:
+    creates: /var/lib/vz/template/cache/debian-13-standard_13.0-1_amd64.tar.zst
+  delegate_to: "{{ proxmox_host }}"
+```
+
+> **Hinweis:** `pveam download` ist idempotent wenn man `creates:` nutzt. Falls eine neuere Template-Version nötig wird, kann die Variable `lxc_template` im Inventar überschrieben werden.
+
+**Nach LXC-Erstellung — Bootstrap via `pct exec`:**
+
+Frisch erstellte LXCs haben weder SSH-Key noch Netbird. Ansible bootstrappt sie über den Proxmox-Host mittels `pct exec` (Proxy-Zugang über Netbird):
+
+```
+Master-LXC ──Netbird──► Proxmox-Host ──pct exec──► Neuer LXC
+```
+
+**Bootstrap-Sequenz:**
+
+```yaml
+# Phase 1: Bootstrap via pct exec (auf dem Proxmox-Host, delegiert)
+- name: Install SSH key in new LXC
+  command: >
+    pct exec {{ lxc_vmid }} -- bash -c
+    "mkdir -p /root/.ssh && echo '{{ master_ssh_pubkey }}' >> /root/.ssh/authorized_keys && chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys"
+  delegate_to: "{{ proxmox_host }}"
+
+- name: Install Netbird in new LXC
+  command: >
+    pct exec {{ lxc_vmid }} -- bash -c
+    "curl -fsSL https://pkgs.netbird.io/install.sh | bash && netbird up --setup-key {{ netbird_setup_key }} --management-url {{ loco.netbird.manager_url }}"
+  delegate_to: "{{ proxmox_host }}"
+
+- name: Wait for Netbird connection
+  command: >
+    pct exec {{ lxc_vmid }} -- netbird status --json
+  delegate_to: "{{ proxmox_host }}"
+  register: nb_status
+  until: nb_status.stdout | from_json | json_query('ip') != ""
+  retries: 30
+  delay: 5
+
+- name: Register Netbird IP
+  set_fact:
+    new_lxc_netbird_ip: "{{ (nb_status.stdout | from_json).ip | regex_replace('/.*', '') }}"
+
+# Phase 2: Direkte SSH-Verbindung über Netbird-IP
+- name: Run base role on new LXC
+  include_role:
+    name: base
+  delegate_to: "{{ new_lxc_netbird_ip }}"
+
+- name: Deploy app on new LXC
+  include_role:
+    name: "apps/{{ app_name }}"
+  delegate_to: "{{ new_lxc_netbird_ip }}"
+```
+
+1. **Phase 1 (via `pct exec`):** SSH-Key + Netbird installieren — Ansible delegiert Befehle an den Proxmox-Host, der sie per `pct exec` im LXC ausführt
+2. **Phase 2 (direkte SSH-Verbindung):** Sobald Netbird läuft, verbindet sich Ansible direkt über die Netbird-IP zum LXC für base-Rolle, Docker, App-Deployment
+3. TUN-Device konfigurieren: `lxc.cgroup2.devices.allow: c 10:200 rwm` + `lxc.mount.entry: /dev/net/tun` — wird VOR dem LXC-Start in der Proxmox-Config gesetzt
+
+> **Warum `pct exec`?** Zuverlässiger als Cloud-Init (nicht alle Templates unterstützen es) und flexibler als der `pubkey`-Parameter des Proxmox-Moduls (der nur SSH-Keys kann, kein Netbird-Install).
 
 ### 5.7 Netzwerk-Übersicht bei LXC-pro-App (Hybrid)
 
@@ -544,12 +607,113 @@ xyz-hetzner                    ← Kunde XYZ
 ...
 ```
 
-### 6.3 Setup-Keys
+### 6.3 Netbird-Automation via API (vollautomatisch durch Ansible)
 
-Pro Kunde bei Onboarding generiert (Netbird API):
-- `auto_groups: ["kunde-abc"]`
-- `reusable: false` (Einmal-Key, sicherer)
-- Gespeichert in Admin-Vaultwarden (`vault.loco.ollornog.de`)
+Ansible erstellt beim Kunden-Onboarding **alle Netbird-Ressourcen automatisch** über die Netbird REST-API (`{{ loco.netbird.manager_url }}/api`). Kein manueller Eingriff nötig.
+
+**Schritt 1: Kundengruppe erstellen**
+```yaml
+- name: Create Netbird group for customer
+  uri:
+    url: "{{ loco.netbird.manager_url }}/api/groups"
+    method: POST
+    headers:
+      Authorization: "Token {{ loco.netbird.api_token }}"
+    body_format: json
+    body:
+      name: "kunde-{{ kunde_id }}"
+    status_code: 200
+  register: nb_group
+```
+
+**Schritt 2: Policies erstellen**
+```yaml
+- name: Create policy — customer internal
+  uri:
+    url: "{{ loco.netbird.manager_url }}/api/policies"
+    method: POST
+    headers:
+      Authorization: "Token {{ loco.netbird.api_token }}"
+    body_format: json
+    body:
+      name: "kunde-{{ kunde_id }}-internal"
+      enabled: true
+      rules:
+        - name: "Internal traffic"
+          enabled: true
+          sources: ["{{ nb_group.json.id }}"]
+          destinations: ["{{ nb_group.json.id }}"]
+          bidirectional: true
+          protocol: "all"
+          action: "accept"
+
+- name: Create policy — admin to customer
+  uri:
+    url: "{{ loco.netbird.manager_url }}/api/policies"
+    method: POST
+    headers:
+      Authorization: "Token {{ loco.netbird.api_token }}"
+    body_format: json
+    body:
+      name: "loco-admin-to-kunde-{{ kunde_id }}"
+      enabled: true
+      rules:
+        - name: "Admin access"
+          enabled: true
+          sources: ["{{ loco_admin_group_id }}"]
+          destinations: ["{{ nb_group.json.id }}"]
+          bidirectional: true
+          protocol: "all"
+          action: "accept"
+```
+
+**Schritt 3: Setup-Keys generieren**
+```yaml
+- name: Create Netbird setup key for customer
+  uri:
+    url: "{{ loco.netbird.manager_url }}/api/setup-keys"
+    method: POST
+    headers:
+      Authorization: "Token {{ loco.netbird.api_token }}"
+    body_format: json
+    body:
+      name: "kunde-{{ kunde_id }}-onboarding"
+      type: "reusable"
+      auto_groups: ["{{ nb_group.json.id }}"]
+      usage_limit: 20
+      expires_in: 86400
+    status_code: 200
+  register: nb_setup_key
+```
+
+**Setup-Key Strategie:**
+- `reusable: true` mit `usage_limit` für Onboarding (damit mehrere LXCs denselben Key nutzen können)
+- Nach Onboarding: Key läuft automatisch ab (`expires_in: 86400` = 24h)
+- Für spätere einzelne LXC-Erstellungen (`add-app.yml`): Einmal-Key generieren
+- Alle Keys werden in Admin-Vaultwarden gespeichert
+
+**Schritt 4: Backup-Policy erstellen (falls Backup-Server existiert)**
+```yaml
+- name: Create policy — backup to customer
+  uri:
+    url: "{{ loco.netbird.manager_url }}/api/policies"
+    method: POST
+    headers:
+      Authorization: "Token {{ loco.netbird.api_token }}"
+    body_format: json
+    body:
+      name: "loco-backup-to-kunde-{{ kunde_id }}"
+      enabled: true
+      rules:
+        - name: "Backup pull"
+          enabled: true
+          sources: ["{{ loco_backup_group_id }}"]
+          destinations: ["{{ nb_group.json.id }}"]
+          bidirectional: false
+          protocol: "all"
+          action: "accept"
+  when: backup.enabled | default(false)
+```
 
 ### 6.4 DNS in Netbird
 
@@ -933,14 +1097,57 @@ volumes:
 
 ### 9.5 App hinzufügen / entfernen / bearbeiten
 
-**Hinzufügen:**
+**Hinzufügen (bei `single_lxc` oder `target: online`):**
 1. App zu `apps_enabled` im Inventar hinzufügen
 2. Playbook `add-app.yml` ausführen
 3. Generiert Credentials → Vaultwarden
 4. Deployed Docker Container
-5. Registriert OIDC-Client in PocketID
+5. Registriert OIDC-Client in PocketID via API
 6. Regeneriert Caddyfile + restart
 7. Registriert Zabbix-Check
+
+**Hinzufügen (bei `lxc_per_app` mit `target: lokal`) — erweiterter Workflow:**
+
+Bei `lxc_per_app` muss `add-app.yml` einen komplett neuen LXC erstellen und bootstrappen, bevor die App deployt werden kann:
+
+```
+┌─ add-app.yml ─────────────────────────────────────────────────┐
+│                                                                │
+│  1. Netbird-Setup-Key generieren (Netbird API)                 │
+│     └── Einmal-Key für die Kundengruppe                        │
+│                                                                │
+│  2. LXC erstellen (Proxmox API via Netbird → Proxmox-Host)    │
+│     └── community.general.proxmox Modul                        │
+│     └── TUN-Device konfigurieren (für Netbird)                 │
+│     └── LXC starten                                            │
+│                                                                │
+│  3. Bootstrap via pct exec (delegiert an Proxmox-Host)         │
+│     ├── SSH-Key injizieren                                     │
+│     ├── Netbird installieren + joinen                          │
+│     └── Netbird-IP ermitteln + registrieren                    │
+│                                                                │
+│  4. hosts.yml aktualisieren (neuen Host hinzufügen)            │
+│     └── ansible_host: <neue Netbird-IP>                        │
+│     └── server_role: app                                       │
+│     └── app_name: <app>                                        │
+│                                                                │
+│  5. Base-Rolle (via direkte SSH über Netbird-IP)               │
+│     └── Hardening, Docker, UFW                                 │
+│                                                                │
+│  6. App deployen                                               │
+│     ├── Docker Compose + .env                                  │
+│     ├── OIDC-Client via PocketID API                           │
+│     └── Credentials → Vaultwarden                              │
+│                                                                │
+│  7. Caddyfile auf Entry-Point regenerieren + restart            │
+│     └── Neue Route: subdomain.domain → Netbird-IP:Port         │
+│                                                                │
+│  8. Zabbix-Check registrieren                                  │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+> **Chicken-and-Egg gelöst:** Die Netbird-IP ist erst nach dem Join bekannt (Schritt 3). Deshalb wird `hosts.yml` dynamisch in Schritt 4 aktualisiert. Ab Schritt 5 verbindet sich Ansible direkt über die neue Netbird-IP.
 
 **Entfernen:**
 1. Playbook `remove-app.yml` mit `app_name`
@@ -1439,8 +1646,11 @@ ssh_args = -o ControlMaster=auto -o ControlPersist=60s
 | Template | Playbook | Extra-Variablen |
 |----------|----------|-----------------|
 | Full Deploy | `site.yml` | — |
+| Onboard Customer | `onboard-customer.yml` | — (alles aus Inventar) |
+| Offboard Customer | `offboard-customer.yml` | `offboard_mode` (`archivieren` / `loeschen`) |
 | Add App | `add-app.yml` | `app_name`, `app_subdomain`, `app_port`, `app_target`, `app_public_paths` |
 | Remove App | `remove-app.yml` | `app_name` |
+| Update App | `update-app.yml` | `app_name` (Image-Tag aus Inventar) |
 | Add User | `add-user.yml` | `username`, `email`, `display_name` |
 | Remove User | `remove-user.yml` | `username` |
 | Update Caddy | `update-caddy.yml` | — |
@@ -1505,25 +1715,35 @@ Manuelle Vorbereitung (einmalig am Kunden-Proxmox):
 
 Inventar vorbereiten:
 1. bash scripts/new-customer.sh kunde-abc "Firma ABC GmbH" "firma-abc.de" "hybrid"
-2. hosts.yml + group_vars/all.yml anpassen (Proxmox API-Token, Netbird-Keys)
+2. hosts.yml + group_vars/all.yml anpassen (Proxmox API-Token, Netbird-IP)
 3. DNS-Records anlegen (A + Wildcard *.firma-abc.de)
 4. Hetzner vServer bestellen (falls Hybrid/Cloud)
 5. Git commit + push → Auf Master: git pull
 
 Automatisiert (Semaphore → onboard-customer.yml):
-1. lxc-create → LXC-Container auf Proxmox erstellen (via Proxmox API über Netbird)
-2. base → Hardening + Docker auf jedem LXC
-3. netbird-client → Installation + Join auf jedem LXC (eigener Client pro LXC)
-4. pocketid → Eigene Instanz für Kunden (auf Entry-Point)
-5. tinyauth → Eigene Instanz, OIDC mit Kunden-PocketID
-6. caddy → Caddyfile generieren
-7. Pro App: Deploy + OIDC (via PocketID API) + Credentials → Vaultwarden
-8. monitoring → Zabbix Agent
-9. backup → Restic Setup
-10. Test → HTTP-Checks
+ 1. Netbird-Gruppe "kunde-xxx" erstellen (Netbird API)
+ 2. Netbird-Policies erstellen: intern + loco-admin→kunde + loco-backup→kunde (API)
+ 3. Netbird-Setup-Key generieren (reusable, 24h Ablauf) (API)
+ 4. LXC-Template herunterladen falls fehlend (pveam download, delegiert an Proxmox)
+ 5. LXC-Container erstellen auf Proxmox (community.general.proxmox über Netbird)
+    └── TUN-Device konfigurieren (für Netbird im LXC)
+ 6. Bootstrap via pct exec (delegiert an Proxmox-Host):
+    ├── SSH-Key injizieren
+    ├── Netbird installieren + joinen (Setup-Key aus Schritt 3)
+    └── Netbird-IP ermitteln → hosts.yml aktualisieren
+ 7. base-Rolle (direkte SSH via Netbird-IP): Hardening + Docker + UFW
+ 8. Entry-Point konfigurieren (Hetzner oder Gateway-LXC):
+    ├── PocketID deployen (id.firma.de)
+    ├── Tinyauth deployen (auth.firma.de)
+    └── Admin-User in PocketID anlegen (API)
+ 9. Pro App: Deploy + OIDC-Client (PocketID API) + Credentials → Vaultwarden
+10. Caddy → Caddyfile generieren + restart
+11. Monitoring → Zabbix Agent auf jedem Host + Checks registrieren
+12. Backup → Restic Setup + initiales Backup
+13. Smoke-Test → HTTP-Checks auf alle Subdomains
 ```
 
-> **Kernidee:** Der Proxmox-Host braucht nur Netbird + API-Token. Ansible erstellt und konfiguriert alle LXC-Container remote über die Proxmox API und SSH via Netbird. Kein manuelles LXC-Setup nötig.
+> **Kernidee:** Der Proxmox-Host braucht nur Netbird + API-Token. Ansible erstellt Netbird-Gruppen, -Policies und -Keys automatisch via API, erstellt und bootstrappt alle LXC-Container remote über die Proxmox API und `pct exec`, und verbindet sich dann direkt via Netbird für alles Weitere. Kein manuelles LXC-Setup nötig.
 
 ### 15.3 Benutzer hinzufügen
 
@@ -1538,6 +1758,65 @@ Automatisiert (Semaphore → onboard-customer.yml):
 # 4. docker restart tinyauth
 # 5. Inventar-YAML aktualisieren (kunden_users Liste)
 ```
+
+### 15.4 Kunde offboarden
+
+**`offboard-customer.yml`** — gestufter Prozess mit Sicherheitsabfragen.
+
+**Zwei Modi:**
+- **Archivieren** (Standard): Daten sichern, Dienste stoppen, Infrastruktur aus Admin entfernen, Server behalten
+- **Komplett löschen**: Wie Archivieren + Daten und LXCs vernichten
+
+```
+┌─ offboard-customer.yml ───────────────────────────────────────┐
+│                                                                │
+│  Modus: archivieren | loeschen                                 │
+│                                                                │
+│  1. Finales Backup aller App-Daten (Restic)                    │
+│     └── Backup verifizieren (restic check)                     │
+│                                                                │
+│  2. Docker Container stoppen (alle Apps)                       │
+│     └── Pro App: docker compose down                           │
+│                                                                │
+│  3. OIDC-Clients aus PocketID entfernen (API)                  │
+│     └── Alle Clients für diese Kunden-Domain                   │
+│                                                                │
+│  4. Netbird aufräumen                                          │
+│     ├── Alle Peers der Kundengruppe entfernen (API)            │
+│     ├── Policies entfernen (API)                               │
+│     └── Kundengruppe entfernen (API)                           │
+│                                                                │
+│  5. Zabbix-Hosts entfernen                                     │
+│     └── Alle Hosts mit Prefix "{{ kunde_id }}-"               │
+│                                                                │
+│  6. Credentials in Vaultwarden archivieren                     │
+│     └── Kunden-Ordner umbenennen: "[ARCHIV] Firma ABC"         │
+│     └── Credentials bleiben für Audit-Trail erhalten           │
+│                                                                │
+│  7. Semaphore-Projekt entfernen                                │
+│     └── Kunden-Projekt in Semaphore löschen                    │
+│                                                                │
+│  ── Nur bei Modus "loeschen": ────────────────────────────     │
+│                                                                │
+│  8. App-Daten löschen                                          │
+│     └── Docker Volumes entfernen                               │
+│     └── Daten-Verzeichnisse löschen                            │
+│                                                                │
+│  9. LXCs auf Proxmox vernichten (bei lxc_per_app)              │
+│     └── community.general.proxmox: state=absent                │
+│                                                                │
+│  ── Ende ──────────────────────────────────────────────────    │
+│                                                                │
+│  10. Inventar-Verzeichnis archivieren oder löschen              │
+│      └── mv inventories/kunde-abc inventories/_archived/abc    │
+│      └── Oder: rm -rf inventories/kunde-abc                    │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+> **Hetzner-Server wird NICHT automatisch gelöscht.** Das muss Daniel manuell über die Hetzner-Konsole tun — zu riskant für Automation. Das Playbook gibt am Ende eine Zusammenfassung aus mit Hinweis: "Hetzner-Server XYZ kann jetzt manuell gelöscht werden."
+
+> **DNS-Records** müssen ebenfalls manuell entfernt werden (A-Record + Wildcard der Kunden-Domain).
 
 ---
 
@@ -1556,7 +1835,7 @@ Identisch für alle Server (Master + Kunden):
 | Kernel-Hardening | sysctl (rp_filter, syncookies, etc.) — **LXC-kompatible Params beachten!** |
 | Fail2ban | SSH (10 Versuche, 3600s Ban) |
 | Unattended-upgrades | Automatische Sicherheitsupdates |
-| Watchtower | Docker-Image-Updates täglich 04:00 |
+| Watchtower | Docker-Image-Patches täglich 04:00 (Label-basiert, nur Minor/Patch) |
 | USB deaktiviert | Nur auf physischen Servern (`is_lxc`-Check!) |
 | .env chmod 600 | Alle Secrets-Files |
 | Docker Port-Bind | Entry-Point: `127.0.0.1:PORT` / App-LXCs: `0.0.0.0:PORT` + UFW auf wt0 |
@@ -1584,16 +1863,59 @@ admin_user_nopasswd: true  # NOPASSWD für Ansible-Kompatibilität
 | Task | Frequenz | Tool |
 |------|----------|------|
 | OS-Sicherheitsupdates | Täglich | unattended-upgrades |
-| Docker-Image-Updates | Täglich 04:00 | Watchtower |
+| Docker-Image-Updates (Patches) | Täglich 04:00 | Watchtower (Label-basiert) |
 | Backup | Konfigurierbar (default: 6h) | Restic Cron |
 | Health-Checks | Alle 5 min | Zabbix |
 | SSL-Erneuerung | Automatisch | Caddy |
 
-### 17.2 Manuell (Semaphore)
+### 17.2 Watchtower-Strategie: Nur Security-Patches automatisch
+
+**Problem:** Watchtower mit `:latest`-Tags kann bei Major-Updates Apps kaputt machen (z.B. Nextcloud 29 → 30, Breaking Changes in Paperless, DB-Migrationen die fehlschlagen).
+
+**Lösung:** Label-basiertes Watchtower mit konservativen Image-Tags.
+
+```yaml
+# Docker Compose Template für jede App:
+services:
+  app:
+    image: "nextcloud:29"          # Pinned auf Major-Version, Patches automatisch
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    # ...
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_LABEL_ENABLE=true      # Nur gelabelte Container updaten
+      - WATCHTOWER_SCHEDULE=0 0 4 * * *   # Täglich 04:00
+      - WATCHTOWER_CLEANUP=true           # Alte Images entfernen
+      - WATCHTOWER_NOTIFICATIONS=email    # Optional: Benachrichtigung bei Update
+      - WATCHTOWER_NOTIFICATION_EMAIL_FROM={{ loco.smtp.from }}
+      - WATCHTOWER_NOTIFICATION_EMAIL_TO={{ loco.operator.email }}
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER={{ loco.smtp.host }}
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PORT={{ loco.smtp.port }}
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_USER={{ loco.smtp.user }}
+```
+
+**Image-Tag-Strategie:**
+- `nextcloud:29` → bekommt automatisch 29.0.1, 29.0.2, etc. (Patches)
+- `nextcloud:30` → manuell via `update-app.yml` wenn getestet (Major-Update)
+- Container ohne Label werden von Watchtower ignoriert
+
+**Major-Updates** (die was kaputt machen können) werden ausschließlich über Semaphore/`update-app.yml` gemacht:
+1. Image-Tag im Inventar ändern (z.B. `nextcloud_version: "30"`)
+2. `update-app.yml` ausführen → neues Image pullen, Container neu starten
+3. Post-Update-Checks (Health-Check, DB-Migration prüfen)
+
+### 17.3 Manuell (Semaphore)
 
 | Task | Playbook |
 |------|----------|
-| Major App-Updates | `update-app.yml` |
+| Major App-Updates | `update-app.yml` — Image-Tag im Inventar ändern, dann ausführen |
 | Full OS-Update | `update-all.yml` |
 | Backup-Test | `backup-test.yml` |
 | Mitarbeiter anlegen/entfernen | `add-user.yml` / `remove-user.yml` |
@@ -1608,6 +1930,18 @@ admin_user_nopasswd: true  # NOPASSWD für Ansible-Kompatibilität
 # inventories/kunde-abc/hosts.yml
 all:
   children:
+    proxmox:
+      hosts:
+        abc-proxmox:
+          ansible_host: "100.114.a.99"   # Netbird-IP des Proxmox-Hosts
+          ansible_user: root
+          server_role: proxmox
+          is_lxc: false
+          proxmox_node: "pve"
+          proxmox_api_host: "100.114.a.99"
+          proxmox_api_token_id: "ansible@pam!loco"
+          proxmox_api_token_secret: "{{ vault_proxmox_token }}"
+          lxc_template: "local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst"
     online:
       hosts:
         abc-hetzner:
@@ -1625,12 +1959,26 @@ all:
           is_lxc: true
 ```
 
+> **Der Proxmox-Host** ist im Inventar als `server_role: proxmox`. Er wird NICHT wie ein App-Server gehärtet (kein Docker, andere UFW-Regeln). Er dient nur als Ziel für LXC-Erstellung via Proxmox API und `pct exec`-Bootstrap. Netbird auf dem Proxmox-Host wird beim Kunden-Onboarding manuell installiert (einmaliger Schritt).
+
 ### 18.2 Beispiel: Hybrid-Kunde (lxc_per_app)
 
 ```yaml
 # inventories/kunde-abc/hosts.yml
 all:
   children:
+    proxmox:
+      hosts:
+        abc-proxmox:
+          ansible_host: "100.114.a.99"   # Netbird-IP des Proxmox-Hosts
+          ansible_user: root
+          server_role: proxmox
+          is_lxc: false
+          proxmox_node: "pve"
+          proxmox_api_host: "100.114.a.99"
+          proxmox_api_token_id: "ansible@pam!loco"
+          proxmox_api_token_secret: "{{ vault_proxmox_token }}"
+          lxc_template: "local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst"
     online:
       hosts:
         abc-hetzner:
@@ -1660,7 +2008,7 @@ all:
           is_lxc: true
 ```
 
-> **Jeder LXC hat seine eigene Netbird-IP.** Ansible erreicht jeden einzelnen direkt über Netbird — kein SSH-Hopping, kein Gateway.
+> **Jeder LXC hat seine eigene Netbird-IP.** Ansible erreicht jeden einzelnen direkt über Netbird — kein SSH-Hopping, kein Gateway. Der Proxmox-Host wird nur für LXC-Erstellung und Bootstrap benötigt.
 
 ### 18.3 Beispiel: Cloud-Only
 
@@ -1680,6 +2028,18 @@ all:
 ```yaml
 all:
   children:
+    proxmox:
+      hosts:
+        abc-proxmox:
+          ansible_host: "100.114.a.99"   # Netbird-IP des Proxmox-Hosts
+          ansible_user: root
+          server_role: proxmox
+          is_lxc: false
+          proxmox_node: "pve"
+          proxmox_api_host: "100.114.a.99"
+          proxmox_api_token_id: "ansible@pam!loco"
+          proxmox_api_token_secret: "{{ vault_proxmox_token }}"
+          lxc_template: "local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst"
     gateway:
       hosts:
         abc-gw:
@@ -1708,7 +2068,7 @@ all:
           is_lxc: true
 ```
 
-> **Bei Lokal-Only:** Der Gateway-LXC übernimmt die Rolle des Hetzner-Servers (Caddy + Auth). Routing zu App-LXCs geht über Netbird — kein Unterschied zur Hybrid-Variante aus Sicht der App-LXCs.
+> **Bei Lokal-Only:** Der Gateway-LXC übernimmt die Rolle des Hetzner-Servers (Caddy + Auth). Routing zu App-LXCs geht über Netbird — kein Unterschied zur Hybrid-Variante aus Sicht der App-LXCs. Der Proxmox-Host ist im Inventar für LXC-Erstellung und Bootstrap.
 
 ### 18.5 group_vars/all.yml (Hauptkonfiguration)
 
@@ -1920,6 +2280,11 @@ Microsoft 365 / Google Workspace.
 | Ansible Vault vs. Vaultwarden | Beides komplementär: Vault für Repo-Encryption, Vaultwarden für Credential-Store + Lookup | Kap. 10.1 |
 | Shared Redis | Implizit durch `isolation_mode` gelöst (single_lxc: DB-Nummern, lxc_per_app: eigener Container) | Kap. 9.3 |
 | Isolation auf Proxmox | `lxc_per_app` empfohlen, `single_lxc` als Option | Kap. 5 |
+| LXC-Bootstrap-Methode | `pct exec` via Proxmox-Host (SSH-Key + Netbird injizieren, dann direkte Verbindung) | Kap. 5.6 |
+| Netbird-Gruppen/Keys/Policies | Vollautomatisch via Netbird REST-API durch Ansible (kein manueller Eingriff) | Kap. 6.3 |
+| Watchtower-Strategie | Label-basiert + gepinnte Major-Versionen. Patches automatisch, Major-Updates manuell via Semaphore | Kap. 17.2 |
+| LXC-Template auf Proxmox | Ansible lädt Template via `pveam download` automatisch herunter wenn fehlend | Kap. 5.6 |
+| Offboarding-Strategie | Gestuft: Archivieren (Standard) oder komplett löschen. Hetzner-Server manuell. Credentials archiviert | Kap. 15.4 |
 
 ### Noch offene Entscheidungen
 
