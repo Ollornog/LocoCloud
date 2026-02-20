@@ -5,11 +5,13 @@
 Auf einem frischen Debian 13 (Trixie) Server als root:
 
 ```bash
-apt update && apt upgrade -y && apt install -y curl
-curl -fsSL https://raw.githubusercontent.com/Ollornog/LocoCloud/main/scripts/setup.sh | bash
+apt update && apt install -y curl
+curl -fsSL https://raw.githubusercontent.com/Ollornog/LocoCloud/main/scripts/setup.sh -o setup.sh
+bash setup.sh
 ```
 
-Das Script erledigt alles interaktiv: Pakete, Netbird, Repo-Clone, Ansible, Konfiguration.
+Das Script fragt interaktiv alles ab: Domain, Name, E-Mail, Netbird-Zugang, SMTP.
+Danach sind Pakete, Netbird, Repo, Ansible und Config fertig eingerichtet.
 
 ---
 
