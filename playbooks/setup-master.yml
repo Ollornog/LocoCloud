@@ -54,6 +54,8 @@
         vaultwarden_smtp_port: "{{ loco.smtp.port | default(587) }}"
         vaultwarden_smtp_username: "{{ loco.smtp.user | default('') }}"
         vaultwarden_smtp_from: "{{ loco.smtp.from | default('') }}"
+        pocketid_domain: "{{ loco.urls.pocketid }}"
+        pocketid_api_token: "{{ loco.pocketid.api_token | default('') }}"
         caddy_mode: "master"
       tags: [vaultwarden]
 

@@ -1,0 +1,78 @@
+---
+# roles/apps/vaultwarden/tasks/oidc.yml
+# Register Vaultwarden as OIDC client in PocketID and configure SSO.
+# Only runs when pocketid_api_token is available.
+
+- name: Check if Vaultwarden OIDC client exists in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ pocketid_domain }}/api/oidc-clients"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ pocketid_api_token }}"
+    status_code: 200
+  register: oidc_clients
+
+- name: Find existing Vaultwarden OIDC client
+  ansible.builtin.set_fact:
+    vaultwarden_oidc_client: >-
+      {{ oidc_clients.json | selectattr('name', 'equalto', 'Vaultwarden') | list | first | default(None) }}
+
+- name: Create Vaultwarden OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ pocketid_domain }}/api/oidc-clients"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ pocketid_api_token }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      name: "Vaultwarden"
+      callbackURLs:
+        - "https://{{ vaultwarden_domain }}/identity/connect/oidc-signin"
+      pkceEnabled: true
+    status_code: [200, 201]
+  register: oidc_create_result
+  when: vaultwarden_oidc_client is none
+
+- name: Set OIDC client facts from creation
+  ansible.builtin.set_fact:
+    vaultwarden_sso_client_id: "{{ oidc_create_result.json.id }}"
+    vaultwarden_sso_client_secret: "{{ oidc_create_result.json.secret }}"
+  when: vaultwarden_oidc_client is none
+
+- name: Set OIDC client facts from existing client
+  ansible.builtin.set_fact:
+    vaultwarden_sso_client_id: "{{ vaultwarden_oidc_client.id }}"
+    vaultwarden_sso_client_secret: "{{ vaultwarden_oidc_client.secret | default('') }}"
+  when: vaultwarden_oidc_client is not none
+
+- name: Enable SSO in Vaultwarden
+  ansible.builtin.set_fact:
+    vaultwarden_sso_enabled: true
+    vaultwarden_sso_only: true
+    vaultwarden_sso_authority: "https://{{ pocketid_domain }}"
+
+- name: Update Vaultwarden .env with SSO config
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ vaultwarden_stack_path }}/.env"
+    mode: "0600"
+  notify: restart caddy
+
+- name: Restart Vaultwarden to apply SSO config
+  community.docker.docker_compose_v2:
+    project_src: "{{ vaultwarden_stack_path }}"
+    state: restarted
+
+- name: Store Vaultwarden OIDC credentials in Vaultwarden
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "https://{{ vaultwarden_domain }}"
+    credential_name: "Master — Vaultwarden OIDC Client"
+    credential_username: "{{ vaultwarden_sso_client_id }}"
+    credential_password: "{{ vaultwarden_sso_client_secret }}"
+    credential_uri: "https://{{ pocketid_domain }}"
+    credential_notes: "Vaultwarden SSO OIDC client. Authority: https://{{ pocketid_domain }}"
+  when: vaultwarden_sso_client_secret | length > 0

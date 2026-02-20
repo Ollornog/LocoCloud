@@ -10,9 +10,8 @@ curl -fsSL https://raw.githubusercontent.com/Ollornog/LocoCloud/main/scripts/set
 bash setup.sh
 ```
 
-Das Script fragt zuerst alles ab (Name, E-Mail, Domain, Netbird, SMTP) und
-fuehrt danach automatisch aus: Pakete, Docker, Netbird-Server (optional),
-Netbird-Client, Repo-Clone, Ansible, Config-Generierung.
+Das Script fragt zuerst alles ab, installiert dann alles automatisch
+und fuehrt am Ende das Ansible-Playbook aus.
 
 ---
 
@@ -27,16 +26,18 @@ Netbird-Client, Repo-Clone, Ansible, Config-Generierung.
 - Netbird Management-URL + Setup-Key
 
 **Dann: Automatische Installation**
-1. `apt update && apt upgrade` + Grundpakete (sudo, curl, git, pipx, jq, ...)
+1. `apt update && apt upgrade` + Grundpakete
 2. Docker installieren (`get.docker.com`)
-3. Netbird-Server deployen (falls self-hosted) — Docker Compose Stack
+3. Netbird-Server deployen (falls self-hosted)
 4. Netbird-Client installieren + joinen
 5. Repo klonen nach `/root/LocoCloud`
 6. Ansible installieren (pipx) + Collections
-7. `config/lococloudd.yml` generieren — alle Subdomains automatisch aus der Basis-Domain
-8. Master-Inventar vorbereiten
+7. `config/lococloudd.yml` generieren
+8. SSH-Key generieren + in Inventar eintragen
+9. Master-Inventar mit `ansible_connection: local` vorbereiten
+10. Master-Playbook automatisch ausfuehren
 
-**Am Ende: Zusammenfassung mit konkreten Befehlen und IPs**
+**Am Ende: Zusammenfassung mit naechsten Schritten**
 
 ---
 
@@ -50,15 +51,15 @@ Netbird-Client, Repo-Clone, Ansible, Config-Generierung.
 
 ## Nach dem Setup-Script
 
-Das Script zeigt am Ende die naechsten Schritte mit konkreten Befehlen an.
-Hier die Kurzfassung:
+Das Playbook laeuft automatisch am Ende des Scripts. Danach gibt es
+nur noch wenige manuelle Schritte:
 
 ### 1. DNS einrichten
 
-Das Script zeigt die oeffentliche IP des Servers an. DNS-Eintraege erstellen:
+Wildcard-DNS auf die Gateway Public IP zeigen lassen:
 
 ```
-*.admin.example.com → A-Record auf die Public IP des Gateway-Servers
+*.admin.example.com → A-Record auf Gateway Public IP
 ```
 
 Falls Netbird self-hosted:
@@ -67,62 +68,65 @@ netbird.example.com → A-Record auf diesen Server
 relay.example.com   → A-Record auf diesen Server
 ```
 
-### 2. SSH-Public-Key eintragen
+### 2. Gateway-Caddy konfigurieren
 
-Damit Ansible sich per SSH verbinden kann, muss mindestens ein Public Key
-hinterlegt werden. Den Key findest du auf deinem Admin-Rechner:
+Auf dem Gateway-Server muss Caddy den Admin-Wildcard an den Master weiterleiten:
 
-```bash
-cat ~/.ssh/id_ed25519.pub
+```
+*.admin.example.com {
+    tls {
+        dns cloudflare {env.CF_API_TOKEN}
+    }
+    reverse_proxy https://<MASTER-NETBIRD-IP> {
+        header_up Host {host}
+        transport http {
+            tls_server_name admin.example.com
+        }
+    }
+}
 ```
 
-Diesen Key eintragen in `inventories/master/group_vars/all.yml`:
+### 3. PocketID: Passkey registrieren + API-Key erstellen
 
-```yaml
-admin_ssh_pubkeys:
-  - "ssh-ed25519 AAAA... dein-name@rechner"
-```
+1. `https://id.admin.example.com` im Browser oeffnen
+2. Admin-Account mit Passkey einrichten
+3. Settings → API Keys → Neuen Key erstellen
+4. Key in `config/lococloudd.yml` eintragen:
+   ```yaml
+   pocketid:
+     api_token: "euer-api-key"
+   ```
 
-### 3. Master-Playbook ausfuehren
+### 4. Playbook erneut ausfuehren (mit API-Key)
 
 ```bash
-cd /root/LocoCloud
 ansible-playbook playbooks/setup-master.yml -i inventories/master/
 ```
 
-Das Playbook richtet ein:
+Beim zweiten Lauf passiert automatisch:
+- Vaultwarden wird als OIDC-Client in PocketID registriert
+- SSO-Login fuer Vaultwarden wird aktiviert (`SSO_ONLY=true`)
+- OIDC-Credentials werden in Vaultwarden gespeichert
 
-| Reihenfolge | Rolle | Funktion |
-|-------------|-------|----------|
-| 1 | base | OS-Hardening, Docker, UFW, Fail2ban |
-| 2 | netbird_client | VPN-Anbindung |
-| 3 | pocketid | OIDC Provider |
-| 4 | tinyauth | Forward Auth |
-| 5 | vaultwarden | Credential Store |
-| 6 | semaphore | Ansible Web-UI |
-| 7 | caddy | Reverse Proxy |
-
-### 4. PocketID API-Token eintragen
-
-1. `https://id.admin.example.com` oeffnen
-2. Einloggen (Passwort steht in der Ansible-Ausgabe)
-3. Settings → API → Token generieren
-4. Token in `config/lococloudd.yml` eintragen:
-   ```yaml
-   pocketid:
-     api_token: "euer-token-hier"
-   ```
-
-### 5. Vaultwarden einrichten + Playbook erneut ausfuehren
+### 5. Vaultwarden: Master-Passwort setzen
 
 1. `https://vault.admin.example.com` oeffnen
-2. Admin-Account erstellen
-3. Organisation "LocoCloud" anlegen
-4. Organisation-ID in `config/lococloudd.yml` eintragen
-5. Playbook nochmal ausfuehren:
-   ```bash
-   ansible-playbook playbooks/setup-master.yml -i inventories/master/
-   ```
+2. "Use single sign-on" klicken (Login via PocketID)
+3. Master-Passwort setzen (fuer Vault-Verschluesselung)
+4. Organisation "LocoCloud" im Admin-Panel anlegen
+5. Organisation-ID in `config/lococloudd.yml` eintragen
+
+---
+
+## Sicherheitskonzept
+
+| Massnahme | Details |
+|-----------|---------|
+| PocketID Registration | Blockiert via Caddy (`/register` → 403) |
+| Vaultwarden Signups | Deaktiviert (`SIGNUPS_ALLOWED=false`) |
+| Vaultwarden Login | Nur via SSO/PocketID (`SSO_ONLY=true`) |
+| Admin-Dienste | Hinter Tinyauth Forward-Auth (PocketID OIDC) |
+| SSH-Key | Automatisch generiert, in `/root/.ssh/id_ed25519` |
 
 ---
 
@@ -132,7 +136,7 @@ Das Playbook richtet ein:
 |--------|-----|----------|
 | PocketID | `https://id.admin.example.com` | OIDC Provider |
 | Tinyauth | `https://auth.admin.example.com` | Forward Auth |
-| Vaultwarden | `https://vault.admin.example.com` | Credential Store |
+| Vaultwarden | `https://vault.admin.example.com` | Credential Store (SSO via PocketID) |
 | Semaphore | `https://deploy.admin.example.com` | Ansible Web-UI |
 
 ---
@@ -167,23 +171,6 @@ nano config/lococloudd.yml
 
 # Ausfuehren
 ansible-playbook playbooks/setup-master.yml -i inventories/master/
-```
-
----
-
-## Admin-Gateway (Caddy)
-
-Der Gateway-Server leitet `*.admin.example.com` per Caddy an den Master weiter:
-
-```
-*.admin.example.com {
-    reverse_proxy https://<MASTER-NETBIRD-IP>:443 {
-        header_up Host {host}
-        transport http {
-            tls_server_name admin.example.com
-        }
-    }
-}
 ```
 
 ---

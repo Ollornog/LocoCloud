@@ -15,3 +15,5 @@ services:
       - {{ pocketid_data_path }}:/data
     environment:
       - TRUST_PROXY=true
+      - PUBLIC_APP_URL=https://{{ pocketid_domain }}
+      - EMAILS_VERIFIED=true
