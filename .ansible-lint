@@ -1,0 +1,39 @@
+# .ansible-lint — Ansible Lint configuration for LocoCloud
+# Run: ansible-lint playbooks/ roles/
+
+# Profiles: min, basic, moderate, safety, shared, production
+profile: moderate
+
+# Paths to lint
+playbook_dirs:
+  - playbooks
+
+# Exclude paths from linting
+exclude_paths:
+  - .cache/
+  - .github/
+  - inventories/
+
+# Skip specific rules
+skip_list:
+  # We use command/shell where no module exists (pct exec, netbird, occ)
+  - command-instead-of-module
+  # Template files are Jinja2, not pure YAML
+  - jinja[spacing]
+  # Customer inventories use vault references
+  - var-naming[no-jinja]
+
+# Warn-only rules (won't fail the lint)
+warn_list:
+  - name[missing]
+  - yaml[truthy]
+  - yaml[line-length]
+
+# Enable offline mode (no Galaxy downloads during lint)
+offline: true
+
+# Use default rules + any custom rules
+use_default_rules: true
+
+# Parseable output for CI
+parseable: true

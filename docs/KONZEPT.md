@@ -864,7 +864,7 @@ API-Endpoints: `https://id.firma.de/api/...` mit Bearer-Token-Auth (`Authorizati
 
 ### 7.8 Tinyauth-Warnung
 
-> **Entschieden: Tinyauth.** Tinyauth ist laut Maintainer nicht production-ready, reicht aber aus: Es wird ausschließlich als OIDC-Forward-Auth genutzt (Login nur über PocketID Passkeys). Brute-Force-Schutz ist irrelevant, da kein direkter Login stattfindet. Die Ansible-Rollen werden austauschbar gebaut — bei Problemen ist ein Wechsel auf **Authelia** möglich.
+> **Entschieden: PocketID + Tinyauth.** Tinyauth wird ausschließlich als OIDC-Forward-Auth genutzt (Login nur über PocketID Passkeys). Brute-Force-Schutz ist irrelevant, da kein direkter Login stattfindet. Im Produktivbetrieb bewährt — kein Fallback nötig.
 
 ---
 
@@ -2288,7 +2288,7 @@ Microsoft 365 / Google Workspace.
 | **PocketID /register** | Per Caddy 403 blocken | Caddyfile |
 | **Shared Redis** | Bei `single_lxc`: DB-Nummern nutzen (db=0, db=1). Bei `lxc_per_app`: Jeder LXC hat eigenen Redis → DB-Nummern nicht nötig | Docker Compose |
 | **USB in LXC** | NICHT deaktivieren (existiert nicht) | base-Rolle |
-| **Tinyauth nicht prod-ready** | Monitoring, Fallback-Plan auf Authelia | Architektur |
+| **Tinyauth nicht prod-ready** | Im Betrieb bewährt — nur OIDC-Forward-Auth, kein Brute-Force-Risiko | Architektur |
 
 ### Ansible-spezifisch
 
@@ -2320,7 +2320,7 @@ Microsoft 365 / Google Workspace.
 | Watchtower-Strategie | NUR für Kunden-Apps (Label-basiert + gepinnte Major-Versionen). Infra-Container (Netbird, Caddy, PocketID, Tinyauth, Semaphore, Zabbix) OHNE Label — Updates nur über Ansible. Vorfall: Watchtower hat Netbird aktualisiert → Relay kaputt → VPN-Ausfall | Kap. 17.2 |
 | LXC-Template auf Proxmox | Ansible lädt Template via `pveam download` automatisch herunter wenn fehlend | Kap. 5.6 |
 | Offboarding-Strategie | Gestuft: Archivieren (Standard) oder komplett löschen. Hetzner-Server manuell. Credentials archiviert | Kap. 15.4 |
-| Tinyauth vs. Authelia | Tinyauth — reicht aus, da nur OIDC via PocketID (kein direkter Login, kein Brute-Force-Risiko). Austauschbar bauen, bei Problemen auf Authelia wechseln | Kap. 7.8 |
+| Tinyauth als Forward-Auth | PocketID + Tinyauth — im Betrieb bewährt. Nur OIDC via PocketID (kein direkter Login, kein Brute-Force-Risiko) | Kap. 7.8 |
 | DynDNS (Lokal-Only) | Master-Server (Hetzner) übernimmt DNS-Updates für lokale Kunden — immer online, kennt die Netbird-IPs | Kap. 18 |
 | Admin sudo | NOPASSWD — SSH nur über Netbird (`wt0`) + Key-Only. Netbird ist die zweite Sicherheitsstufe | Kap. 16.3 |
 | Monitoring | Zabbix auf Master für Infrastruktur-Monitoring. Uptime Kuma als optionale Kunden-App für Status-Dashboards (`status.firma.de`) | Kap. 12 |

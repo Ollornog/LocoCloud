@@ -2,44 +2,81 @@
 # roles/lxc_create/tasks/bootstrap.yml
 # Bootstrap a fresh LXC: inject SSH key, install Netbird, retrieve IP.
 # All commands run via pct exec on the Proxmox host (delegated).
+# Idempotent: checks state before each action.
 
-# 1. Inject SSH key
+# 1. Inject SSH key (idempotent: only add if not already present)
 - name: Create .ssh directory in LXC
   ansible.builtin.command: >
     pct exec {{ lxc_vmid }} -- bash -c
     "mkdir -p /root/.ssh && chmod 700 /root/.ssh"
   delegate_to: "{{ proxmox_host }}"
-  changed_when: true
+  changed_when: false
+
+- name: Check if SSH key already present
+  ansible.builtin.command: >
+    pct exec {{ lxc_vmid }} -- bash -c
+    "grep -qF '{{ master_ssh_pubkey }}' /root/.ssh/authorized_keys 2>/dev/null && echo exists || echo missing"
+  delegate_to: "{{ proxmox_host }}"
+  register: ssh_key_check
+  changed_when: false
 
 - name: Inject SSH public key into LXC
   ansible.builtin.command: >
     pct exec {{ lxc_vmid }} -- bash -c
     "echo '{{ master_ssh_pubkey }}' >> /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys"
   delegate_to: "{{ proxmox_host }}"
+  when: "'missing' in ssh_key_check.stdout"
   changed_when: true
 
-# 2. Ensure SSH server is running
+# 2. Ensure SSH server is running (idempotent: check first)
+- name: Check if SSH server is installed
+  ansible.builtin.command: >
+    pct exec {{ lxc_vmid }} -- bash -c
+    "dpkg -l openssh-server 2>/dev/null | grep -q '^ii' && echo installed || echo missing"
+  delegate_to: "{{ proxmox_host }}"
+  register: ssh_installed_check
+  changed_when: false
+
 - name: Install and start SSH in LXC
   ansible.builtin.command: >
     pct exec {{ lxc_vmid }} -- bash -c
     "apt-get update -qq && apt-get install -y -qq openssh-server && systemctl enable ssh && systemctl start ssh"
   delegate_to: "{{ proxmox_host }}"
+  when: "'missing' in ssh_installed_check.stdout"
   changed_when: true
 
-# 3. Install Netbird
+# 3. Install Netbird (idempotent: check if already installed)
+- name: Check if Netbird is installed
+  ansible.builtin.command: >
+    pct exec {{ lxc_vmid }} -- bash -c
+    "command -v netbird >/dev/null 2>&1 && echo installed || echo missing"
+  delegate_to: "{{ proxmox_host }}"
+  register: netbird_installed_check
+  changed_when: false
+
 - name: Install Netbird in LXC
   ansible.builtin.command: >
     pct exec {{ lxc_vmid }} -- bash -c
     "curl -fsSL https://pkgs.netbird.io/install.sh | bash"
   delegate_to: "{{ proxmox_host }}"
+  when: "'missing' in netbird_installed_check.stdout"
   changed_when: true
 
-# 4. Join Netbird network
+# 4. Join Netbird network (idempotent: check connection status)
+- name: Check Netbird connection status
+  ansible.builtin.command: >
+    pct exec {{ lxc_vmid }} -- bash -c
+    "netbird status --json 2>/dev/null || echo '{\"managementState\":\"Disconnected\"}'"
+  delegate_to: "{{ proxmox_host }}"
+  register: nb_lxc_status
+  changed_when: false
+
 - name: Join Netbird in LXC
   ansible.builtin.command: >
     pct exec {{ lxc_vmid }} -- bash -c
     "netbird up --setup-key {{ netbird_setup_key }} --management-url {{ netbird_management_url }}"
   delegate_to: "{{ proxmox_host }}"
+  when: "'Connected' not in nb_lxc_status.stdout"
   changed_when: true
 
 # 5. Wait for Netbird connection and get IP

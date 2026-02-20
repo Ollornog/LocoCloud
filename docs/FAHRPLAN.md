@@ -29,10 +29,10 @@ Phase 7: Hardening, Docs, Public-Readiness      ← Release-Qualität
 
 ### 1.1 Repo-Skelett anlegen
 
-- [ ] `ansible.cfg` (Inventory-Pfad, Vault-Script, SSH-Pipelining)
-- [ ] `requirements.yml` (community.general, community.docker, ansible.posix)
-- [ ] `.gitignore` (config/lococloudd.yml, vault.yml, Keys, retry-Files)
-- [ ] Verzeichnisstruktur:
+- [x] `ansible.cfg` (Inventory-Pfad, Vault-Script, SSH-Pipelining)
+- [x] `requirements.yml` (community.general, community.docker, ansible.posix)
+- [x] `.gitignore` (config/lococloudd.yml, vault.yml, Keys, retry-Files)
+- [x] Verzeichnisstruktur:
   ```
   inventories/master/
   inventories/_template/
@@ -45,30 +45,30 @@ Phase 7: Hardening, Docs, Public-Readiness      ← Release-Qualität
 
 Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 
-- [ ] `defaults/main.yml` — Konfigurierbare Variablen (admin_user, ssh_port, is_lxc)
-- [ ] `tasks/main.yml` — Dispatcher mit Tags
-- [ ] Tasks:
-  - [ ] `packages.yml` — Basis-Pakete (curl, git, gnupg, htop, ufw, fail2ban, msmtp)
-  - [ ] `user.yml` — srvadmin-User anlegen, SSH-Key, NOPASSWD-sudo
-  - [ ] `ssh.yml` — Key-Only, PermitRootLogin no, Port konfigurierbar
-  - [ ] `firewall.yml` — UFW Default Deny, SSH nur wt0, Ports je nach server_role
-  - [ ] `hardening.yml` — sysctl (netzwerk-only bei LXC), unattended-upgrades
-  - [ ] `fail2ban.yml` — SSH Jail
-  - [ ] `docker.yml` — Docker CE + Compose Plugin installieren
-- [ ] `handlers/main.yml` — restart sshd, restart ufw, restart fail2ban
-- [ ] LXC-Kompatibilität: `is_lxc`-Checks für Kernel-Params, USB, TUN
+- [x] `defaults/main.yml` — Konfigurierbare Variablen (admin_user, ssh_port, is_lxc)
+- [x] `tasks/main.yml` — Dispatcher mit Tags
+- [x] Tasks:
+  - [x] `packages.yml` — Basis-Pakete (curl, git, gnupg, htop, ufw, fail2ban, msmtp)
+  - [x] `user.yml` — srvadmin-User anlegen, SSH-Key, NOPASSWD-sudo
+  - [x] `ssh.yml` — Key-Only, PermitRootLogin no, Port konfigurierbar
+  - [x] `firewall.yml` — UFW Default Deny, SSH nur wt0, Ports je nach server_role
+  - [x] `hardening.yml` — sysctl (netzwerk-only bei LXC), unattended-upgrades
+  - [x] `fail2ban.yml` — SSH Jail
+  - [x] `docker.yml` — Docker CE + Compose Plugin installieren
+- [x] `handlers/main.yml` — restart sshd, restart ufw, restart fail2ban
+- [x] LXC-Kompatibilität: `is_lxc`-Checks für Kernel-Params, USB, TUN
 
 ### 1.3 Inventar-Templates
 
-- [ ] `inventories/_template/hosts.yml.j2`
-- [ ] `inventories/_template/group_vars/all.yml.j2`
-- [ ] `inventories/master/hosts.yml`
-- [ ] `inventories/master/group_vars/all.yml`
+- [x] `inventories/_template/hosts.yml.j2`
+- [x] `inventories/_template/group_vars/all.yml.j2`
+- [x] `inventories/master/hosts.yml`
+- [x] `inventories/master/group_vars/all.yml`
 
 ### 1.4 Scripts (Grundgerüst)
 
-- [ ] `scripts/vault-pass.sh` — Ansible-Vault-Passwort aus Vaultwarden (bw CLI)
-- [ ] `scripts/new-customer.sh` — Inventar aus Template generieren
+- [x] `scripts/vault-pass.sh` — Ansible-Vault-Passwort aus Vaultwarden (bw CLI)
+- [x] `scripts/new-customer.sh` — Inventar aus Template generieren
 
 **Ergebnis Phase 1:** `ansible-playbook playbooks/setup-master.yml` kann die Base-Rolle auf einem frischen Debian 13 ausführen.
 
@@ -80,59 +80,59 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 
 ### 2.1 Netbird-Client-Rolle (`roles/netbird_client/`)
 
-- [ ] Netbird installieren (apt-Repo)
-- [ ] `netbird up` mit Setup-Key + Management-URL
-- [ ] Netbird-IP ermitteln und als Fact registrieren
-- [ ] TUN-Device-Check für LXC
+- [x] Netbird installieren (apt-Repo)
+- [x] `netbird up` mit Setup-Key + Management-URL
+- [x] Netbird-IP ermitteln und als Fact registrieren
+- [x] TUN-Device-Check für LXC
 
 ### 2.2 Caddy-Rolle (`roles/caddy/`)
 
-- [ ] Docker Compose Template (Host-Network-Mode)
-- [ ] Caddyfile-Template (Jinja2) mit Snippets `(public)` und `(auth)`
-- [ ] Master-spezifisches Caddyfile (Admin-Dienste)
-- [ ] Kunden-Caddyfile-Template (Apps dynamisch aus `apps_enabled`)
-- [ ] Handler: `docker restart caddy`
+- [x] Docker Compose Template (Host-Network-Mode)
+- [x] Caddyfile-Template (Jinja2) mit Snippets `(public)` und `(auth)`
+- [x] Master-spezifisches Caddyfile (Admin-Dienste)
+- [x] Kunden-Caddyfile-Template (Apps dynamisch aus `apps_enabled`)
+- [x] Handler: `docker restart caddy`
 
 ### 2.3 PocketID-Rolle (`roles/pocketid/`)
 
-- [ ] Docker Compose Template
-- [ ] Admin-Passwort generieren + in Vaultwarden speichern
-- [ ] Caddyfile-Block: /register → 403, /settings → auth
+- [x] Docker Compose Template
+- [x] Admin-Passwort generieren + in Vaultwarden speichern
+- [x] Caddyfile-Block: /register → 403, /settings → auth
 
 ### 2.4 Tinyauth-Rolle (`roles/tinyauth/`)
 
-- [ ] Docker Compose Template
-- [ ] OIDC-Client in PocketID registrieren (via API)
-- [ ] OAUTH_WHITELIST konfigurieren
+- [x] Docker Compose Template
+- [x] OIDC-Client in PocketID registrieren (via API)
+- [x] OAUTH_WHITELIST konfigurieren
 
 ### 2.5 Credentials-Rolle (`roles/credentials/`)
 
-- [ ] Vaultwarden API-Integration (uri-Modul)
-- [ ] Ordner erstellen / Credential speichern / Credential lesen
-- [ ] Wiederverwendbar für alle Rollen die Secrets speichern müssen
+- [x] Vaultwarden API-Integration (uri-Modul)
+- [x] Ordner erstellen / Credential speichern / Credential lesen
+- [x] Wiederverwendbar für alle Rollen die Secrets speichern müssen
 
 ### 2.6 Vaultwarden-Rolle (Master) (`roles/apps/vaultwarden/`)
 
-- [ ] Docker Compose Template
-- [ ] Admin-Token generieren
-- [ ] Organisation erstellen
+- [x] Docker Compose Template
+- [x] Admin-Token generieren
+- [x] Organisation erstellen
 
 ### 2.7 Semaphore-Rolle (`roles/apps/semaphore/`)
 
-- [ ] Docker Compose Template (+ PostgreSQL)
+- [x] Docker Compose Template (+ PostgreSQL)
 - [ ] OIDC mit Master-PocketID
 - [ ] Projekt-Templates vorbereiten
 
 ### 2.8 Playbook: `setup-master.yml`
 
-- [ ] Orchestriert alle obigen Rollen in der richtigen Reihenfolge
-- [ ] pre_tasks: globale Config laden
-- [ ] Reihenfolge: base → netbird → pocketid → tinyauth → vaultwarden → credentials → semaphore → caddy
+- [x] Orchestriert alle obigen Rollen in der richtigen Reihenfolge
+- [x] pre_tasks: globale Config laden
+- [x] Reihenfolge: base → netbird → pocketid → tinyauth → vaultwarden → credentials → semaphore → caddy
 
 ### 2.9 Hetzner-Caddy-Konfiguration
 
 - [ ] Playbook/Rolle für den Caddy auf Daniels Hetzner (*.loco.ollornog.de → Netbird → Master)
-- [ ] Oder: Dokumentation für manuelle Einrichtung (falls der Hetzner nicht von Ansible verwaltet wird)
+- [x] Oder: Dokumentation für manuelle Einrichtung (falls der Hetzner nicht von Ansible verwaltet wird)
 
 **Ergebnis Phase 2:** `setup-master.yml` richtet den Master-LXC komplett ein. Alle Admin-Dienste erreichbar unter `*.loco.ollornog.de`.
 
@@ -144,39 +144,39 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 
 ### 3.1 Netbird-Automation (`roles/netbird_client/` erweitern)
 
-- [ ] `tasks/api.yml` — Netbird REST-API Integration:
+- [x] `tasks/api.yml` — Netbird REST-API Integration:
   - Kundengruppe erstellen
   - Policies erstellen (intern, admin→kunde, backup→kunde)
   - Setup-Key generieren
-- [ ] Idempotenz: Gruppe/Policy nur erstellen wenn nicht vorhanden
+- [x] Idempotenz: Gruppe/Policy nur erstellen wenn nicht vorhanden
 
 ### 3.2 Playbook: `onboard-customer.yml` (Cloud-Only)
 
-- [ ] Netbird-Gruppe + Policies + Setup-Key (API)
-- [ ] Base-Rolle auf Kunden-Hetzner
-- [ ] Netbird-Client auf Kunden-Hetzner
-- [ ] PocketID deployen (id.firma.de)
-- [ ] Admin-User in PocketID anlegen (API)
-- [ ] Tinyauth deployen (auth.firma.de)
-- [ ] Caddy deployen + Caddyfile generieren
-- [ ] Credentials in Vaultwarden speichern
-- [ ] Smoke-Test (HTTP-Checks auf Subdomains)
+- [x] Netbird-Gruppe + Policies + Setup-Key (API)
+- [x] Base-Rolle auf Kunden-Hetzner
+- [x] Netbird-Client auf Kunden-Hetzner
+- [x] PocketID deployen (id.firma.de)
+- [x] Admin-User in PocketID anlegen (API)
+- [x] Tinyauth deployen (auth.firma.de)
+- [x] Caddy deployen + Caddyfile generieren
+- [x] Credentials in Vaultwarden speichern
+- [x] Smoke-Test (HTTP-Checks auf Subdomains)
 
 ### 3.3 Playbook: `site.yml`
 
-- [ ] Full-Deploy: Base + Auth-Stack + alle Apps aus `apps_enabled`
-- [ ] Idempotent: Kann jederzeit erneut ausgeführt werden
+- [x] Full-Deploy: Base + Auth-Stack + alle Apps aus `apps_enabled`
+- [x] Idempotent: Kann jederzeit erneut ausgeführt werden
 
 ### 3.4 User-Management Playbooks
 
-- [ ] `add-user.yml` — PocketID API: User anlegen, Tinyauth Whitelist aktualisieren
-- [ ] `remove-user.yml` — PocketID API: User deaktivieren, Tinyauth Whitelist aktualisieren
+- [x] `add-user.yml` — PocketID API: User anlegen, Tinyauth Whitelist aktualisieren
+- [x] `remove-user.yml` — PocketID API: User deaktivieren, Tinyauth Whitelist aktualisieren
 
 ### 3.5 Script: `new-customer.sh` implementieren
 
-- [ ] Inventar-Verzeichnis aus Template erstellen
-- [ ] Interaktive Abfrage: Name, Domain, Variante, Apps
-- [ ] vault.yml Grundgerüst (verschlüsselt)
+- [x] Inventar-Verzeichnis aus Template erstellen
+- [x] Interaktive Abfrage: Name, Domain, Variante, Apps
+- [x] vault.yml Grundgerüst (verschlüsselt)
 
 **Ergebnis Phase 3:** `bash scripts/new-customer.sh` + `onboard-customer.yml` = funktionierender Kunde mit Auth-Stack (noch ohne Apps).
 
@@ -194,36 +194,36 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 
 ### 4.2 Nextcloud (`roles/apps/nextcloud/`)
 
-- [ ] Docker Compose: Nextcloud + MariaDB + Redis
-- [ ] OIDC via PocketID API (user_oidc)
-- [ ] occ-Befehle für Ersteinrichtung (trusted_domains, OIDC-Config)
-- [ ] Public Paths: /s/*, /index.php/s/*
-- [ ] HSTS-Fix (security.conf Volume-Mount)
-- [ ] `--send-id-token-hint=0` für Single Logout
+- [x] Docker Compose: Nextcloud + MariaDB + Redis
+- [x] OIDC via PocketID API (user_oidc)
+- [x] occ-Befehle für Ersteinrichtung (trusted_domains, OIDC-Config)
+- [x] Public Paths: /s/*, /index.php/s/*
+- [x] HSTS-Fix (security.conf Volume-Mount)
+- [x] `--send-id-token-hint=0` für Single Logout
 
 ### 4.3 Paperless-NGX (`roles/apps/paperless/`)
 
-- [ ] Docker Compose: Paperless + PostgreSQL + Redis + Gotenberg + Tika
-- [ ] OIDC via PocketID API
-- [ ] DISABLE_REGULAR_LOGIN, ACCOUNT_ALLOW_SIGNUPS=false
-- [ ] PostgreSQL 18: Mount auf `/var/lib/postgresql`
+- [x] Docker Compose: Paperless + PostgreSQL + Redis + Gotenberg + Tika
+- [x] OIDC via PocketID API
+- [x] DISABLE_REGULAR_LOGIN, ACCOUNT_ALLOW_SIGNUPS=false
+- [x] PostgreSQL 18: Mount auf `/var/lib/postgresql`
 
 ### 4.4 Vaultwarden Kunde (`roles/apps/vaultwarden/`)
 
-- [ ] Docker Compose: Vaultwarden (SQLite)
+- [x] Docker Compose: Vaultwarden (SQLite)
 - [ ] OIDC via PocketID API (SSO)
-- [ ] Admin-Token generieren + in Admin-VW speichern
+- [x] Admin-Token generieren + in Admin-VW speichern
 
 ### 4.5 Watchtower (`roles/apps/watchtower/`)
 
-- [ ] Docker Compose: Label-basiert, Schedule 04:00
-- [ ] E-Mail-Benachrichtigung bei Updates
-- [ ] Wird auf jedem Server deployt (kein eigener Eintrag in apps_enabled)
+- [x] Docker Compose: Label-basiert, Schedule 04:00
+- [x] E-Mail-Benachrichtigung bei Updates
+- [x] Wird auf jedem Server deployt (kein eigener Eintrag in apps_enabled)
 
 ### 4.6 Playbooks für App-Management
 
-- [ ] `add-app.yml` — App zu bestehendem Kunden hinzufügen
-- [ ] `remove-app.yml` — App entfernen (Daten archivieren)
+- [x] `add-app.yml` — App zu bestehendem Kunden hinzufügen
+- [x] `remove-app.yml` — App entfernen (Daten archivieren)
 - [ ] `update-app.yml` — Image-Tag aktualisieren, Container neu starten
 - [ ] `update-caddy.yml` — Caddyfile regenerieren + restart
 
@@ -237,33 +237,33 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 
 ### 5.1 LXC-Create-Rolle (`roles/lxc_create/`)
 
-- [ ] LXC-Template herunterladen (pveam download, idempotent)
-- [ ] LXC erstellen (community.general.proxmox)
-- [ ] TUN-Device konfigurieren (für Netbird)
-- [ ] LXC starten
-- [ ] Bootstrap via pct exec:
+- [x] LXC-Template herunterladen (pveam download, idempotent)
+- [x] LXC erstellen (community.general.proxmox)
+- [x] TUN-Device konfigurieren (für Netbird)
+- [x] LXC starten
+- [x] Bootstrap via pct exec:
   - SSH-Key injizieren
   - Netbird installieren + joinen
   - Netbird-IP ermitteln
-- [ ] hosts.yml dynamisch aktualisieren (neue Netbird-IP)
+- [x] hosts.yml dynamisch aktualisieren (neue Netbird-IP)
 
 ### 5.2 Onboarding erweitern für Hybrid
 
-- [ ] `onboard-customer.yml` um Proxmox-Logik erweitern
-- [ ] Ablauf: Netbird-Setup → LXC erstellen → Bootstrap → Base → Apps
-- [ ] Caddy auf Hetzner: Routen zu Netbird-IPs der lokalen LXCs
+- [x] `onboard-customer.yml` um Proxmox-Logik erweitern
+- [x] Ablauf: Netbird-Setup → LXC erstellen → Bootstrap → Base → Apps
+- [x] Caddy auf Hetzner: Routen zu Netbird-IPs der lokalen LXCs
 
 ### 5.3 Onboarding für Lokal-Only
 
-- [ ] Gateway-LXC erstellen (Caddy + PocketID + Tinyauth)
-- [ ] Port-Forward-Dokumentation für Kunden-Router
-- [ ] DynDNS-Integration (Master übernimmt DNS-Updates)
+- [x] Gateway-LXC erstellen (Caddy + PocketID + Tinyauth)
+- [x] Port-Forward-Dokumentation für Kunden-Router
+- [x] DynDNS-Integration (Master übernimmt DNS-Updates)
 
 ### 5.4 `add-app.yml` erweitern (lxc_per_app)
 
-- [ ] Neuen LXC erstellen + bootstrappen
-- [ ] App deployen auf neuem LXC
-- [ ] Caddyfile auf Entry-Point aktualisieren (neue Netbird-IP)
+- [x] Neuen LXC erstellen + bootstrappen
+- [x] App deployen auf neuem LXC
+- [x] Caddyfile auf Entry-Point aktualisieren (neue Netbird-IP)
 
 **Ergebnis Phase 5:** Alle drei Deployment-Varianten funktionieren. Cloud-Only, Hybrid und Lokal-Only.
 
@@ -276,35 +276,35 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 ### 6.1 Monitoring-Rolle (`roles/monitoring/`)
 
 - [ ] Zabbix Server auf Master deployen (Docker Compose)
-- [ ] Zabbix Agent Rolle (auf jedem Kunden-Server)
-- [ ] TLS-PSK Konfiguration
-- [ ] Standard-Checks: CPU, RAM, Disk, Docker, HTTP-Status, Netbird, Backup
-- [ ] Health-Checks auf Backend-Ports (nicht öffentliche URL!)
+- [x] Zabbix Agent Rolle (auf jedem Kunden-Server)
+- [x] TLS-PSK Konfiguration
+- [x] Standard-Checks: CPU, RAM, Disk, Docker, HTTP-Status, Netbird, Backup
+- [x] Health-Checks auf Backend-Ports (nicht öffentliche URL!)
 
 ### 6.2 Uptime-Kuma-Rolle (`roles/apps/uptime-kuma/`)
 
-- [ ] Optionale Kunden-App (status.firma.de)
-- [ ] Docker Compose Template
-- [ ] Hinter Tinyauth
+- [x] Optionale Kunden-App (status.firma.de)
+- [x] Docker Compose Template
+- [x] Hinter Tinyauth
 
 ### 6.3 Backup-Rolle (`roles/backup/`)
 
-- [ ] Restic installieren + Repo initialisieren
-- [ ] Pre-Backup: DB-Dumps (pg_dump, mysqldump)
-- [ ] Backup-Ziele aus Kunden-Inventar (SFTP via Netbird, Storage Box, etc.)
-- [ ] Cron-Job für inkrementelle Backups
-- [ ] Retention-Policy anwenden
-- [ ] Encryption-Key in Vaultwarden speichern
+- [x] Restic installieren + Repo initialisieren
+- [x] Pre-Backup: DB-Dumps (pg_dump, mysqldump)
+- [x] Backup-Ziele aus Kunden-Inventar (SFTP via Netbird, Storage Box, etc.)
+- [x] Cron-Job für inkrementelle Backups
+- [x] Retention-Policy anwenden
+- [x] Encryption-Key in Vaultwarden speichern
 
 ### 6.4 Restore-Playbook
 
-- [ ] `restore.yml` — Snapshot auswählen, App-Daten wiederherstellen
-- [ ] `backup-now.yml` — Sofortiges Backup auslösen
+- [x] `restore.yml` — Snapshot auswählen, App-Daten wiederherstellen
+- [x] `backup-now.yml` — Sofortiges Backup auslösen
 
 ### 6.5 Wartungs-Playbooks
 
-- [ ] `update-all.yml` — OS-Updates auf allen Servern eines Kunden
-- [ ] `offboard-customer.yml` — Gestuft: Archivieren oder Löschen
+- [x] `update-all.yml` — OS-Updates auf allen Servern eines Kunden
+- [x] `offboard-customer.yml` — Gestuft: Archivieren oder Löschen
 
 **Ergebnis Phase 6:** Automatische Backups, zentrales Monitoring, Restore-Fähigkeit, Offboarding.
 
@@ -321,29 +321,32 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 
 ### 7.2 Dokumentation vervollständigen
 
-- [ ] `docs/SETUP.md` — Master-Server Setup Anleitung
-- [ ] `docs/ONBOARDING.md` — Neukunden-Prozess Schritt für Schritt
-- [ ] `docs/APP-DEVELOPMENT.md` — Wie man eine neue App-Rolle erstellt
-- [ ] `docs/TROUBLESHOOTING.md` — Bekannte Probleme + Lösungen
-- [ ] `README.md` — Englisch, Quick Start, Architektur-Überblick
+- [x] `docs/SETUP.md` — Master-Server Setup Anleitung
+- [x] `docs/ONBOARDING.md` — Neukunden-Prozess Schritt für Schritt
+- [x] `docs/APP-DEVELOPMENT.md` — Wie man eine neue App-Rolle erstellt
+- [x] `docs/TROUBLESHOOTING.md` — Bekannte Probleme + Lösungen
+- [x] `README.md` — Englisch, Quick Start, Architektur-Überblick
+- [x] `docs/SEMAPHORE.md` — Semaphore-Templates pro Kunde
 
 ### 7.3 Security-Review
 
-- [ ] Keine Secrets im Repo (grep nach Passwörtern, Tokens, Keys)
-- [ ] Alle .env-Dateien chmod 600
-- [ ] UFW-Regeln korrekt auf allen Server-Rollen
-- [ ] Fail2ban aktiv
-- [ ] SSH Key-Only überall
+- [x] Keine Secrets im Repo (grep nach Passwörtern, Tokens, Keys)
+- [x] Alle .env-Dateien chmod 600
+- [x] UFW-Regeln korrekt auf allen Server-Rollen
+- [x] Fail2ban aktiv
+- [x] SSH Key-Only überall
+- [x] `.ansible-lint` + `.yamllint` Konfiguration
 
 ### 7.4 Idempotenz-Tests
 
-- [ ] Jedes Playbook 2x hintereinander ausführen → keine Änderungen beim 2. Lauf
-- [ ] Jede Rolle einzeln testbar mit Tags
+- [x] Code-Review: Alle Rollen verwenden idempotente Module (state: present, template, file)
+- [x] Jede Rolle einzeln testbar mit Tags
+- [ ] Jedes Playbook 2x hintereinander ausführen → keine Änderungen beim 2. Lauf (manuell auf Infra testen)
 
 ### 7.5 Semaphore-Templates
 
-- [ ] Alle Playbooks als Semaphore-Templates dokumentieren
-- [ ] Anleitung: Semaphore-Projekte pro Kunde einrichten
+- [x] Alle Playbooks als Semaphore-Templates dokumentiert (`docs/SEMAPHORE.md`)
+- [x] Anleitung: Semaphore-Projekte pro Kunde einrichten
 
 **Ergebnis Phase 7:** Repo ist public-fähig. Dokumentation vollständig. Alles getestet.
 

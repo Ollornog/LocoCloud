@@ -19,34 +19,48 @@ LocoCloud/
 │   ├── master/
 │   ├── _template/
 │   └── kunde-*/
+├── .ansible-lint                  ← Lint-Konfiguration
+├── .yamllint                      ← YAML-Lint-Konfiguration
 ├── roles/
 │   ├── base/                    ✓ OS-Hardening, Docker, UFW, Fail2ban
 │   ├── caddy/                   ✓ Reverse Proxy (master + customer Caddyfile)
 │   ├── pocketid/                ✓ OIDC Provider
 │   ├── tinyauth/                ✓ Forward Auth (+ OIDC-Registration)
-│   ├── netbird_client/          ✓ VPN (install + join)
+│   ├── netbird_client/          ✓ VPN (install + join + API-Automation)
 │   ├── credentials/             ✓ Vaultwarden API (store + folders)
-│   ├── monitoring/              ← Zabbix Agent (Phase 6)
-│   ├── backup/                  ← Restic (Phase 6)
-│   ├── lxc_create/              ← Proxmox LXC-Erstellung (Phase 5)
+│   ├── monitoring/              ✓ Zabbix Agent
+│   ├── backup/                  ✓ Restic Backup
+│   ├── watchtower/              ✓ Auto-Update (nur Kunden-Apps)
+│   ├── lxc_create/              ✓ Proxmox LXC-Erstellung + Bootstrap
 │   └── apps/
-│       ├── _template/
 │       ├── vaultwarden/         ✓ Credential Manager
 │       ├── semaphore/           ✓ Ansible Web-UI
-│       ├── nextcloud/           ← Phase 4
-│       ├── paperless/           ← Phase 4
-│       └── ...
+│       ├── nextcloud/           ✓ Cloud Storage (MariaDB + Redis)
+│       ├── paperless/           ✓ Dokumenten-Management (PostgreSQL)
+│       └── uptime_kuma/         ✓ Status-Page
 ├── playbooks/
-│   ├── site.yml                 ← Full Deploy
-│   ├── setup-master.yml
-│   ├── onboard-customer.yml
-│   └── ...
+│   ├── setup-master.yml         ← Master-Server einrichten
+│   ├── onboard-customer.yml     ← Neukunden-Onboarding
+│   ├── site.yml                 ← Full Deploy (idempotent)
+│   ├── add-app.yml              ← App hinzufügen
+│   ├── remove-app.yml           ← App entfernen (archivieren)
+│   ├── add-user.yml             ← Benutzer anlegen
+│   ├── remove-user.yml          ← Benutzer entfernen
+│   ├── update-all.yml           ← OS-Updates
+│   ├── backup-now.yml           ← Sofort-Backup
+│   ├── restore.yml              ← Restore aus Backup
+│   └── offboard-customer.yml    ← Kunden-Offboarding
 ├── scripts/
 │   ├── vault-pass.sh            ← Ansible-Vault-Passwort aus Vaultwarden
 │   └── new-customer.sh          ← Kunden-Inventar aus Template generieren
 ├── docs/
 │   ├── KONZEPT.md               ← DIE WAHRHEIT (Architektur-Referenz)
-│   └── FAHRPLAN.md              ← Implementierungs-Reihenfolge (7 Phasen)
+│   ├── FAHRPLAN.md              ← Implementierungs-Reihenfolge (7 Phasen)
+│   ├── SETUP.md                 ← Master-Server Setup-Anleitung
+│   ├── ONBOARDING.md            ← Neukunden-Prozess Schritt für Schritt
+│   ├── APP-DEVELOPMENT.md       ← Neue App-Rolle erstellen
+│   ├── TROUBLESHOOTING.md       ← Bekannte Probleme + Lösungen
+│   └── SEMAPHORE.md             ← Semaphore-Templates pro Kunde
 └── .claude/rules/               ← Detail-Regeln für Claude Code
 ```
 
@@ -55,7 +69,7 @@ LocoCloud/
 ## Architektur-Essenz
 
 - **Netbird überall.** Jeder LXC eigener Netbird-Client + eigene IP. Keine Proxmox-Bridge.
-- **PocketID + Tinyauth pro Kunde.** Eigene Instanzen, kein Sharing. Tinyauth reicht (nur OIDC, kein Brute-Force-Risiko), austauschbar auf Authelia. PocketID REST-API für User/Gruppen/OIDC-Client-Automation via `uri`-Modul.
+- **PocketID + Tinyauth pro Kunde.** Eigene Instanzen, kein Sharing. Tinyauth als OIDC-Forward-Auth (Login nur über PocketID Passkeys, kein Brute-Force-Risiko). PocketID REST-API für User/Gruppen/OIDC-Client-Automation via `uri`-Modul.
 - **Caddy als Entry-Point.** Default: alles blockiert. Öffentliche Pfade explizit gewhitelistet.
 - **Port-Binding:** Entry-Point `127.0.0.1:PORT`, App-LXCs `0.0.0.0:PORT` + UFW auf `wt0`.
 - **Secrets:** Ansible Vault für Repo-Encryption, Vaultwarden als Credential-Store. `community.general.bitwarden` Lookup-Plugin für Laufzeit-Secrets. `scripts/vault-pass.sh` holt Vault-Passwort aus Vaultwarden.
