@@ -42,7 +42,8 @@ LocoCloud/
 ├── scripts/
 │   └── vault-pass.sh            ← Ansible-Vault-Passwort aus Vaultwarden
 ├── docs/
-│   └── KONZEPT.md               ← DIE WAHRHEIT (Architektur-Referenz)
+│   ├── KONZEPT.md               ← DIE WAHRHEIT (Architektur-Referenz)
+│   └── FAHRPLAN.md              ← Implementierungs-Reihenfolge (7 Phasen)
 └── .claude/rules/               ← Detail-Regeln für Claude Code
 ```
 
