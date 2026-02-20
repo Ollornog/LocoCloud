@@ -45,9 +45,8 @@ smtp:
 
 # --- GitHub Repo ---
 repo:
-  url: "git@github.com:YourUser/LocoCloud.git"
+  url: "https://github.com/Ollornog/LocoCloud.git"
   branch: "main"
-  deploy_key_path: "/root/.ssh/github-deploy-key"
 
 # --- Vaultwarden (Admin-Instanz) ---
 vaultwarden:
