@@ -19,3 +19,10 @@ vaultwarden_smtp_port: 587
 vaultwarden_smtp_security: "starttls"
 vaultwarden_smtp_username: ""
 vaultwarden_smtp_from: ""
+
+# SSO/OIDC via PocketID
+vaultwarden_sso_enabled: false
+vaultwarden_sso_only: false
+vaultwarden_sso_authority: ""  # e.g. "https://id.firma.de"
+vaultwarden_sso_client_id: ""
+vaultwarden_sso_client_secret: ""

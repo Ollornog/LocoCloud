@@ -64,6 +64,7 @@ SMTP_PORT="587"
 SMTP_USER=""
 SMTP_FROM=""
 GATEWAY_IP=""
+POCKETID_API_TOKEN=""
 WRITE_CONFIG=""
 
 REPO_DIR="/root/LocoCloud"
@@ -273,11 +274,19 @@ fi
 if [ -n "$NETBIRD_URL" ] && [ -n "$NETBIRD_SETUP_KEY" ]; then
   netbird up --management-url "$NETBIRD_URL" --setup-key "$NETBIRD_SETUP_KEY"
   ok "Netbird verbunden"
-  sleep 2
-  # Try to get IP automatically
-  NETBIRD_IP=$(netbird status --json 2>/dev/null | jq -r '.localPeerState.ip // empty' 2>/dev/null || true)
+  sleep 3
+  # Try to get IP automatically — Netbird uses uppercase "IP" in JSON
+  NB_JSON=$(netbird status --json 2>/dev/null || true)
+  if [ -n "$NB_JSON" ]; then
+    NETBIRD_IP=$(echo "$NB_JSON" | jq -r '.localPeerState.IP // .localPeerState.ip // empty' 2>/dev/null || true)
+  fi
+  # Strip CIDR suffix (/16 or /32)
+  NETBIRD_IP="${NETBIRD_IP%/*}"
+  # Fallback: read IP from wt0 interface
+  if [ -z "$NETBIRD_IP" ]; then
+    NETBIRD_IP=$(ip -4 addr show wt0 2>/dev/null | grep -oP 'inet \K[0-9.]+' || true)
+  fi
   if [ -n "$NETBIRD_IP" ]; then
-    NETBIRD_IP="${NETBIRD_IP%/32}"
     ok "Netbird-IP: $NETBIRD_IP"
   else
     warn "Netbird-IP konnte nicht automatisch ermittelt werden."
@@ -339,6 +348,10 @@ ok "Collections installiert"
 # =====================================================
 info "Phase 9: config/lococloudd.yml generieren"
 
+# Generate PocketID API token (STATIC_API_KEY)
+POCKETID_API_TOKEN=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 48 || true)
+ok "PocketID API-Token generiert (STATIC_API_KEY)"
+
 CONFIG_FILE="$REPO_DIR/config/lococloudd.yml"
 
 WRITE_CONFIG="true"
@@ -382,9 +395,10 @@ netbird:
   api_token: ""
 
 # --- PocketID (Admin-Instanz) ---
-# Token wird nach dem ersten Setup-Lauf hier eingetragen.
+# STATIC_API_KEY — automatisch generiert, kein manueller Schritt noetig.
+# PocketID nutzt Passkeys (WebAuthn), keine Passwoerter.
 pocketid:
-  api_token: ""
+  api_token: "${POCKETID_API_TOKEN}"
 
 # --- SMTP ---
 smtp:
@@ -431,35 +445,90 @@ YAML
 fi
 
 # =====================================================
-# Phase 10: Master-Inventar vorbereiten
+# Phase 10: SSH-Key generieren
 # =====================================================
-info "Phase 10: Master-Inventar vorbereiten"
+info "Phase 10: SSH-Key fuer Ansible generieren"
+
+SSH_KEY="/root/.ssh/id_ed25519"
+if [ -f "$SSH_KEY" ]; then
+  ok "SSH-Key existiert bereits: $SSH_KEY"
+else
+  ssh-keygen -t ed25519 -f "$SSH_KEY" -N "" -C "loco-master@$(hostname)" >/dev/null 2>&1
+  ok "SSH-Key generiert: $SSH_KEY"
+fi
+SSH_PUBKEY=$(cat "${SSH_KEY}.pub")
+
+# Write SSH key to group_vars
+GROUP_VARS="$REPO_DIR/inventories/master/group_vars/all.yml"
+cat > "$GROUP_VARS" <<YAML
+---
+# inventories/master/group_vars/all.yml
+# Master-Server configuration
+
+admin_user: "srvadmin"
+admin_ssh_pubkeys:
+  - "${SSH_PUBKEY}"
+
+is_lxc: true
+docker_install: true
+server_roles: [master]
+YAML
+ok "SSH-Key in group_vars/all.yml eingetragen"
+
+# =====================================================
+# Phase 11: Master-Inventar vorbereiten
+# =====================================================
+info "Phase 11: Master-Inventar vorbereiten"
 
 HOSTS_FILE="$REPO_DIR/inventories/master/hosts.yml"
 
-if [ -n "$NETBIRD_IP" ]; then
-  cat > "$HOSTS_FILE" <<YAML
+# Use ansible_connection: local for initial setup (no SSH needed)
+cat > "$HOSTS_FILE" <<YAML
 ---
 all:
   hosts:
     loco-master:
-      ansible_host: "${NETBIRD_IP}"
+      ansible_connection: local
+      ansible_host: "${NETBIRD_IP:-127.0.0.1}"
       ansible_user: root
       server_roles: [master]
       is_lxc: true
 YAML
-  ok "hosts.yml geschrieben mit Netbird-IP ${NETBIRD_IP}"
+
+if [ -n "$NETBIRD_IP" ]; then
+  ok "hosts.yml geschrieben (Netbird-IP: ${NETBIRD_IP}, connection: local)"
 else
-  warn "Keine Netbird-IP bekannt. hosts.yml muss manuell bearbeitet werden."
-  warn "  Datei: $HOSTS_FILE"
-  warn "  Feld:  ansible_host: <NETBIRD-IP>"
+  ok "hosts.yml geschrieben (connection: local, Netbird-IP spaeter setzen)"
+fi
+
+# =====================================================
+# Phase 12: Master-Playbook ausfuehren
+# =====================================================
+info "Phase 12: Master-Playbook ausfuehren"
+echo ""
+echo "Das Playbook richtet die Admin-Dienste ein:"
+echo "  base → pocketid → tinyauth → vaultwarden → semaphore → caddy"
+echo ""
+
+ansible-playbook "$REPO_DIR/playbooks/setup-master.yml" \
+  -i "$REPO_DIR/inventories/master/" \
+  2>&1 | tee /tmp/loco-setup-playbook.log
+
+PLAYBOOK_EXIT=${PIPESTATUS[0]}
+
+if [ "$PLAYBOOK_EXIT" -eq 0 ]; then
+  ok "Master-Playbook erfolgreich abgeschlossen"
+else
+  warn "Playbook mit Fehlern beendet (Exit-Code: $PLAYBOOK_EXIT)"
+  warn "Log: /tmp/loco-setup-playbook.log"
+  warn "Nach Fehlerbehebung erneut ausfuehren:"
+  echo "  ansible-playbook $REPO_DIR/playbooks/setup-master.yml -i $REPO_DIR/inventories/master/"
 fi
 
 # =====================================================
 # Zusammenfassung
 # =====================================================
 
-# Oeffentliche IP ermitteln
 PUBLIC_IP=$(curl -fsSL -4 https://ifconfig.me 2>/dev/null || curl -fsSL -4 https://api.ipify.org 2>/dev/null || echo "nicht ermittelt")
 
 echo ""
@@ -474,6 +543,7 @@ if [ -n "$NETBIRD_IP" ]; then
 fi
 echo "  Repo:            $REPO_DIR"
 echo "  Config:          $REPO_DIR/config/lococloudd.yml"
+echo "  SSH-Key:         ${SSH_KEY}"
 echo ""
 
 if [[ "$NETBIRD_SELF_HOSTED" =~ ^[jJyY]$ ]]; then
@@ -483,7 +553,7 @@ if [[ "$NETBIRD_SELF_HOSTED" =~ ^[jJyY]$ ]]; then
   echo ""
 fi
 
-echo -e "${BOLD}Admin-URLs (nach Playbook-Lauf):${NC}"
+echo -e "${BOLD}Admin-URLs:${NC}"
 echo "  PocketID:    https://id.${ADMIN_DOMAIN}"
 echo "  Tinyauth:    https://auth.${ADMIN_DOMAIN}"
 echo "  Vaultwarden: https://vault.${ADMIN_DOMAIN}"
@@ -505,64 +575,54 @@ if [[ "$NETBIRD_SELF_HOSTED" =~ ^[jJyY]$ ]]; then
   STEP=$((STEP + 1))
 fi
 
+echo -e "${BOLD}  ${STEP}. DNS fuer Admin-Dienste einrichten${NC}"
+echo ""
+echo "     Wildcard-DNS auf die Gateway Public IP zeigen lassen:"
+echo "     *.${ADMIN_DOMAIN} -> A ${GATEWAY_IP:-<GATEWAY-IP>}"
+echo ""
+echo "     Auf dem Gateway-Server die Caddyfile ergaenzen:"
+echo ""
+echo "     *.${ADMIN_DOMAIN} {"
+echo "         tls {"
+echo "             dns cloudflare {env.CF_API_TOKEN}"
+echo "         }"
+echo "         reverse_proxy https://${NETBIRD_IP:-<MASTER-NETBIRD-IP>} {"
+echo "             header_up Host {host}"
+echo "             transport http {"
+echo "                 tls_server_name ${ADMIN_DOMAIN}"
+echo "             }"
+echo "         }"
+echo "     }"
+echo ""
+STEP=$((STEP + 1))
+
 if [ -z "$NETBIRD_IP" ]; then
-  echo -e "${BOLD}  ${STEP}. Netbird-Client mit dem Server verbinden${NC}"
+  echo -e "${BOLD}  ${STEP}. Netbird-Client verbinden${NC}"
   echo ""
   echo "     netbird up --management-url ${NETBIRD_URL:-<URL>} --setup-key <KEY>"
   echo ""
-  echo "     Danach die Netbird-IP in das Inventar eintragen:"
-  echo "     nano $REPO_DIR/inventories/master/hosts.yml"
-  echo "     -> ansible_host: <NETBIRD-IP>"
+  echo "     Danach hosts.yml anpassen und Playbook erneut ausfuehren."
   echo ""
   STEP=$((STEP + 1))
 fi
 
-echo -e "${BOLD}  ${STEP}. DNS fuer Admin-Dienste einrichten${NC}"
+echo -e "${BOLD}  ${STEP}. PocketID: Admin-Passkey registrieren${NC}"
 echo ""
-echo "     *.${ADMIN_DOMAIN} -> A ${GATEWAY_IP:-<GATEWAY-IP>}"
+echo "     a) https://id.${ADMIN_DOMAIN} im Browser oeffnen"
+echo "     b) Admin-Account mit Passkey einrichten"
 echo ""
-echo "     Dieser Wildcard-Eintrag deckt alle Admin-Subdomains ab"
-echo "     (id, auth, vault, deploy, monitor)."
-echo ""
-STEP=$((STEP + 1))
-
-echo -e "${BOLD}  ${STEP}. SSH-Public-Key eintragen${NC}"
-echo ""
-echo "     Damit Ansible sich per SSH verbinden kann, muss mindestens"
-echo "     ein Public Key hinterlegt werden. Deinen Key findest du auf"
-echo "     deinem Admin-Rechner unter ~/.ssh/id_ed25519.pub (oder .pub)."
-echo ""
-echo "     nano $REPO_DIR/inventories/master/group_vars/all.yml"
-echo ""
-echo "     admin_ssh_pubkeys:"
-echo "       - \"ssh-ed25519 AAAA... dein-name@rechner\""
+echo "     Der API-Key wurde automatisch generiert (STATIC_API_KEY)."
+echo "     Registration ist deaktiviert (ALLOW_USER_SIGNUPS=disabled)."
 echo ""
 STEP=$((STEP + 1))
 
-echo -e "${BOLD}  ${STEP}. Master-Playbook ausfuehren${NC}"
-echo ""
-echo "     cd $REPO_DIR"
-echo "     ansible-playbook playbooks/setup-master.yml -i inventories/master/"
-echo ""
-STEP=$((STEP + 1))
-
-echo -e "${BOLD}  ${STEP}. PocketID API-Token eintragen (nach erstem Playbook-Lauf)${NC}"
-echo ""
-echo "     a) https://id.${ADMIN_DOMAIN} oeffnen"
-echo "     b) Einloggen (Passwort steht in der Ansible-Ausgabe)"
-echo "     c) Settings -> API -> Token generieren"
-echo "     d) Token eintragen:"
-echo "        nano $REPO_DIR/config/lococloudd.yml"
-echo "        -> pocketid.api_token: \"<TOKEN>\""
-echo ""
-STEP=$((STEP + 1))
-
-echo -e "${BOLD}  ${STEP}. Vaultwarden einrichten + Playbook erneut ausfuehren${NC}"
+echo -e "${BOLD}  ${STEP}. Vaultwarden: Master-Passwort setzen${NC}"
 echo ""
 echo "     a) https://vault.${ADMIN_DOMAIN} oeffnen"
-echo "     b) Admin-Account erstellen"
-echo "     c) Organisation \"LocoCloud\" anlegen"
-echo "     d) Organisation-ID in config/lococloudd.yml eintragen"
-echo "     e) Playbook nochmal ausfuehren:"
-echo "        ansible-playbook playbooks/setup-master.yml -i inventories/master/"
+echo "     b) 'Use single sign-on' klicken (Login via PocketID)"
+echo "     c) Master-Passwort setzen (fuer Vault-Verschluesselung)"
+echo "     d) Organisation 'LocoCloud' im Admin-Panel anlegen"
+echo "     e) Organisation-ID in Config eintragen:"
+echo "        nano $REPO_DIR/config/lococloudd.yml"
+echo "        -> vaultwarden.organization_id: \"<ID>\""
 echo ""

@@ -54,6 +54,8 @@
         vaultwarden_smtp_port: "{{ loco.smtp.port | default(587) }}"
         vaultwarden_smtp_username: "{{ loco.smtp.user | default('') }}"
         vaultwarden_smtp_from: "{{ loco.smtp.from | default('') }}"
+        pocketid_domain: "{{ loco.urls.pocketid }}"
+        pocketid_api_token: "{{ loco.pocketid.api_token | default('') }}"
         caddy_mode: "master"
       tags: [vaultwarden]
 
@@ -69,18 +71,18 @@
       tags: [caddy]
 
   post_tasks:
-    - name: Store PocketID admin credentials in Vaultwarden
+    - name: Store PocketID API token in Vaultwarden
       ansible.builtin.include_role:
         name: credentials
         tasks_from: store.yml
       vars:
         vw_api_url: "https://{{ loco.urls.vaultwarden }}"
-        credential_name: "Master — PocketID Admin"
-        credential_username: "admin"
-        credential_password: "{{ pocketid_admin_password }}"
+        credential_name: "Master — PocketID API Token"
+        credential_username: "STATIC_API_KEY"
+        credential_password: "{{ pocketid_api_token }}"
         credential_uri: "https://{{ loco.urls.pocketid }}"
-        credential_notes: "PocketID admin account on master. Deployed: {{ ansible_date_time.iso8601 }}"
-      when: pocketid_admin_password is defined
+        credential_notes: "PocketID static API key for automation. Deployed: {{ ansible_date_time.iso8601 }}"
+      when: pocketid_api_token is defined and pocketid_api_token | length > 0
       tags: [credentials]
 
     - name: Store Semaphore admin credentials in Vaultwarden

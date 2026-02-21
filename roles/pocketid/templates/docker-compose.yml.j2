@@ -15,3 +15,10 @@ services:
       - {{ pocketid_data_path }}:/data
     environment:
       - TRUST_PROXY=true
+      - PUBLIC_APP_URL=https://{{ pocketid_domain }}
+      - EMAILS_VERIFIED=true
+      - ALLOW_USER_SIGNUPS=disabled
+      - UI_CONFIG_DISABLED=true
+{% if pocketid_api_token | length > 0 %}
+      - STATIC_API_KEY={{ pocketid_api_token }}
+{% endif %}

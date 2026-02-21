@@ -10,8 +10,7 @@ pocketid_port: 1411
 # Domain where PocketID is reachable (set per deployment)
 pocketid_domain: ""  # e.g. "id.firma.de" or from loco.urls.pocketid
 
-# Admin password (generated if empty)
-pocketid_admin_password: ""
-
-# PocketID API token (for managing users/groups/OIDC clients)
+# Static API key for automation (OIDC client creation, user management).
+# Set via STATIC_API_KEY env var — no manual UI step needed.
+# PocketID uses passkeys (WebAuthn), not passwords.
 pocketid_api_token: ""
