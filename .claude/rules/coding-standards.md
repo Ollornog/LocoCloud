@@ -70,6 +70,6 @@
 
 - **User anlegen:** `uri`-Modul gegen `https://id.firma.de/api/users` (POST, Bearer-Token)
 - **Gruppen erstellen:** `uri`-Modul gegen `https://id.firma.de/api/user-groups`
-- **OIDC-Clients erstellen:** `uri`-Modul gegen `https://id.firma.de/api/oidc-clients` (Name, Callback-URLs, Scopes)
+- **OIDC-Clients erstellen:** `uri`-Modul gegen `https://id.firma.de/api/oidc/clients` (Name, callbackURLs, Scopes)
 - API gibt Client-ID und Client-Secret zurück → in Vaultwarden speichern
 - PocketID API-Token wird als Variable `pocketid_api_token` aus Vault geladen

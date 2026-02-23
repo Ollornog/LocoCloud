@@ -4,7 +4,7 @@
 
 - name: Check if Tinyauth OIDC client already exists
   ansible.builtin.uri:
-    url: "{{ tinyauth_oidc_issuer_url }}/api/oidc-clients"
+    url: "{{ tinyauth_oidc_issuer_url }}/api/oidc/clients"
     method: GET
     headers:
       Authorization: "Bearer {{ pocketid_api_token }}"
@@ -19,14 +19,14 @@
 
 - name: Create Tinyauth OIDC client in PocketID
   ansible.builtin.uri:
-    url: "{{ tinyauth_oidc_issuer_url }}/api/oidc-clients"
+    url: "{{ tinyauth_oidc_issuer_url }}/api/oidc/clients"
     method: POST
     headers:
       Authorization: "Bearer {{ pocketid_api_token }}"
     body_format: json
     body:
       name: "Tinyauth"
-      callback_urls:
+      callbackURLs:
         - "https://{{ tinyauth_domain }}/api/oidc/callback"
     status_code: [200, 201]
   register: tinyauth_oidc_result
@@ -36,14 +36,14 @@
 
 - name: Set Tinyauth OIDC credentials from new client
   ansible.builtin.set_fact:
-    tinyauth_oidc_client_id: "{{ tinyauth_oidc_result.json.client_id }}"
-    tinyauth_oidc_client_secret: "{{ tinyauth_oidc_result.json.client_secret }}"
+    tinyauth_oidc_client_id: "{{ tinyauth_oidc_result.json.id }}"
+    tinyauth_oidc_client_secret: "{{ tinyauth_oidc_result.json.secret }}"
   when: tinyauth_oidc_result is changed
 
 - name: Set Tinyauth OIDC credentials from existing client
   ansible.builtin.set_fact:
-    tinyauth_oidc_client_id: "{{ tinyauth_existing_client.client_id }}"
-    tinyauth_oidc_client_secret: "{{ tinyauth_existing_client.client_secret }}"
+    tinyauth_oidc_client_id: "{{ tinyauth_existing_client.id }}"
+    tinyauth_oidc_client_secret: "{{ tinyauth_existing_client.secret }}"
   when:
     - tinyauth_oidc_result is not changed
     - tinyauth_existing_client is defined and tinyauth_existing_client != None

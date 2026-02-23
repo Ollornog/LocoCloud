@@ -55,6 +55,61 @@
   retries: 60
   delay: 10
 
+# --- Imaginary + Preview Generator ---
+
+- name: Install previewgenerator app
+  ansible.builtin.command: >
+    docker exec -u www-data nextcloud
+    php occ app:install previewgenerator
+  register: nc_preview_install
+  changed_when: "'installed' in nc_preview_install.stdout"
+  failed_when: false
+
+- name: Enable previewgenerator app
+  ansible.builtin.command: >
+    docker exec -u www-data nextcloud
+    php occ app:enable previewgenerator
+  register: nc_preview_enable
+  changed_when: "'enabled' in nc_preview_enable.stdout"
+  failed_when: false
+
+- name: Configure Imaginary as preview provider
+  ansible.builtin.command: >
+    docker exec -u www-data nextcloud
+    php occ config:system:set {{ item.key }} --value="{{ item.value }}" {{ item.type | default('') }}
+  loop:
+    - { key: "enabledPreviewProviders 0", value: "OC\\Preview\\Imaginary", type: "" }
+    - { key: "preview_imaginary_url", value: "http://nextcloud-imaginary:9000", type: "" }
+    - { key: "preview_max_x", value: "{{ nextcloud_preview_max_x }}", type: "--type=integer" }
+    - { key: "preview_max_y", value: "{{ nextcloud_preview_max_y }}", type: "--type=integer" }
+    - { key: "jpeg_quality", value: "{{ nextcloud_preview_jpeg_quality }}", type: "--type=integer" }
+    - { key: "preview_concurrency_all", value: "{{ nextcloud_preview_concurrency_all }}", type: "--type=integer" }
+    - { key: "preview_concurrency_new", value: "{{ nextcloud_preview_concurrency_new }}", type: "--type=integer" }
+  register: nc_preview_config
+  changed_when: true
+
+- name: Set Nextcloud cron mode to cron
+  ansible.builtin.command: >
+    docker exec -u www-data nextcloud
+    php occ background:cron
+  register: nc_cron_mode
+  changed_when: "'Set mode' in nc_cron_mode.stdout"
+  failed_when: false
+
+- name: Create preview pre-generate cron job
+  ansible.builtin.cron:
+    name: "nextcloud-preview-generate"
+    minute: "*/10"
+    job: "docker exec -u www-data nextcloud php occ preview:pre-generate > /dev/null 2>&1"
+    user: root
+
+- name: Create Nextcloud system cron job
+  ansible.builtin.cron:
+    name: "nextcloud-cron"
+    minute: "*/5"
+    job: "docker exec -u www-data nextcloud php -f /var/www/html/cron.php > /dev/null 2>&1"
+    user: root
+
 - name: Store Nextcloud credentials
   ansible.builtin.include_role:
     name: credentials
