@@ -5,14 +5,14 @@
 # 1. Register OIDC client in PocketID
 - name: Create OIDC client in PocketID
   ansible.builtin.uri:
-    url: "https://{{ nextcloud_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc-clients"
+    url: "https://{{ nextcloud_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients"
     method: POST
     headers:
       Authorization: "Bearer {{ loco.pocketid.api_token }}"
     body_format: json
     body:
       name: "Nextcloud ({{ kunde_name }})"
-      callback_urls:
+      callbackURLs:
         - "https://{{ nextcloud_domain }}/apps/user_oidc/code"
     status_code: [200, 201]
   register: nc_oidc_client
@@ -22,8 +22,8 @@
 
 - name: Set OIDC credentials from API response
   ansible.builtin.set_fact:
-    nextcloud_oidc_client_id: "{{ nc_oidc_client.json.client_id }}"
-    nextcloud_oidc_client_secret: "{{ nc_oidc_client.json.client_secret }}"
+    nextcloud_oidc_client_id: "{{ nc_oidc_client.json.id }}"
+    nextcloud_oidc_client_secret: "{{ nc_oidc_client.json.secret }}"
   when: nc_oidc_client is not skipped and nc_oidc_client is changed
 
 # 2. Store OIDC credentials in Vaultwarden

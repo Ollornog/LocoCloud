@@ -21,6 +21,16 @@ nextcloud_db_root_password: ""  # Generated if empty
 nextcloud_redis_image: "redis:7-alpine"
 nextcloud_redis_db: 0  # DB number for single_lxc shared Redis
 
+# Imaginary (image preview generation)
+nextcloud_imaginary_image: "nextcloud/aio-imaginary:latest"
+
+# Preview settings
+nextcloud_preview_max_x: 1024
+nextcloud_preview_max_y: 1024
+nextcloud_preview_jpeg_quality: 60
+nextcloud_preview_concurrency_all: 4
+nextcloud_preview_concurrency_new: 2
+
 # Admin
 nextcloud_admin_user: "admin"
 nextcloud_admin_password: ""  # Generated if empty

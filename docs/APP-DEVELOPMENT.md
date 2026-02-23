@@ -146,14 +146,14 @@ OIDC-Client über PocketID REST-API registrieren:
 # Create OIDC client in PocketID via API
 - name: Create OIDC client in PocketID
   ansible.builtin.uri:
-    url: "https://{{ pocketid_domain | default('id.' + kunde_domain) }}/api/oidc-clients"
+    url: "https://{{ pocketid_domain | default('id.' + kunde_domain) }}/api/oidc/clients"
     method: POST
     headers:
       Authorization: "Bearer {{ pocketid_api_token }}"
     body_format: json
     body:
       name: "{{ app_name | default('MeineApp') }}"
-      callback_urls:
+      callbackURLs:
         - "https://{{ meineapp_domain }}/callback"
     status_code: [200, 201]
   register: oidc_client

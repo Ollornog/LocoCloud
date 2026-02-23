@@ -855,7 +855,7 @@ Apps OHNE OIDC (Uptime Kuma, Listmonk etc.) werden ausschließlich durch Tinyaut
 **PocketID hat eine REST-API mit API-Token-Authentifizierung.** Ansible kann über das `uri`-Modul direkt:
 - **User anlegen:** `POST /api/users` (username, email, first_name, last_name)
 - **Gruppen erstellen und User zuweisen:** `POST /api/user-groups`
-- **OIDC-Clients erstellen:** `POST /api/oidc-clients` (Name, Callback-URLs, Scopes)
+- **OIDC-Clients erstellen:** `POST /api/oidc/clients` (Name, Callback-URLs, Scopes)
 
 API-Endpoints: `https://id.firma.de/api/...` mit Bearer-Token-Auth (`Authorization: Bearer <api-token>`).
 
@@ -1083,14 +1083,14 @@ roles/apps/nextcloud/
 ```yaml
 - name: Create OIDC client in PocketID
   uri:
-    url: "https://id.{{ kunde_domain }}/api/oidc-clients"
+    url: "https://id.{{ kunde_domain }}/api/oidc/clients"
     method: POST
     headers:
       Authorization: "Bearer {{ pocketid_api_token }}"
     body_format: json
     body:
       name: "{{ app_name }}"
-      callback_urls:
+      callbackURLs:
         - "https://{{ app_subdomain }}.{{ kunde_domain }}{{ app_oidc_redirect_path }}"
     status_code: 201
   register: oidc_result
