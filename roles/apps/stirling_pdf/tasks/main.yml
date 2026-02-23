@@ -1,0 +1,11 @@
+---
+# roles/apps/stirling_pdf/tasks/main.yml
+
+- name: Deploy Stirling PDF
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [stirling_pdf, deploy]
+
+- name: Configure OIDC for Stirling PDF
+  ansible.builtin.import_tasks: oidc.yml
+  tags: [stirling_pdf, oidc]
+  when: stirling_pdf_oidc_enabled | default(false)

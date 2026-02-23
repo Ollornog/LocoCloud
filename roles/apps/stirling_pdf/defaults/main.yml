@@ -1,0 +1,33 @@
+---
+# roles/apps/stirling_pdf/defaults/main.yml
+# Stirling PDF — Self-hosted PDF manipulation toolkit
+
+stirling_pdf_stack_path: "/opt/stacks/stirling-pdf"
+stirling_pdf_image: "stirlingtools/stirling-pdf:latest"
+stirling_pdf_port: 8084
+
+# Domain for Stirling PDF
+stirling_pdf_domain: ""  # e.g. "pdf.firma-abc.de"
+
+# Locale and language
+stirling_pdf_locale: "de-DE"
+stirling_pdf_langs: "de_DE"  # Tesseract OCR languages (comma-separated)
+
+# Max file upload size (MB)
+stirling_pdf_max_file_size: 2000
+
+# OIDC via PocketID
+stirling_pdf_oidc_enabled: false
+stirling_pdf_oidc_client_id: ""
+stirling_pdf_oidc_client_secret: ""
+stirling_pdf_oidc_provider_url: ""  # e.g. "https://id.firma-abc.de"
+
+# Public paths (none — fully protected by Tinyauth or native OIDC)
+stirling_pdf_public_paths: []
+
+# Backup paths
+stirling_pdf_backup_paths:
+  - "/opt/stacks/stirling-pdf"
+
+# Health check
+stirling_pdf_health_path: "/"
