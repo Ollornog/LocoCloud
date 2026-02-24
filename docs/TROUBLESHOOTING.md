@@ -131,7 +131,7 @@ lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
 
 **Lösung:**
 - **Kunden-Apps** (Nextcloud, Paperless, Vaultwarden, Uptime Kuma): Watchtower-Label setzen
-- **Infrastruktur** (Caddy, Netbird, PocketID, Tinyauth, Semaphore, Zabbix): KEIN Watchtower-Label. Updates nur über Ansible.
+- **Infrastruktur** (Caddy, Netbird, PocketID, Tinyauth, Semaphore, Grafana, Alloy, Baserow): KEIN Watchtower-Label. Updates nur über Ansible.
 
 ---
 
@@ -187,6 +187,25 @@ handle /register* {
 ---
 
 ## Ansible-spezifisch
+
+### Setup scheitert an vault-pass.sh (Erstes Setup)
+
+**Problem:** `ansible-playbook` scheitert beim initialen Setup mit:
+```
+ERROR: Could not unlock Bitwarden vault. Is bw CLI configured?
+```
+
+**Ursache:** `ansible.cfg` referenziert `scripts/vault-pass.sh` als `vault_password_file`. Beim ersten Setup ist `bw` CLI noch nicht installiert/konfiguriert.
+
+**Lösung:** Das Script hat drei Fallback-Mechanismen:
+1. Umgebungsvariable `ANSIBLE_VAULT_PASSWORD` (höchste Priorität)
+2. Lokale Passwort-Datei `/root/.loco-vault-pass`
+3. `bw` CLI (Bitwarden/Vaultwarden)
+4. Dummy-Passwort für Bootstrap (wenn nichts konfiguriert)
+
+Falls der Fehler auftritt (altes Script-Version): Script aktualisieren mit `git pull`.
+
+---
 
 ### Playbook-Fehler: "variable 'loco' is undefined"
 
@@ -255,6 +274,41 @@ url: "https://app.firma-abc.de/health"
 4. `hosts.yml` mit neuer Netbird-IP updaten
 
 Die `lxc_create`-Rolle automatisiert diesen Prozess.
+
+---
+
+## Verschlüsselung (gocryptfs)
+
+### gocryptfs: /mnt/data nicht gemountet nach Reboot
+
+**Problem:** Nach einem Reboot ist `/mnt/data` nicht gemountet. Docker-Container starten ohne Daten.
+
+**Ursache:** Der Systemd-Service `gocryptfs-mount.service` konnte den Keyfile nicht vom Master holen (Netzwerk nicht verfügbar, Master offline, SSH-Key ungültig).
+
+**Lösung:**
+1. Service-Status prüfen: `systemctl status gocryptfs-mount.service`
+2. Master erreichbar? SSH testen: `ssh -i /root/.ssh/id_ed25519 root@<master-ip>`
+3. Keyfile auf Master vorhanden? `ls /opt/lococloudd/keys/<hostname>.key`
+4. Manuell mounten: `/opt/scripts/gocryptfs-mount.sh`
+5. Danach Docker-Container neustarten: `docker restart $(docker ps -q)`
+
+**Wichtig:** Der `gocryptfs-mount.service` muss VOR `docker.service` starten. Die Rolle konfiguriert dies automatisch.
+
+---
+
+### gocryptfs: Keyfile auf Server vergessen
+
+**Problem:** Das Keyfile liegt noch auf dem Kundenserver (z.B. in `/tmp/`).
+
+**Risiko:** Wer Zugriff auf den Server hat, kann die verschlüsselten Daten entschlüsseln.
+
+**Lösung:** SOFORT löschen:
+```bash
+find /tmp -name "gocryptfs*.key" -delete
+find /root -name "gocryptfs*.key" -delete
+```
+
+Keyfile darf NUR auf dem Master-Server (`/opt/lococloudd/keys/`) und optional auf dem Key-Backup-Server liegen.
 
 ---
 
