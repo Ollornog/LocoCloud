@@ -104,7 +104,8 @@ echo "  PocketID:    https://id.${ADMIN_DOMAIN}"
 echo "  Tinyauth:    https://auth.${ADMIN_DOMAIN}"
 echo "  Vaultwarden: https://vault.${ADMIN_DOMAIN}"
 echo "  Semaphore:   https://deploy.${ADMIN_DOMAIN}"
-echo "  Zabbix:      https://monitor.${ADMIN_DOMAIN}"
+echo "  Grafana:     https://grafana.${ADMIN_DOMAIN}"
+echo "  Baserow:     https://baserow.${ADMIN_DOMAIN}"
 echo ""
 
 # SMTP
@@ -119,36 +120,48 @@ fi
 echo ""
 ask "Public IP des Gateway-Servers (leer = spaeter):" GATEWAY_IP
 
-# --- Netbird ---
+# --- Netbird (optional) ---
 echo ""
-echo -e "${BOLD}--- Netbird VPN ---${NC}"
+echo -e "${BOLD}--- Netbird VPN (optional) ---${NC}"
 echo ""
-echo "LocoCloud nutzt Netbird als VPN-Mesh fuer alle Server."
-echo "Du kannst einen eigenen Netbird-Server auf diesem Host einrichten"
-echo "oder einen bestehenden verwenden."
+echo "Netbird ist OPTIONAL. Server koennen auch direkt per IP erreichbar sein."
+echo "Netbird bietet ein VPN-Mesh fuer Admin-Zugriff zwischen Servern."
 echo ""
-ask_default "Eigenen Netbird-Server einrichten? (j/n)" NETBIRD_SELF_HOSTED "n"
+NETBIRD_ENABLED="n"
+ask_default "Netbird aktivieren? (j/n)" NETBIRD_ENABLED "n"
 
-if [[ "$NETBIRD_SELF_HOSTED" =~ ^[jJyY]$ ]]; then
-  ask_default "Netbird-Domain" NETBIRD_DOMAIN "netbird.${BASE_DOMAIN}"
-  ask_default "Netbird-Relay-Domain" NETBIRD_RELAY_DOMAIN "relay.${BASE_DOMAIN}"
-  NETBIRD_URL="https://${NETBIRD_DOMAIN}"
+if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]]; then
   echo ""
-  info "Netbird-Server wird auf diesem Host eingerichtet."
-  info "Management-URL: ${NETBIRD_URL}"
+  echo "Du kannst einen eigenen Netbird-Server auf diesem Host einrichten"
+  echo "oder einen bestehenden verwenden."
   echo ""
-  echo "Nach dem Server-Start musst du im Netbird-Dashboard einen Setup-Key"
-  echo "erstellen. Das Script fragt spaeter danach."
+  ask_default "Eigenen Netbird-Server einrichten? (j/n)" NETBIRD_SELF_HOSTED "n"
 else
-  echo ""
-  ask "Netbird Management-URL (leer = spaeter):" NETBIRD_URL
-  # https:// Fallback
-  if [ -n "$NETBIRD_URL" ] && [[ ! "$NETBIRD_URL" =~ ^https?:// ]]; then
-    NETBIRD_URL="https://${NETBIRD_URL}"
-    info "URL korrigiert: $NETBIRD_URL"
-  fi
-  if [ -n "$NETBIRD_URL" ]; then
-    ask "Netbird Setup-Key:" NETBIRD_SETUP_KEY
+  info "Netbird wird uebersprungen."
+fi
+
+if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]]; then
+  if [[ "$NETBIRD_SELF_HOSTED" =~ ^[jJyY]$ ]]; then
+    ask_default "Netbird-Domain" NETBIRD_DOMAIN "netbird.${BASE_DOMAIN}"
+    ask_default "Netbird-Relay-Domain" NETBIRD_RELAY_DOMAIN "relay.${BASE_DOMAIN}"
+    NETBIRD_URL="https://${NETBIRD_DOMAIN}"
+    echo ""
+    info "Netbird-Server wird auf diesem Host eingerichtet."
+    info "Management-URL: ${NETBIRD_URL}"
+    echo ""
+    echo "Nach dem Server-Start musst du im Netbird-Dashboard einen Setup-Key"
+    echo "erstellen. Das Script fragt spaeter danach."
+  else
+    echo ""
+    ask "Netbird Management-URL (leer = spaeter):" NETBIRD_URL
+    # https:// Fallback
+    if [ -n "$NETBIRD_URL" ] && [[ ! "$NETBIRD_URL" =~ ^https?:// ]]; then
+      NETBIRD_URL="https://${NETBIRD_URL}"
+      info "URL korrigiert: $NETBIRD_URL"
+    fi
+    if [ -n "$NETBIRD_URL" ]; then
+      ask "Netbird Setup-Key:" NETBIRD_SETUP_KEY
+    fi
   fi
 fi
 
@@ -194,7 +207,7 @@ fi
 # =====================================================
 # Phase 4: Netbird-Server einrichten (falls self-hosted)
 # =====================================================
-if [[ "$NETBIRD_SELF_HOSTED" =~ ^[jJyY]$ ]]; then
+if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]] && [[ "$NETBIRD_SELF_HOSTED" =~ ^[jJyY]$ ]]; then
   info "Phase 4: Netbird-Server einrichten"
 
   mkdir -p "${NETBIRD_STACK}"
@@ -256,22 +269,26 @@ COMPOSE
   echo ""
   ask "Setup-Key eingeben (wenn Dashboard schon erreichbar, sonst leer = spaeter):" NETBIRD_SETUP_KEY
 else
-  info "Phase 4: Netbird-Server wird uebersprungen (extern)"
+  info "Phase 4: Netbird-Server wird uebersprungen (extern oder deaktiviert)"
 fi
 
 # =====================================================
-# Phase 5: Netbird-Client installieren + joinen
+# Phase 5: Netbird-Client installieren + joinen (nur wenn aktiviert)
 # =====================================================
-info "Phase 5: Netbird-Client installieren"
+if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]]; then
+  info "Phase 5: Netbird-Client installieren"
 
-if command -v netbird &>/dev/null; then
-  ok "Netbird ist bereits installiert"
+  if command -v netbird &>/dev/null; then
+    ok "Netbird ist bereits installiert"
+  else
+    curl -fsSL https://pkgs.netbird.io/install.sh | sh
+    ok "Netbird installiert"
+  fi
 else
-  curl -fsSL https://pkgs.netbird.io/install.sh | sh
-  ok "Netbird installiert"
+  info "Phase 5: Netbird uebersprungen (deaktiviert)"
 fi
 
-if [ -n "$NETBIRD_URL" ] && [ -n "$NETBIRD_SETUP_KEY" ]; then
+if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]] && [ -n "$NETBIRD_URL" ] && [ -n "$NETBIRD_SETUP_KEY" ]; then
   netbird up --management-url "$NETBIRD_URL" --setup-key "$NETBIRD_SETUP_KEY"
   ok "Netbird verbunden"
   sleep 3
@@ -292,10 +309,10 @@ if [ -n "$NETBIRD_URL" ] && [ -n "$NETBIRD_SETUP_KEY" ]; then
     warn "Netbird-IP konnte nicht automatisch ermittelt werden."
     ask "Netbird-IP manuell eingeben (100.x.x.x):" NETBIRD_IP
   fi
-elif [ -n "$NETBIRD_URL" ]; then
+elif [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]] && [ -n "$NETBIRD_URL" ]; then
   warn "Kein Setup-Key angegeben. Netbird-Join spaeter manuell:"
   echo "  netbird up --management-url $NETBIRD_URL --setup-key <KEY>"
-else
+elif [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]]; then
   warn "Netbird-Join uebersprungen."
   echo "  Spaeter: netbird up --management-url <URL> --setup-key <KEY>"
 fi
@@ -387,10 +404,12 @@ urls:
   tinyauth: "auth.${ADMIN_DOMAIN}"
   vaultwarden: "vault.${ADMIN_DOMAIN}"
   semaphore: "deploy.${ADMIN_DOMAIN}"
-  zabbix: "monitor.${ADMIN_DOMAIN}"
+  grafana: "grafana.${ADMIN_DOMAIN}"
+  baserow: "baserow.${ADMIN_DOMAIN}"
 
-# --- Netbird ---
+# --- Netbird (optional) ---
 netbird:
+  enabled: $(if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]]; then echo "true"; else echo "false"; fi)
   manager_url: "${NETBIRD_URL}"
   api_token: ""
 
@@ -427,6 +446,34 @@ bitwarden_cli:
 # --- Gateway ---
 admin_gateway:
   public_ip: "${GATEWAY_IP}"
+
+# --- gocryptfs ---
+gocryptfs:
+  key_store_path: "/opt/lococloudd/keys"
+
+# --- Key Backup ---
+key_backup:
+  host: ""
+  sync_interval: "0 */6 * * *"
+
+# --- Grafana Stack ---
+grafana:
+  admin_password: ""
+  prometheus_retention: "30d"
+  loki_retention: "4320h"
+  prometheus_remote_write_url: ""
+  loki_push_url: ""
+  alerting:
+    enabled: true
+    email_to: "${OPERATOR_EMAIL}"
+
+# --- Baserow ---
+baserow:
+  admin_email: "${OPERATOR_EMAIL}"
+
+# --- Compliance ---
+compliance:
+  docs_output_path: "/opt/lococloudd/compliance-docs"
 YAML
 
   if [[ "$NETBIRD_SELF_HOSTED" =~ ^[jJyY]$ ]]; then
@@ -507,7 +554,7 @@ fi
 info "Phase 12: Master-Playbook ausfuehren"
 echo ""
 echo "Das Playbook richtet die Admin-Dienste ein:"
-echo "  base → pocketid → tinyauth → vaultwarden → semaphore → caddy"
+echo "  base → pocketid → tinyauth → vaultwarden → semaphore → grafana → baserow → caddy"
 echo ""
 
 ansible-playbook "$REPO_DIR/playbooks/setup-master.yml" \
@@ -546,7 +593,7 @@ echo "  Config:          $REPO_DIR/config/lococloudd.yml"
 echo "  SSH-Key:         ${SSH_KEY}"
 echo ""
 
-if [[ "$NETBIRD_SELF_HOSTED" =~ ^[jJyY]$ ]]; then
+if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]] && [[ "$NETBIRD_SELF_HOSTED" =~ ^[jJyY]$ ]]; then
   echo -e "${BOLD}Netbird-Server:${NC}"
   echo "  Stack:     ${NETBIRD_STACK}"
   echo "  Dashboard: http://${PUBLIC_IP}:8080"
@@ -558,6 +605,8 @@ echo "  PocketID:    https://id.${ADMIN_DOMAIN}"
 echo "  Tinyauth:    https://auth.${ADMIN_DOMAIN}"
 echo "  Vaultwarden: https://vault.${ADMIN_DOMAIN}"
 echo "  Semaphore:   https://deploy.${ADMIN_DOMAIN}"
+echo "  Grafana:     https://grafana.${ADMIN_DOMAIN}"
+echo "  Baserow:     https://baserow.${ADMIN_DOMAIN}"
 
 echo ""
 echo ""
@@ -566,7 +615,7 @@ echo ""
 
 STEP=1
 
-if [[ "$NETBIRD_SELF_HOSTED" =~ ^[jJyY]$ ]]; then
+if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]] && [[ "$NETBIRD_SELF_HOSTED" =~ ^[jJyY]$ ]]; then
   echo -e "${BOLD}  ${STEP}. DNS fuer Netbird-Server einrichten${NC}"
   echo ""
   echo "     ${NETBIRD_DOMAIN}       -> A ${PUBLIC_IP}"
@@ -580,13 +629,14 @@ echo ""
 echo "     Wildcard-DNS auf die Gateway Public IP zeigen lassen:"
 echo "     *.${ADMIN_DOMAIN} -> A ${GATEWAY_IP:-<GATEWAY-IP>}"
 echo ""
+MASTER_PROXY_IP="${NETBIRD_IP:-${PUBLIC_IP}}"
 echo "     Auf dem Gateway-Server die Caddyfile ergaenzen:"
 echo ""
 echo "     *.${ADMIN_DOMAIN} {"
 echo "         tls {"
 echo "             dns cloudflare {env.CF_API_TOKEN}"
 echo "         }"
-echo "         reverse_proxy https://${NETBIRD_IP:-<MASTER-NETBIRD-IP>} {"
+echo "         reverse_proxy https://${MASTER_PROXY_IP:-<MASTER-IP>} {"
 echo "             header_up Host {host}"
 echo "             transport http {"
 echo "                 tls_server_name ${ADMIN_DOMAIN}"
@@ -596,7 +646,7 @@ echo "     }"
 echo ""
 STEP=$((STEP + 1))
 
-if [ -z "$NETBIRD_IP" ]; then
+if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]] && [ -z "$NETBIRD_IP" ]; then
   echo -e "${BOLD}  ${STEP}. Netbird-Client verbinden${NC}"
   echo ""
   echo "     netbird up --management-url ${NETBIRD_URL:-<URL>} --setup-key <KEY>"
