@@ -1,0 +1,47 @@
+---
+# roles/apps/listmonk/defaults/main.yml
+# Listmonk — Self-hosted newsletter and mailing list manager
+
+listmonk_stack_path: "/opt/stacks/listmonk"
+listmonk_data_path: "/mnt/data/listmonk"
+listmonk_image: "listmonk/listmonk:4"
+listmonk_port: 8092
+
+# Domain for Listmonk
+listmonk_domain: ""  # e.g. "newsletter.firma-abc.de"
+
+# PostgreSQL
+listmonk_db_image: "postgres:18"
+listmonk_db_name: "listmonk"
+listmonk_db_user: "listmonk"
+listmonk_db_password: ""  # Generated if empty
+
+# Admin credentials
+listmonk_admin_user: "admin"
+listmonk_admin_password: ""  # Generated if empty
+
+# NO OIDC — Listmonk is protected by Tinyauth forward-auth
+
+# SMTP for sending newsletters
+listmonk_smtp_host: ""
+listmonk_smtp_port: 587
+listmonk_smtp_user: ""
+listmonk_smtp_from: ""  # e.g. "newsletter@firma-abc.de"
+
+# Public paths (subscription/unsubscribe pages must be accessible)
+listmonk_public_paths:
+  - "/subscription/*"
+  - "/public/*"
+
+# Backup paths
+listmonk_backup_paths:
+  - "/opt/stacks/listmonk"
+  - "/mnt/data/listmonk"
+
+# Pre-backup command: dump PostgreSQL before backup
+listmonk_pre_backup_cmd: >
+  docker exec listmonk-db pg_dump -U {{ listmonk_db_user }} {{ listmonk_db_name }}
+  > {{ listmonk_stack_path }}/backup-pre.sql
+
+# Health check
+listmonk_health_path: "/api/health"

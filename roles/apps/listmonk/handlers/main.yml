@@ -1,0 +1,10 @@
+---
+# roles/apps/listmonk/handlers/main.yml
+
+- name: restart caddy
+  ansible.builtin.command: docker restart caddy
+  changed_when: true
+
+- name: restart listmonk
+  ansible.builtin.command: docker restart listmonk
+  changed_when: true

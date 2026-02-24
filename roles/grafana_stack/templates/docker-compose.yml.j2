@@ -1,0 +1,62 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Grafana Stack (Grafana + Prometheus + Loki)
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  grafana:
+    image: {{ grafana_image }}
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:{{ grafana_port }}:3000"
+    volumes:
+      - {{ grafana_stack_path }}/grafana-data:/var/lib/grafana
+      - {{ grafana_stack_path }}/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_USER={{ grafana_admin_user }}
+      - GF_SECURITY_ADMIN_PASSWORD={{ grafana_admin_password }}
+      - GF_SERVER_ROOT_URL=https://{{ grafana_domain }}
+{% if grafana_smtp_enabled %}
+      - GF_SMTP_ENABLED=true
+      - GF_SMTP_HOST={{ grafana_smtp_host }}:{{ grafana_smtp_port }}
+      - GF_SMTP_USER={{ grafana_smtp_user }}
+      - GF_SMTP_FROM_ADDRESS={{ grafana_smtp_from }}
+{% endif %}
+{% if grafana_oidc_enabled and grafana_oidc_client_id | length > 0 %}
+      - GF_AUTH_GENERIC_OAUTH_ENABLED=true
+      - GF_AUTH_GENERIC_OAUTH_NAME=PocketID
+      - GF_AUTH_GENERIC_OAUTH_CLIENT_ID={{ grafana_oidc_client_id }}
+      - GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET={{ grafana_oidc_client_secret }}
+      - GF_AUTH_GENERIC_OAUTH_AUTH_URL={{ grafana_oidc_auth_url }}
+      - GF_AUTH_GENERIC_OAUTH_TOKEN_URL={{ grafana_oidc_token_url }}
+      - GF_AUTH_GENERIC_OAUTH_SCOPES=openid profile email
+{% endif %}
+    # NO watchtower label — infrastructure container
+
+  prometheus:
+    image: {{ prometheus_image }}
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:{{ prometheus_port }}:9090"
+    volumes:
+      - {{ grafana_stack_path }}/prometheus-data:/prometheus
+      - {{ grafana_stack_path }}/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - {{ grafana_stack_path }}/prometheus-targets:/etc/prometheus/targets:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time={{ prometheus_retention }}"
+    # NO watchtower label — infrastructure container
+
+  loki:
+    image: {{ loki_image }}
+    container_name: loki
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:{{ loki_port }}:3100"
+    volumes:
+      - {{ grafana_stack_path }}/loki-data:/loki
+      - {{ grafana_stack_path }}/loki-config.yml:/etc/loki/local-config.yaml:ro
+    # NO watchtower label — infrastructure container

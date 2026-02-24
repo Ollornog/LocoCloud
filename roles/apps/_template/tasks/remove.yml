@@ -1,0 +1,21 @@
+---
+# roles/apps/_template/tasks/remove.yml
+# TEMPLATE — Replace "myapp" with your app name
+# Archive myapp data, stop containers — do NOT delete data.
+
+- name: Stop myapp
+  community.docker.docker_compose_v2:
+    project_src: "{{ myapp_stack_path }}"
+    state: absent
+  ignore_errors: true
+
+- name: Archive myapp data
+  ansible.builtin.command: >
+    tar czf /opt/archives/myapp-{{ ansible_date_time.date }}.tar.gz
+    -C {{ myapp_stack_path }} .
+  args:
+    creates: "/opt/archives/myapp-{{ ansible_date_time.date }}.tar.gz"
+
+- name: Archive complete
+  ansible.builtin.debug:
+    msg: "myapp stopped. Data archived to /opt/archives/myapp-{{ ansible_date_time.date }}.tar.gz."

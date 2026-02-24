@@ -1,0 +1,51 @@
+---
+# roles/apps/calcom/tasks/oidc.yml
+# Register OIDC client in PocketID for Cal.com
+
+- name: Create OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ calcom_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ loco.pocketid.api_token }}"
+    body_format: json
+    body:
+      name: "Cal.com ({{ kunde_name }})"
+      callbackURLs:
+        - "https://{{ calcom_domain }}/api/auth/callback/oidc"
+    status_code: [200, 201]
+  register: calcom_oidc_client
+  when:
+    - calcom_oidc_client_id | length == 0
+    - loco.pocketid.api_token | default('') | length > 0
+
+- name: Set OIDC credentials from API response
+  ansible.builtin.set_fact:
+    calcom_oidc_client_id: "{{ calcom_oidc_client.json.id }}"
+    calcom_oidc_client_secret: "{{ calcom_oidc_client.json.secret }}"
+  when: calcom_oidc_client is not skipped and calcom_oidc_client is changed
+
+- name: Store Cal.com OIDC credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — Cal.com OIDC Client"
+    credential_username: "{{ calcom_oidc_client_id }}"
+    credential_password: "{{ calcom_oidc_client_secret }}"
+    credential_uri: "https://{{ calcom_domain }}"
+    credential_notes: "PocketID OIDC client for Cal.com. Deployed: {{ ansible_date_time.iso8601 }}"
+  when:
+    - loco is defined
+    - calcom_oidc_client_id | length > 0
+
+- name: Redeploy Cal.com .env with OIDC credentials
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ calcom_stack_path }}/.env"
+    mode: "0600"
+  notify: restart calcom
+
+- name: Apply OIDC config immediately
+  ansible.builtin.meta: flush_handlers

@@ -1,0 +1,24 @@
+---
+# roles/gocryptfs/defaults/main.yml
+# gocryptfs — FUSE-based encryption for /mnt/data
+
+# Encrypted storage paths
+gocryptfs_cipher_dir: "/mnt/data-encrypted"
+gocryptfs_plain_dir: "/mnt/data"
+
+# Keyfile path on THIS server (temporarily placed during deploy, then removed)
+gocryptfs_keyfile_local: "/tmp/gocryptfs.key"
+
+# Keyfile path on the master server (persistent key store)
+gocryptfs_master_key_store: "/opt/lococloudd/keys"
+
+# Auto-mount after reboot (requires master reachability for key fetch)
+gocryptfs_automount: true
+
+# Mount script location
+gocryptfs_mount_script: "/opt/scripts/gocryptfs-mount.sh"
+
+# Master SSH settings for key fetch on reboot
+gocryptfs_master_host: ""  # Netbird IP or public IP of master
+gocryptfs_master_user: "root"
+gocryptfs_master_ssh_key: "/root/.ssh/id_ed25519"

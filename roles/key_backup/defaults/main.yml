@@ -1,0 +1,18 @@
+---
+# roles/key_backup/defaults/main.yml
+# Key Backup — Secondary storage for gocryptfs keyfiles
+
+key_backup_store_path: "/opt/gocryptfs-keys"
+
+# Sync from master
+key_backup_master_host: ""  # IP or Netbird IP of master
+key_backup_master_user: "root"
+key_backup_master_key_path: "/opt/lococloudd/keys"  # Source on master
+key_backup_ssh_key: "/root/.ssh/id_ed25519"
+
+# Sync schedule (cron)
+key_backup_sync_schedule: "0 */4 * * *"  # Every 4 hours
+
+# Permissions (restrictive)
+key_backup_dir_mode: "0700"
+key_backup_file_mode: "0600"

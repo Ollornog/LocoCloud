@@ -1,0 +1,143 @@
+# Verzeichnis von Verarbeitungstätigkeiten (VVT)
+# gemäß Art. 30 DSGVO
+
+<!--
+============================================
+GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+Kunde: {{ compliance_kunde_name }} ({{ compliance_kunde_domain }})
+Generiert: {{ ansible_date_time.iso8601 }}
+============================================
+-->
+
+**Verantwortlicher (Auftragsverarbeiter):** {{ compliance_operator_name }}
+**Kontakt:** {{ compliance_operator_email }}
+
+**Auftraggeber (Verantwortlicher):** {{ compliance_kunde_name }}
+**Domain:** {{ compliance_kunde_domain }}
+**Kunden-ID:** {{ compliance_kunde_id }}
+
+**Stand:** {{ ansible_date_time.date }}
+
+---
+
+## 1. Allgemeine Angaben
+
+| Feld | Inhalt |
+|------|--------|
+| Name des Auftragsverarbeiters | {{ compliance_operator_name }} |
+| Kontakt | {{ compliance_operator_email }} |
+| Auftraggeber | {{ compliance_kunde_name }} |
+| Zweck der Verarbeitung | Bereitstellung und Betrieb von Cloud-Diensten im Auftrag des Kunden |
+| Rechtsgrundlage | Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung), Art. 28 DSGVO (Auftragsverarbeitung) |
+| Kategorien betroffener Personen | Mitarbeiter und ggf. Kunden des Auftraggebers |
+| Empfänger der Daten | Keine Weitergabe an Dritte — alle Dienste sind selbst gehostet |
+| Übermittlung in Drittländer | Keine — Verarbeitung erfolgt ausschließlich auf Servern innerhalb der EU |
+| Löschfristen | Siehe Löschkonzept |
+
+---
+
+## 2. Technische und organisatorische Maßnahmen
+
+Die umgesetzten technisch-organisatorischen Maßnahmen sind im separaten TOM-Dokument beschrieben.
+
+---
+
+## 3. Verzeichnis der Verarbeitungstätigkeiten
+{% if compliance_apps | length > 0 %}
+
+Die folgenden Verarbeitungstätigkeiten ergeben sich aus den für den Kunden bereitgestellten Anwendungen:
+
+{% for app in compliance_apps %}
+### 3.{{ loop.index }} {{ app.name }}
+
+| Feld | Inhalt |
+|------|--------|
+| Anwendung | {{ app.name }} |
+| Subdomain | {{ app.subdomain }}.{{ compliance_kunde_domain }} |
+{% if app.name | lower == 'nextcloud' %}
+| Zweck der Verarbeitung | Dateispeicherung, Synchronisation und Zusammenarbeit. Ermöglicht Mitarbeitern das sichere Speichern, Teilen und gemeinsame Bearbeiten von Dokumenten. |
+| Kategorien personenbezogener Daten | Dokumente und Dateien (ggf. mit personenbezogenem Inhalt), Benutzernamen, E-Mail-Adressen, Zugriffsprotokolle, Freigabeinformationen |
+| Kategorien betroffener Personen | Mitarbeiter des Auftraggebers, ggf. externe Empfänger von Freigabelinks |
+| Rechtsgrundlage | Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung) |
+| Löschfrist | {{ compliance_user_data_retention }} |
+{% elif app.name | lower == 'paperless' or app.name | lower == 'paperless-ngx' %}
+| Zweck der Verarbeitung | Dokumentenmanagement und -archivierung. Digitalisierung, OCR-Erkennung und strukturierte Ablage von Geschäftsdokumenten. |
+| Kategorien personenbezogener Daten | Gescannte Dokumente (ggf. mit personenbezogenen Inhalten wie Rechnungen, Verträge), Metadaten, Benutzerzugriffsprotokolle |
+| Kategorien betroffener Personen | Mitarbeiter des Auftraggebers, in Dokumenten genannte Personen |
+| Rechtsgrundlage | Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung), ggf. Art. 6 Abs. 1 lit. c DSGVO (rechtliche Aufbewahrungspflichten) |
+| Löschfrist | {{ compliance_user_data_retention }}; handels- und steuerrechtliche Aufbewahrungsfristen beachten (6 bzw. 10 Jahre gem. HGB/AO) |
+{% elif app.name | lower == 'vaultwarden' %}
+| Zweck der Verarbeitung | Passwortverwaltung. Sichere Speicherung und Verwaltung von Zugangsdaten und Secrets für Mitarbeiter. |
+| Kategorien personenbezogener Daten | Verschlüsselte Zugangsdaten (Passwörter, Benutzernamen, URLs, Notizen), E-Mail-Adressen der Vault-Benutzer |
+| Kategorien betroffener Personen | Mitarbeiter des Auftraggebers |
+| Rechtsgrundlage | Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung), Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an IT-Sicherheit) |
+| Löschfrist | {{ compliance_user_data_retention }} |
+{% elif app.name | lower == 'baserow' %}
+| Zweck der Verarbeitung | Datenbank- und Tabellenmanagement. Erstellung und Verwaltung strukturierter Daten für interne Geschäftsprozesse. |
+| Kategorien personenbezogener Daten | Vom Kunden eingegebene strukturierte Daten (ggf. personenbezogen), Benutzernamen, Zugriffsprotokolle |
+| Kategorien betroffener Personen | Mitarbeiter des Auftraggebers, in Datenbanken erfasste Personen |
+| Rechtsgrundlage | Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung) |
+| Löschfrist | {{ compliance_user_data_retention }} |
+{% elif app.name | lower == 'uptime-kuma' or app.name | lower == 'uptime_kuma' %}
+| Zweck der Verarbeitung | Verfügbarkeitsüberwachung. Monitoring der Erreichbarkeit und Reaktionszeiten von Diensten mit Benachrichtigung bei Ausfällen. |
+| Kategorien personenbezogener Daten | Monitoring-Konfigurationen, Benachrichtigungsadressen (E-Mail, Webhook-URLs), Statusprotokolle |
+| Kategorien betroffener Personen | Administratoren und Benachrichtigungsempfänger |
+| Rechtsgrundlage | Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an Systemverfügbarkeit) |
+| Löschfrist | {{ compliance_log_retention }} |
+{% else %}
+| Zweck der Verarbeitung | Bereitstellung der Anwendung {{ app.name }} im Rahmen des Auftragsverarbeitungsvertrags |
+| Kategorien personenbezogener Daten | Anwendungsspezifische Daten, Benutzernamen, Zugriffsprotokolle |
+| Kategorien betroffener Personen | Mitarbeiter des Auftraggebers |
+| Rechtsgrundlage | Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung) |
+| Löschfrist | {{ compliance_user_data_retention }} |
+{% endif %}
+| Empfänger | Keine Weitergabe an Dritte |
+| Drittlandübermittlung | Keine |
+| TOM | Siehe TOM-Dokument |
+
+{% endfor %}
+{% else %}
+
+Aktuell sind keine Anwendungen für diesen Kunden aktiviert. Das VVT wird bei Aktivierung von Anwendungen automatisch aktualisiert.
+
+{% endif %}
+
+---
+
+## 4. Infrastruktur-Verarbeitungstätigkeiten
+
+Die folgenden Verarbeitungstätigkeiten ergeben sich aus dem Betrieb der Infrastruktur und gelten für alle Kunden gleichermaßen.
+
+### 4.1 Authentifizierung und Benutzerverwaltung (PocketID)
+
+| Feld | Inhalt |
+|------|--------|
+| Zweck der Verarbeitung | Zentrale Authentifizierung aller Benutzer über OpenID Connect |
+| Kategorien personenbezogener Daten | Benutzernamen, E-Mail-Adressen, Gruppenzugehörigkeiten, Anmeldeprotokolle |
+| Kategorien betroffener Personen | Alle Benutzer des Kunden |
+| Rechtsgrundlage | Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung) |
+| Löschfrist | {{ compliance_user_data_retention }} |
+
+### 4.2 Logging und Monitoring (Grafana-Stack)
+
+| Feld | Inhalt |
+|------|--------|
+| Zweck der Verarbeitung | Systemüberwachung, Fehlererkennung, Sicherheitsaudit |
+| Kategorien personenbezogener Daten | IP-Adressen, Benutzernamen in Logs, Zeitstempel, Zugriffsprotokolle |
+| Kategorien betroffener Personen | Alle Benutzer des Systems |
+| Rechtsgrundlage | Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an IT-Sicherheit und Systemstabilität) |
+| Löschfrist | {{ compliance_log_retention }} |
+
+### 4.3 Backup (Restic)
+
+| Feld | Inhalt |
+|------|--------|
+| Zweck der Verarbeitung | Datensicherung zur Wiederherstellung bei Datenverlust |
+| Kategorien personenbezogener Daten | Vollständige Kopien aller Anwendungsdaten (verschlüsselt) |
+| Kategorien betroffener Personen | Alle Benutzer des Kunden |
+| Rechtsgrundlage | Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung), Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an Datensicherheit) |
+| Löschfrist | {{ compliance_backup_retention }} |
+
+---
+
+*Dieses Verzeichnis wird bei jeder relevanten Änderung der Infrastruktur oder App-Konfiguration automatisch neu generiert.*

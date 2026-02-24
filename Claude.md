@@ -37,20 +37,31 @@ LocoCloud/
 │   ├── compliance/              ✓ TOM, VVT, Löschkonzept (Jinja2-Templates)
 │   ├── watchtower/              ✓ Auto-Update (nur Kunden-Apps)
 │   ├── lxc_create/              ✓ Proxmox LXC-Erstellung + Bootstrap
+│   ├── monitoring/              ✓ Wrapper → delegiert an alloy
 │   └── apps/
+│       ├── _template/           ✓ Kopiervorlage für neue Apps
 │       ├── vaultwarden/         ✓ Credential Manager
 │       ├── semaphore/           ✓ Ansible Web-UI
 │       ├── nextcloud/           ✓ Cloud Storage (MariaDB + Redis)
 │       ├── paperless/           ✓ Dokumenten-Management (PostgreSQL)
 │       ├── stirling_pdf/        ✓ PDF-Tool
-│       └── uptime_kuma/         ✓ Status-Page
+│       ├── uptime_kuma/         ✓ Status-Page
+│       ├── documenso/           ✓ Digitale Signaturen (PostgreSQL)
+│       ├── pingvin_share/       ✓ File Sharing
+│       ├── hedgedoc/            ✓ Collaborative Markdown (PostgreSQL)
+│       ├── outline/             ✓ Wiki/Knowledge Base (PostgreSQL + Redis)
+│       ├── gitea/               ✓ Git Hosting (PostgreSQL)
+│       ├── calcom/              ✓ Terminplanung (PostgreSQL)
+│       └── listmonk/            ✓ Newsletter/Mailing (PostgreSQL)
 ├── playbooks/
 │   ├── setup-master.yml         ← Master-Server einrichten (inkl. Grafana Stack, Baserow)
-│   ├── onboard-customer.yml     ← Neukunden-Onboarding
+│   ├── onboard-customer.yml     ← Neukunden-Onboarding (Auth + gocryptfs + Alloy + Compliance)
 │   ├── add-server.yml           ← Frischen Server zum Kunden hinzufügen (IP/User/Pass)
 │   ├── site.yml                 ← Full Deploy (idempotent)
 │   ├── add-app.yml              ← App hinzufügen
 │   ├── remove-app.yml           ← App entfernen (archivieren)
+│   ├── update-app.yml           ← App aktualisieren (Image pull + recreate)
+│   ├── update-caddy.yml         ← Caddy-Konfiguration regenerieren
 │   ├── add-user.yml             ← Benutzer anlegen
 │   ├── remove-user.yml          ← Benutzer entfernen
 │   ├── update-all.yml           ← OS-Updates

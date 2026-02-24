@@ -1,0 +1,20 @@
+---
+# roles/apps/listmonk/tasks/remove.yml
+# Archive Listmonk data, stop containers — do NOT delete data.
+
+- name: Stop Listmonk
+  community.docker.docker_compose_v2:
+    project_src: "{{ listmonk_stack_path }}"
+    state: absent
+  ignore_errors: true
+
+- name: Archive Listmonk data
+  ansible.builtin.command: >
+    tar czf /opt/archives/listmonk-{{ ansible_date_time.date }}.tar.gz
+    -C {{ listmonk_stack_path }} .
+  args:
+    creates: "/opt/archives/listmonk-{{ ansible_date_time.date }}.tar.gz"
+
+- name: Archive complete
+  ansible.builtin.debug:
+    msg: "Listmonk stopped. Data archived to /opt/archives/listmonk-{{ ansible_date_time.date }}.tar.gz."

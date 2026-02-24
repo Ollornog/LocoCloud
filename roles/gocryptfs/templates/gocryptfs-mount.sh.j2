@@ -1,0 +1,89 @@
+#!/bin/bash
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# gocryptfs Mount Script
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+# Fetches keyfile from master, mounts gocryptfs, removes keyfile immediately.
+# Called by gocryptfs-mount.service on boot (before Docker starts).
+set -euo pipefail
+
+CIPHER_DIR="{{ gocryptfs_cipher_dir }}"
+PLAIN_DIR="{{ gocryptfs_plain_dir }}"
+KEYFILE="{{ gocryptfs_keyfile_local }}"
+MASTER_HOST="{{ gocryptfs_master_host }}"
+MASTER_USER="{{ gocryptfs_master_user }}"
+MASTER_KEY_STORE="{{ gocryptfs_master_key_store }}"
+SSH_KEY="{{ gocryptfs_master_ssh_key }}"
+HOSTNAME="$(hostname)"
+
+LOG_PREFIX="$(date -Iseconds) [gocryptfs-mount]"
+
+cleanup() {
+    # Always remove the keyfile, even on failure
+    if [ -f "$KEYFILE" ]; then
+        rm -f "$KEYFILE"
+        echo "${LOG_PREFIX} Keyfile removed (cleanup)"
+    fi
+}
+trap cleanup EXIT
+
+# Check if already mounted
+if mountpoint -q "$PLAIN_DIR" 2>/dev/null; then
+    echo "${LOG_PREFIX} ${PLAIN_DIR} is already mounted, nothing to do"
+    exit 0
+fi
+
+# Verify cipher directory is initialized
+if [ ! -f "${CIPHER_DIR}/gocryptfs.conf" ]; then
+    echo "${LOG_PREFIX} ERROR: ${CIPHER_DIR}/gocryptfs.conf not found — filesystem not initialized" >&2
+    exit 1
+fi
+
+# Verify master host is configured
+if [ -z "$MASTER_HOST" ]; then
+    echo "${LOG_PREFIX} ERROR: gocryptfs_master_host is not configured" >&2
+    exit 1
+fi
+
+# Fetch keyfile from master via SCP
+echo "${LOG_PREFIX} Fetching keyfile from ${MASTER_USER}@${MASTER_HOST}..."
+
+MAX_RETRIES=5
+RETRY_DELAY=10
+ATTEMPT=0
+
+while [ $ATTEMPT -lt $MAX_RETRIES ]; do
+    ATTEMPT=$((ATTEMPT + 1))
+    if scp -i "$SSH_KEY" \
+         -o StrictHostKeyChecking=accept-new \
+         -o ConnectTimeout=10 \
+         "${MASTER_USER}@${MASTER_HOST}:${MASTER_KEY_STORE}/${HOSTNAME}.key" \
+         "$KEYFILE" 2>/dev/null; then
+        echo "${LOG_PREFIX} Keyfile fetched successfully (attempt ${ATTEMPT})"
+        break
+    fi
+
+    if [ $ATTEMPT -lt $MAX_RETRIES ]; then
+        echo "${LOG_PREFIX} WARNING: SCP failed (attempt ${ATTEMPT}/${MAX_RETRIES}), retrying in ${RETRY_DELAY}s..."
+        sleep "$RETRY_DELAY"
+    else
+        echo "${LOG_PREFIX} ERROR: Failed to fetch keyfile after ${MAX_RETRIES} attempts" >&2
+        exit 1
+    fi
+done
+
+# Restrict keyfile permissions
+chmod 600 "$KEYFILE"
+
+# Mount gocryptfs
+echo "${LOG_PREFIX} Mounting ${CIPHER_DIR} -> ${PLAIN_DIR}..."
+if gocryptfs -passfile "$KEYFILE" "$CIPHER_DIR" "$PLAIN_DIR"; then
+    echo "${LOG_PREFIX} Mount successful"
+else
+    echo "${LOG_PREFIX} ERROR: gocryptfs mount failed" >&2
+    exit 1
+fi
+
+# Keyfile removal is handled by the EXIT trap (cleanup function)
+echo "${LOG_PREFIX} Done"

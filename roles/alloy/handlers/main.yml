@@ -1,0 +1,6 @@
+---
+# roles/alloy/handlers/main.yml
+
+- name: restart alloy
+  ansible.builtin.command: docker restart alloy
+  changed_when: true

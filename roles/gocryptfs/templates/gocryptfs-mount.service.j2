@@ -1,0 +1,24 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# gocryptfs Auto-Mount Service
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+# Mounts encrypted /mnt/data before Docker starts.
+# Requires network access to master server for keyfile retrieval.
+
+[Unit]
+Description=Mount gocryptfs encrypted filesystem ({{ gocryptfs_plain_dir }})
+After=network-online.target
+Wants=network-online.target
+Before=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart={{ gocryptfs_mount_script }}
+ExecStop=/usr/bin/fusermount -u {{ gocryptfs_plain_dir }}
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target
+RequiredBy=docker.service

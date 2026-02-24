@@ -1,0 +1,26 @@
+---
+# roles/compliance/defaults/main.yml
+# Compliance — TOM, VVT, Löschkonzept generation
+
+# Output path for generated documents
+compliance_output_path: "/opt/lococloudd/docs/kunden"
+
+# Customer info (from inventory)
+compliance_kunde_name: "{{ kunde_name | default('') }}"
+compliance_kunde_domain: "{{ kunde_domain | default('') }}"
+compliance_kunde_id: "{{ kunde_id | default('') }}"
+
+# Operator info (from global config)
+compliance_operator_name: "{{ loco.operator.name | default('') }}"
+compliance_operator_email: "{{ loco.operator.email | default('') }}"
+
+# Apps enabled (from inventory — used to generate VVT entries)
+compliance_apps: "{{ apps_enabled | default([]) }}"
+
+# Retention periods
+compliance_log_retention: "6 Monate"
+compliance_backup_retention: "6 Monate"
+compliance_user_data_retention: "Vertragsdauer + 30 Tage"
+
+# Document language
+compliance_language: "de"

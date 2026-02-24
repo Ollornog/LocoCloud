@@ -1,0 +1,33 @@
+---
+# playbooks/generate-docs.yml
+# Regenerate compliance documents (TOM, VVT, Löschkonzept) for a customer.
+# Usage: ansible-playbook playbooks/generate-docs.yml -i inventories/kunde-abc/
+
+- name: "Generate Compliance Documents"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+    - name: Load customer config
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/group_vars/all.yml"
+
+  roles:
+    - role: compliance
+      tags: [compliance]
+
+  post_tasks:
+    - name: Documents generated
+      ansible.builtin.debug:
+        msg: |
+          Compliance documents generated for {{ kunde_name }}:
+          - TOM (Technisch-Organisatorische Maßnahmen)
+          - VVT (Verarbeitungsverzeichnis Art. 30 DSGVO)
+          - Löschkonzept
+          Output: {{ loco.compliance.docs_output_path | default('/opt/lococloudd/docs/kunden') }}/{{ kunde_id }}/

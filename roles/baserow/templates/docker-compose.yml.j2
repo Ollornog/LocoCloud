@@ -1,0 +1,25 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Baserow — Permission management (Berechtigungskonzept)
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  baserow:
+    image: {{ baserow_image }}
+    container_name: baserow
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:{{ baserow_port }}:80"
+    volumes:
+      - {{ baserow_stack_path }}/data:/baserow/data
+    environment:
+      - BASEROW_PUBLIC_URL=https://{{ baserow_domain }}
+      - FROM_EMAIL={{ baserow_admin_email }}
+      - BASEROW_AMOUNT_OF_WORKERS=1
+{% if baserow_oidc_enabled and baserow_oidc_client_id | length > 0 %}
+      - BASEROW_OIDC_PROVIDER_URL={{ baserow_oidc_provider_url }}
+      - BASEROW_OIDC_CLIENT_ID={{ baserow_oidc_client_id }}
+      - BASEROW_OIDC_CLIENT_SECRET={{ baserow_oidc_client_secret }}
+{% endif %}
+    # NO watchtower label — infrastructure container

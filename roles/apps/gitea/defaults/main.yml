@@ -1,0 +1,40 @@
+---
+# roles/apps/gitea/defaults/main.yml
+# Gitea — Lightweight self-hosted Git service
+
+gitea_stack_path: "/opt/stacks/gitea"
+gitea_data_path: "/mnt/data/gitea"
+gitea_image: "gitea/gitea:1"
+gitea_port: 8090
+gitea_ssh_port: 2222
+
+# Domain for Gitea
+gitea_domain: ""  # e.g. "git.firma-abc.de"
+
+# PostgreSQL
+gitea_db_image: "postgres:18"
+gitea_db_name: "gitea"
+gitea_db_user: "gitea"
+gitea_db_password: ""  # Generated if empty
+
+# OIDC via PocketID
+gitea_oidc_enabled: false
+gitea_oidc_client_id: ""
+gitea_oidc_client_secret: ""
+gitea_oidc_provider_url: ""  # e.g. "https://id.firma-abc.de"
+
+# Public paths (none — fully protected by Tinyauth or native OIDC)
+gitea_public_paths: []
+
+# Backup paths
+gitea_backup_paths:
+  - "/opt/stacks/gitea"
+  - "/mnt/data/gitea"
+
+# Pre-backup command: dump PostgreSQL before backup
+gitea_pre_backup_cmd: >
+  docker exec gitea-db pg_dump -U {{ gitea_db_user }} {{ gitea_db_name }}
+  > {{ gitea_stack_path }}/backup-pre.sql
+
+# Health check
+gitea_health_path: "/api/healthz"

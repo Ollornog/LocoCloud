@@ -1,0 +1,11 @@
+---
+# roles/baserow/tasks/main.yml
+
+- name: Deploy Baserow
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [baserow, deploy]
+
+- name: Configure OIDC for Baserow
+  ansible.builtin.import_tasks: oidc.yml
+  tags: [baserow, oidc]
+  when: baserow_oidc_enabled | default(false)

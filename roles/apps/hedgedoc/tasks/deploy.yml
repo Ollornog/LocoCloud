@@ -1,0 +1,50 @@
+---
+# roles/apps/hedgedoc/tasks/deploy.yml
+
+- name: Generate HedgeDoc DB password if empty
+  ansible.builtin.set_fact:
+    hedgedoc_db_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: hedgedoc_db_password | length == 0
+
+- name: Generate HedgeDoc session secret if empty
+  ansible.builtin.set_fact:
+    hedgedoc_session_secret: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: hedgedoc_session_secret | length == 0
+
+- name: Create HedgeDoc directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ hedgedoc_stack_path }}"
+    - "{{ hedgedoc_data_path }}"
+    - "{{ hedgedoc_data_path }}/db"
+    - "{{ hedgedoc_data_path }}/uploads"
+
+- name: Deploy HedgeDoc docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ hedgedoc_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Deploy HedgeDoc .env
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ hedgedoc_stack_path }}/.env"
+    mode: "0600"
+
+- name: Start HedgeDoc
+  community.docker.docker_compose_v2:
+    project_src: "{{ hedgedoc_stack_path }}"
+    state: present
+
+- name: Wait for HedgeDoc to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ hedgedoc_port }}{{ hedgedoc_health_path }}"
+    method: GET
+    status_code: [200, 301, 302]
+  register: hedgedoc_health
+  until: hedgedoc_health.status in [200, 301, 302]
+  retries: 30
+  delay: 5

@@ -1,0 +1,51 @@
+---
+# roles/apps/outline/tasks/oidc.yml
+# Register OIDC client in PocketID for Outline
+
+- name: Create OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ outline_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ loco.pocketid.api_token }}"
+    body_format: json
+    body:
+      name: "Outline ({{ kunde_name }})"
+      callbackURLs:
+        - "https://{{ outline_domain }}/auth/oidc.callback"
+    status_code: [200, 201]
+  register: outline_oidc_client
+  when:
+    - outline_oidc_client_id | length == 0
+    - loco.pocketid.api_token | default('') | length > 0
+
+- name: Set OIDC credentials from API response
+  ansible.builtin.set_fact:
+    outline_oidc_client_id: "{{ outline_oidc_client.json.id }}"
+    outline_oidc_client_secret: "{{ outline_oidc_client.json.secret }}"
+  when: outline_oidc_client is not skipped and outline_oidc_client is changed
+
+- name: Store Outline OIDC credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — Outline OIDC Client"
+    credential_username: "{{ outline_oidc_client_id }}"
+    credential_password: "{{ outline_oidc_client_secret }}"
+    credential_uri: "https://{{ outline_domain }}"
+    credential_notes: "PocketID OIDC client for Outline. Deployed: {{ ansible_date_time.iso8601 }}"
+  when:
+    - loco is defined
+    - outline_oidc_client_id | length > 0
+
+- name: Redeploy Outline .env with OIDC credentials
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ outline_stack_path }}/.env"
+    mode: "0600"
+  notify: restart outline
+
+- name: Apply OIDC config immediately
+  ansible.builtin.meta: flush_handlers

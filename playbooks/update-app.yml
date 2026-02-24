@@ -1,0 +1,53 @@
+---
+# playbooks/update-app.yml
+# Update a specific app to its latest configured image version.
+# Usage: ansible-playbook playbooks/update-app.yml -i inventories/kunde-abc/ -e "app_name=nextcloud"
+
+- name: "Update App"
+  hosts: all:!localhost
+  become: true
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+    - name: Validate app_name
+      ansible.builtin.assert:
+        that:
+          - app_name is defined and app_name | length > 0
+        fail_msg: "Required: -e 'app_name=nextcloud' (or other app name)"
+
+  tasks:
+    - name: Pull latest image for {{ app_name }}
+      ansible.builtin.command:
+        cmd: "docker compose pull"
+        chdir: "/opt/stacks/{{ app_name }}"
+      register: pull_result
+      changed_when: "'Pull complete' in pull_result.stdout or 'Downloaded newer image' in pull_result.stdout"
+
+    - name: Recreate containers for {{ app_name }}
+      community.docker.docker_compose_v2:
+        project_src: "/opt/stacks/{{ app_name }}"
+        state: present
+        recreate: always
+      register: compose_result
+
+    - name: Wait for {{ app_name }} to be healthy
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ app_port | default('8080') }}"
+        method: GET
+        status_code: [200, 301, 302, 401, 403]
+      register: health_check
+      until: health_check.status is defined
+      retries: 30
+      delay: 5
+      ignore_errors: true
+
+    - name: Update complete
+      ansible.builtin.debug:
+        msg: |
+          App {{ app_name }} updated successfully.
+          Pull result: {{ 'new image pulled' if pull_result.changed else 'already up to date' }}
+          Container: {{ 'recreated' if compose_result.changed else 'unchanged' }}

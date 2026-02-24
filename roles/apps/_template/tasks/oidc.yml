@@ -1,0 +1,53 @@
+---
+# roles/apps/_template/tasks/oidc.yml
+# TEMPLATE — Replace "myapp" with your app name
+# Register OIDC client in PocketID for myapp
+
+- name: Create OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ myapp_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ loco.pocketid.api_token }}"
+    body_format: json
+    body:
+      name: "myapp ({{ kunde_name }})"
+      callbackURLs:
+        # Adjust the callback path for your app's OIDC implementation
+        - "https://{{ myapp_domain }}/auth/callback"
+    status_code: [200, 201]
+  register: myapp_oidc_client
+  when:
+    - myapp_oidc_client_id | length == 0
+    - loco.pocketid.api_token | default('') | length > 0
+
+- name: Set OIDC credentials from API response
+  ansible.builtin.set_fact:
+    myapp_oidc_client_id: "{{ myapp_oidc_client.json.id }}"
+    myapp_oidc_client_secret: "{{ myapp_oidc_client.json.secret }}"
+  when: myapp_oidc_client is not skipped and myapp_oidc_client is changed
+
+- name: Store myapp OIDC credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — myapp OIDC Client"
+    credential_username: "{{ myapp_oidc_client_id }}"
+    credential_password: "{{ myapp_oidc_client_secret }}"
+    credential_uri: "https://{{ myapp_domain }}"
+    credential_notes: "PocketID OIDC client for myapp. Deployed: {{ ansible_date_time.iso8601 }}"
+  when:
+    - loco is defined
+    - myapp_oidc_client_id | length > 0
+
+- name: Redeploy myapp .env with OIDC credentials
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ myapp_stack_path }}/.env"
+    mode: "0600"
+  notify: restart myapp
+
+- name: Apply OIDC config immediately
+  ansible.builtin.meta: flush_handlers

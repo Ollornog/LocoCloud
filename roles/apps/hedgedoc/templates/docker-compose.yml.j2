@@ -1,0 +1,38 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# HedgeDoc
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  hedgedoc:
+    image: {{ hedgedoc_image }}
+    container_name: hedgedoc
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ hedgedoc_port }}:3000"
+    volumes:
+      - {{ hedgedoc_data_path }}/uploads:/hedgedoc/public/uploads
+    env_file:
+      - .env
+    depends_on:
+      hedgedoc-db:
+        condition: service_healthy
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  hedgedoc-db:
+    image: {{ hedgedoc_db_image }}
+    container_name: hedgedoc-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: {{ hedgedoc_db_name }}
+      POSTGRES_USER: {{ hedgedoc_db_user }}
+      POSTGRES_PASSWORD: {{ hedgedoc_db_password }}
+    volumes:
+      - {{ hedgedoc_data_path }}/db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ hedgedoc_db_user }} -d {{ hedgedoc_db_name }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

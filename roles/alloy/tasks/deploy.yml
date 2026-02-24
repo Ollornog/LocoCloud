@@ -1,0 +1,39 @@
+---
+# roles/alloy/tasks/deploy.yml
+
+- name: Create Alloy directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ alloy_stack_path }}"
+
+- name: Deploy Alloy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ alloy_stack_path }}/docker-compose.yml"
+    mode: "0644"
+  notify: restart alloy
+
+- name: Deploy Alloy config
+  ansible.builtin.template:
+    src: config.alloy.j2
+    dest: "{{ alloy_stack_path }}/config.alloy"
+    mode: "0644"
+  notify: restart alloy
+
+- name: Start Alloy
+  community.docker.docker_compose_v2:
+    project_src: "{{ alloy_stack_path }}"
+    state: present
+
+- name: Wait for Alloy to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ alloy_port }}{{ alloy_health_path }}"
+    method: GET
+    status_code: [200]
+  register: alloy_health
+  until: alloy_health.status == 200
+  retries: 30
+  delay: 5

@@ -1,0 +1,38 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Documenso
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  documenso:
+    image: {{ documenso_image }}
+    container_name: documenso
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ documenso_port }}:3000"
+    volumes:
+      - {{ documenso_data_path }}/uploads:/app/uploads
+    env_file:
+      - .env
+    depends_on:
+      documenso-db:
+        condition: service_healthy
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  documenso-db:
+    image: {{ documenso_db_image }}
+    container_name: documenso-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: {{ documenso_db_name }}
+      POSTGRES_USER: {{ documenso_db_user }}
+      POSTGRES_PASSWORD: {{ documenso_db_password }}
+    volumes:
+      - {{ documenso_data_path }}/db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ documenso_db_user }} -d {{ documenso_db_name }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

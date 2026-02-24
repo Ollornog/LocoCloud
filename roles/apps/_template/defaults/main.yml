@@ -1,0 +1,32 @@
+---
+# roles/apps/_template/defaults/main.yml
+# TEMPLATE — Copy this role and replace "myapp" with your app name
+# See docs/APP-DEVELOPMENT.md for instructions
+
+myapp_stack_path: "/opt/stacks/myapp"
+myapp_data_path: "/mnt/data/myapp"  # On gocryptfs-encrypted volume
+myapp_image: "vendor/myapp:1"
+myapp_port: 8099  # Choose unused port
+
+# Domain
+myapp_domain: ""  # e.g. "myapp.firma-abc.de"
+
+# OIDC via PocketID
+myapp_oidc_enabled: false
+myapp_oidc_client_id: ""
+myapp_oidc_client_secret: ""
+myapp_oidc_provider_url: ""
+
+# Public paths (empty = fully protected by Tinyauth)
+myapp_public_paths: []
+
+# Backup paths
+myapp_backup_paths:
+  - "/opt/stacks/myapp"
+  - "/mnt/data/myapp"
+
+# Pre-backup hook (if DB exists)
+# myapp_pre_backup_cmd: "docker exec myapp-db pg_dumpall -U postgres"
+
+# Health check
+myapp_health_path: "/"

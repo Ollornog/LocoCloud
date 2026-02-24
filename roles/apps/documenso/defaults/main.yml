@@ -1,0 +1,35 @@
+---
+# roles/apps/documenso/defaults/main.yml
+# Documenso — Digital document signing (DocuSign alternative)
+
+documenso_stack_path: "/opt/stacks/documenso"
+documenso_data_path: "/mnt/data/documenso"
+documenso_image: "documenso/documenso:1"
+documenso_port: 8086
+
+documenso_domain: ""
+
+# PostgreSQL
+documenso_db_image: "postgres:18"
+documenso_db_name: "documenso"
+documenso_db_user: "documenso"
+documenso_db_password: ""  # Generated if empty
+
+# Signing certificate
+documenso_signing_cert_path: ""  # Optional: path to .p12 file
+
+# OIDC
+documenso_oidc_enabled: false
+documenso_oidc_client_id: ""
+documenso_oidc_client_secret: ""
+documenso_oidc_provider_url: ""
+
+documenso_public_paths: []
+
+documenso_backup_paths:
+  - "/opt/stacks/documenso"
+  - "/mnt/data/documenso"
+
+documenso_pre_backup_cmd: "docker exec documenso-db pg_dumpall -U postgres > /opt/backups/dumps/documenso_pg.sql"
+
+documenso_health_path: "/api/health"

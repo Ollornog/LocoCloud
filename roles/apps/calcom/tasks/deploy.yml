@@ -1,0 +1,37 @@
+---
+# roles/apps/calcom/tasks/deploy.yml
+
+- name: Create Cal.com directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ calcom_stack_path }}"
+
+- name: Deploy Cal.com docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ calcom_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Deploy Cal.com .env
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ calcom_stack_path }}/.env"
+    mode: "0600"
+
+- name: Start Cal.com
+  community.docker.docker_compose_v2:
+    project_src: "{{ calcom_stack_path }}"
+    state: present
+
+- name: Wait for Cal.com to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ calcom_port }}{{ calcom_health_path }}"
+    method: GET
+    status_code: [200, 301, 302]
+  register: calcom_health
+  until: calcom_health.status in [200, 301, 302]
+  retries: 30
+  delay: 5

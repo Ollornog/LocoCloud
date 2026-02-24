@@ -1,0 +1,39 @@
+---
+# roles/compliance/tasks/generate.yml
+# Generate DSGVO/GoBD compliance documents per customer
+
+- name: Create customer compliance output directory
+  ansible.builtin.file:
+    path: "{{ compliance_output_path }}/{{ compliance_kunde_id }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
+
+- name: Generate TOM document (Technisch-Organisatorische Maßnahmen)
+  ansible.builtin.template:
+    src: tom.md.j2
+    dest: "{{ compliance_output_path }}/{{ compliance_kunde_id }}/TOM.md"
+    owner: root
+    group: root
+    mode: "0640"
+  become: true
+
+- name: Generate VVT document (Verzeichnis von Verarbeitungstätigkeiten)
+  ansible.builtin.template:
+    src: vvt.md.j2
+    dest: "{{ compliance_output_path }}/{{ compliance_kunde_id }}/VVT.md"
+    owner: root
+    group: root
+    mode: "0640"
+  become: true
+
+- name: Generate Löschkonzept document
+  ansible.builtin.template:
+    src: loeschkonzept.md.j2
+    dest: "{{ compliance_output_path }}/{{ compliance_kunde_id }}/Loeschkonzept.md"
+    owner: root
+    group: root
+    mode: "0640"
+  become: true

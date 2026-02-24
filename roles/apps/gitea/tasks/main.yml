@@ -1,0 +1,11 @@
+---
+# roles/apps/gitea/tasks/main.yml
+
+- name: Deploy Gitea
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [gitea, deploy]
+
+- name: Configure OIDC for Gitea
+  ansible.builtin.import_tasks: oidc.yml
+  tags: [gitea, oidc]
+  when: gitea_oidc_enabled | default(false)

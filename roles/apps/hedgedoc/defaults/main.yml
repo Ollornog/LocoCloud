@@ -1,0 +1,35 @@
+---
+# roles/apps/hedgedoc/defaults/main.yml
+# HedgeDoc — Real-time collaborative markdown editor
+
+hedgedoc_stack_path: "/opt/stacks/hedgedoc"
+hedgedoc_data_path: "/mnt/data/hedgedoc"
+hedgedoc_image: "quay.io/hedgedoc/hedgedoc:1"
+hedgedoc_port: 8088
+
+hedgedoc_domain: ""
+
+# PostgreSQL
+hedgedoc_db_image: "postgres:18"
+hedgedoc_db_name: "hedgedoc"
+hedgedoc_db_user: "hedgedoc"
+hedgedoc_db_password: ""  # Generated if empty
+
+# Session secret
+hedgedoc_session_secret: ""  # Generated if empty
+
+# OIDC
+hedgedoc_oidc_enabled: false
+hedgedoc_oidc_client_id: ""
+hedgedoc_oidc_client_secret: ""
+hedgedoc_oidc_provider_url: ""
+
+hedgedoc_public_paths: []
+
+hedgedoc_backup_paths:
+  - "/opt/stacks/hedgedoc"
+  - "/mnt/data/hedgedoc"
+
+hedgedoc_pre_backup_cmd: "docker exec hedgedoc-db pg_dumpall -U postgres > /opt/backups/dumps/hedgedoc_pg.sql"
+
+hedgedoc_health_path: "/status"

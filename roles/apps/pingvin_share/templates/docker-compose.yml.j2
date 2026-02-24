@@ -1,0 +1,20 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Pingvin Share
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  pingvin-share:
+    image: {{ pingvin_share_image }}
+    container_name: pingvin-share
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ pingvin_share_port }}:3000"
+    volumes:
+      - {{ pingvin_share_data_path }}/uploads:/opt/app/backend/uploads
+      - {{ pingvin_share_data_path }}/data:/opt/app/backend/data
+    env_file:
+      - .env
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"

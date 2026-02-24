@@ -1,10 +1,13 @@
 ---
 # roles/monitoring/tasks/main.yml
+# Deploys Grafana Alloy as the unified monitoring agent
 
-- name: Install Zabbix Agent
-  ansible.builtin.import_tasks: agent.yml
-  tags: [monitoring, zabbix]
-
-- name: Deploy monitoring scripts
-  ansible.builtin.import_tasks: scripts.yml
-  tags: [monitoring, scripts]
+- name: Deploy Grafana Alloy agent
+  ansible.builtin.include_role:
+    name: alloy
+  vars:
+    alloy_prometheus_url: "{{ monitoring_prometheus_url }}"
+    alloy_loki_url: "{{ monitoring_loki_url }}"
+    alloy_instance_label: "{{ monitoring_instance_label }}"
+    alloy_kunde_label: "{{ monitoring_kunde_label }}"
+  tags: [monitoring, alloy]

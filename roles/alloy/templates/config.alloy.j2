@@ -1,0 +1,129 @@
+// ============================================
+// GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+// Grafana Alloy Configuration
+// Generiert: {{ ansible_date_time.iso8601 }}
+// ============================================
+
+// -----------------------------------------------
+// Node metrics (built-in node_exporter)
+// -----------------------------------------------
+prometheus.exporter.unix "node" {
+  // Uses default collectors: cpu, disk, filesystem, loadavg, memory, netdev, etc.
+}
+
+prometheus.scrape "node" {
+  targets    = prometheus.exporter.unix.node.targets
+  forward_to = [prometheus.remote_write.default.receiver]
+
+  scrape_interval = "60s"
+  job_name        = "node"
+}
+
+// -----------------------------------------------
+// Docker container metrics
+// -----------------------------------------------
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "docker" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "instance"
+    replacement   = "{{ alloy_instance_label }}"
+  }
+}
+
+prometheus.scrape "docker" {
+  targets    = discovery.relabel.docker.output
+  forward_to = [prometheus.remote_write.default.receiver]
+
+  scrape_interval = "60s"
+  job_name        = "docker"
+}
+
+// -----------------------------------------------
+// Remote write to Prometheus on master
+// -----------------------------------------------
+prometheus.remote_write "default" {
+  endpoint {
+    url = "{{ alloy_prometheus_url }}"
+  }
+
+  external_labels = {
+    instance = "{{ alloy_instance_label }}",
+    kunde    = "{{ alloy_kunde_label }}",
+  }
+}
+
+// -----------------------------------------------
+// Journal / syslog log collection
+// -----------------------------------------------
+loki.source.journal "syslog" {
+  forward_to = [loki.write.default.receiver]
+
+  relabel_rules = loki.relabel.journal.rules
+
+  labels = {
+    job      = "journal",
+    instance = "{{ alloy_instance_label }}",
+    kunde    = "{{ alloy_kunde_label }}",
+  }
+}
+
+loki.relabel "journal" {
+  forward_to = []
+
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+
+  rule {
+    source_labels = ["__journal_priority_keyword"]
+    target_label  = "level"
+  }
+}
+
+// -----------------------------------------------
+// Docker container log collection
+// -----------------------------------------------
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.docker.containers.targets
+  forward_to = [loki.relabel.docker_logs.receiver]
+
+  labels = {
+    job      = "docker",
+    instance = "{{ alloy_instance_label }}",
+    kunde    = "{{ alloy_kunde_label }}",
+  }
+}
+
+loki.relabel "docker_logs" {
+  forward_to = [loki.write.default.receiver]
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+}
+
+// -----------------------------------------------
+// Push logs to Loki on master
+// -----------------------------------------------
+loki.write "default" {
+  endpoint {
+    url = "{{ alloy_loki_url }}"
+  }
+}

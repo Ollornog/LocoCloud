@@ -1,0 +1,10 @@
+---
+# roles/apps/gitea/handlers/main.yml
+
+- name: restart caddy
+  ansible.builtin.command: docker restart caddy
+  changed_when: true
+
+- name: restart gitea
+  ansible.builtin.command: docker restart gitea
+  changed_when: true

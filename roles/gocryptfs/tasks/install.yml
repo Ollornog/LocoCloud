@@ -1,0 +1,41 @@
+---
+# roles/gocryptfs/tasks/install.yml
+# Install gocryptfs and FUSE, create required directories
+
+- name: Install gocryptfs and FUSE packages
+  ansible.builtin.apt:
+    name:
+      - gocryptfs
+      - fuse3
+    state: present
+    update_cache: true
+
+- name: Ensure FUSE kernel module is loaded
+  ansible.builtin.modprobe:
+    name: fuse
+    state: present
+  when: not (is_lxc | default(false))
+
+- name: Create encrypted cipher directory
+  ansible.builtin.file:
+    path: "{{ gocryptfs_cipher_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Create plaintext mount directory
+  ansible.builtin.file:
+    path: "{{ gocryptfs_plain_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create scripts directory
+  ansible.builtin.file:
+    path: "{{ gocryptfs_mount_script | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"

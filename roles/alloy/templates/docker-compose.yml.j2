@@ -1,0 +1,23 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Grafana Alloy
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  alloy:
+    image: {{ alloy_image }}
+    container_name: alloy
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:{{ alloy_port }}:12345"
+    volumes:
+      - {{ alloy_stack_path }}/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/log:/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - "run"
+      - "/etc/alloy/config.alloy"
+      - "--server.http.listen-addr=0.0.0.0:12345"
+      - "--server.http.memory-limit-mb={{ alloy_memory_limit_mb }}"
+    # NO watchtower label — infrastructure container

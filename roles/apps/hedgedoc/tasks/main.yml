@@ -1,0 +1,11 @@
+---
+# roles/apps/hedgedoc/tasks/main.yml
+
+- name: Deploy HedgeDoc
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [hedgedoc, deploy]
+
+- name: Configure OIDC for HedgeDoc
+  ansible.builtin.import_tasks: oidc.yml
+  tags: [hedgedoc, oidc]
+  when: hedgedoc_oidc_enabled | default(false)

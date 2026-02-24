@@ -1,0 +1,110 @@
+# Technisch-Organisatorische Maßnahmen (TOM)
+
+<!--
+============================================
+GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+Kunde: {{ compliance_kunde_name }} ({{ compliance_kunde_domain }})
+Generiert: {{ ansible_date_time.iso8601 }}
+============================================
+-->
+
+**Kunde:** {{ compliance_kunde_name }}
+**Domain:** {{ compliance_kunde_domain }}
+**Kunden-ID:** {{ compliance_kunde_id }}
+**Betreiber:** {{ compliance_operator_name }}
+**Kontakt:** {{ compliance_operator_email }}
+**Stand:** {{ ansible_date_time.date }}
+
+---
+
+Die nachfolgenden technisch-organisatorischen Maßnahmen werden gemäß Art. 32 DSGVO zum Schutz personenbezogener Daten umgesetzt.
+
+---
+
+## 1. Zutrittskontrolle
+
+Maßnahmen, die unbefugten Personen den Zutritt zu Datenverarbeitungsanlagen verwehren.
+
+- Serverinfrastruktur wird in professionellen Rechenzentren mit physischer Zutrittskontrolle betrieben
+- Zugang zu Serverräumen nur für autorisiertes Personal des Rechenzentrumsbetreibers
+- Keine lokale Datenverarbeitung auf Endgeräten des Betreibers — alle Daten liegen ausschließlich auf der Serverinfrastruktur
+
+## 2. Zugangskontrolle
+
+Maßnahmen, die verhindern, dass Datenverarbeitungssysteme von Unbefugten genutzt werden.
+
+- SSH-Zugang ausschließlich über SSH-Key-Authentifizierung (Passwort-Login deaktiviert)
+- SSH-Zugang nur über das Netbird-VPN-Netzwerk (WireGuard-basiert) erreichbar — kein direkter Zugang über das öffentliche Internet
+- Fail2ban zur automatischen Sperrung nach fehlgeschlagenen Anmeldeversuchen
+- UFW-Firewall auf allen Servern aktiv — nur explizit freigegebene Ports erreichbar
+- Automatische Sicherheitsupdates (Unattended Upgrades) aktiviert
+- Regelmäßige Prüfung und Rotation von SSH-Schlüsseln
+
+## 3. Zugriffskontrolle
+
+Maßnahmen, die gewährleisten, dass nur Berechtigte auf Daten zugreifen.
+
+- Zentrales Identity Management über PocketID (OpenID Connect)
+- Jeder Benutzer erhält individuelle Zugangsdaten — keine geteilten Accounts
+- Rollenbasierte Zugriffskontrolle (RBAC) über PocketID-Gruppen
+- Forward-Auth über Tinyauth für alle Webanwendungen, die keine eigene Authentifizierung mitbringen
+- Passwörter und Secrets werden ausschließlich in Vaultwarden (selbst-gehosteter Passwort-Manager) gespeichert
+- API-Tokens und Credentials werden automatisiert generiert und nie im Klartext in der Konfiguration gespeichert
+- Registrierung neuer Benutzer ist deaktiviert (PocketID /register via Caddy gesperrt)
+
+## 4. Weitergabekontrolle
+
+Maßnahmen, die verhindern, dass Daten bei Übertragung unbefugt gelesen oder verändert werden.
+
+- Gesamte Kommunikation zwischen Servern über Netbird-VPN (WireGuard-Verschlüsselung)
+- TLS-Verschlüsselung (HTTPS) für alle externen Verbindungen via Caddy Reverse Proxy mit automatischen Let's Encrypt-Zertifikaten
+- Daten-at-Rest-Verschlüsselung durch gocryptfs (FUSE-basierte Dateiverschlüsselung) auf allen Datenpartitionen
+- Verschlüsselungsschlüssel werden separat auf dem Master-Server und einem Backup-Server aufbewahrt
+- Backups werden verschlüsselt (Restic mit AES-256) auf externe Zielserver übertragen
+
+## 5. Eingabekontrolle
+
+Maßnahmen, die nachträglich prüfbar machen, wer wann welche Daten eingegeben oder verändert hat.
+
+- Zentrales Logging über Grafana Loki — alle Applikationslogs werden aggregiert und aufbewahrt
+- Log-Aufbewahrungsdauer: {{ compliance_log_retention }}
+- Audit-Logs der Anwendungen (soweit von der jeweiligen App unterstützt)
+- Alle administrativen Änderungen erfolgen über Ansible (Infrastructure as Code) und werden im Git-Repository versioniert
+- Nachvollziehbarkeit aller Konfigurationsänderungen über Git-History
+
+## 6. Auftragskontrolle
+
+Maßnahmen, die gewährleisten, dass Daten nur gemäß den Weisungen des Auftraggebers verarbeitet werden.
+
+- Auftragsverarbeitungsvertrag (AVV) mit jedem Kunden geschlossen
+- Datenverarbeitung erfolgt ausschließlich innerhalb der definierten Zwecke
+- Kein Zugriff durch Dritte auf Kundendaten — alle Dienste sind selbst gehostet
+- Technische Mandantentrennung (siehe Trennungsgebot)
+- Regelmäßige Überprüfung der Auftragsverarbeitungsverhältnisse
+
+## 7. Verfügbarkeitskontrolle
+
+Maßnahmen zum Schutz gegen zufällige Zerstörung oder Verlust von Daten.
+
+- Automatisierte Backups via Restic (alle {{ compliance_backup_retention }} aufbewahrt)
+- Backup-Aufbewahrung mit konfigurierbarer Retention-Policy (täglich, wöchentlich, monatlich)
+- Backup-Integrität wird automatisch geprüft
+- Monitoring über Grafana-Stack (Prometheus, Loki, Alertmanager) mit Alarmierung bei Ausfällen
+- Uptime Kuma für externe Erreichbarkeitsprüfung
+- Automatische Neustarts bei Container-Ausfällen (`restart: unless-stopped`)
+- gocryptfs-Verschlüsselungsschlüssel auf separatem Backup-Server gesichert
+
+## 8. Trennungsgebot
+
+Maßnahmen, die gewährleisten, dass zu unterschiedlichen Zwecken erhobene Daten getrennt verarbeitet werden.
+
+- Jeder Kunde erhält eigene LXC-Container oder dedizierte Server — keine gemeinsame Nutzung von Applikationsinstanzen
+- Separate Datenbanken pro Kunde und Anwendung
+- Trennung der Docker-Netzwerke pro Applikation
+- Kundenspezifische Verschlüsselung der Datenpartitionen (individuelle gocryptfs-Schlüssel)
+- DNS-Isolation über kundenspezifische Subdomains
+- Netzwerksegmentierung über Netbird-Routen und UFW-Regeln
+
+---
+
+*Dieses Dokument wird bei jeder relevanten Änderung der Infrastruktur automatisch neu generiert.*

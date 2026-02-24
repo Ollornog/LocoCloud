@@ -1,0 +1,30 @@
+---
+# roles/baserow/defaults/main.yml
+# Baserow — Permission management (Berechtigungskonzept)
+
+baserow_stack_path: "/opt/stacks/baserow"
+baserow_image: "baserow/baserow:1"
+baserow_port: 8085
+
+# Domain
+baserow_domain: ""  # e.g. "permissions.admin.example.com"
+
+# Admin account
+baserow_admin_email: ""      # Set from loco.operator.email
+baserow_admin_password: ""   # Generated if empty
+
+# Database (embedded PostgreSQL in Baserow image)
+# Baserow uses an internal SQLite/PostgreSQL — no external DB needed
+
+# OIDC
+baserow_oidc_enabled: false
+baserow_oidc_client_id: ""
+baserow_oidc_client_secret: ""
+baserow_oidc_provider_url: ""  # e.g. "https://id.firma.de"
+
+# Health check
+baserow_health_path: "/_health/"
+
+# Backup paths
+baserow_backup_paths:
+  - "/opt/stacks/baserow"

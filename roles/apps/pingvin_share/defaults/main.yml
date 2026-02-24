@@ -1,0 +1,24 @@
+---
+# roles/apps/pingvin_share/defaults/main.yml
+# Pingvin Share — Self-hosted file sharing
+
+pingvin_share_stack_path: "/opt/stacks/pingvin-share"
+pingvin_share_data_path: "/mnt/data/pingvin-share"
+pingvin_share_image: "stonith404/pingvin-share:1"
+pingvin_share_port: 8087
+
+pingvin_share_domain: ""
+
+# OIDC
+pingvin_share_oidc_enabled: false
+pingvin_share_oidc_client_id: ""
+pingvin_share_oidc_client_secret: ""
+pingvin_share_oidc_provider_url: ""
+
+pingvin_share_public_paths: []
+
+pingvin_share_backup_paths:
+  - "/opt/stacks/pingvin-share"
+  - "/mnt/data/pingvin-share"
+
+pingvin_share_health_path: "/"

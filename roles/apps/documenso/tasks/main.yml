@@ -1,0 +1,11 @@
+---
+# roles/apps/documenso/tasks/main.yml
+
+- name: Deploy Documenso
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [documenso, deploy]
+
+- name: Configure OIDC for Documenso
+  ansible.builtin.import_tasks: oidc.yml
+  tags: [documenso, oidc]
+  when: documenso_oidc_enabled | default(false)

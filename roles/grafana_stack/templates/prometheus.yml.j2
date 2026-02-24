@@ -1,0 +1,22 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Prometheus Configuration
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Alloy agents on customer servers (file-based service discovery)
+  - job_name: "alloy"
+    file_sd_configs:
+      - files:
+          - "/etc/prometheus/targets/*.yml"
+        refresh_interval: 30s
