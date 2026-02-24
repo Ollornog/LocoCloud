@@ -1,0 +1,19 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# myapp
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  myapp:
+    image: {{ myapp_image }}
+    container_name: myapp
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ myapp_port }}:8080"
+    volumes:
+      - {{ myapp_data_path }}:/data
+    env_file:
+      - .env
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"

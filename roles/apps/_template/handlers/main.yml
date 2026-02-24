@@ -1,0 +1,11 @@
+---
+# roles/apps/_template/handlers/main.yml
+# TEMPLATE — Replace "myapp" with your app name
+
+- name: restart caddy
+  ansible.builtin.command: docker restart caddy
+  changed_when: true
+
+- name: restart myapp
+  ansible.builtin.command: docker restart myapp
+  changed_when: true

@@ -1,0 +1,6 @@
+---
+# roles/alloy/tasks/main.yml
+
+- name: Deploy Grafana Alloy
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [alloy, deploy]

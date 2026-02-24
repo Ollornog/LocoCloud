@@ -1,0 +1,11 @@
+---
+# roles/grafana_stack/tasks/main.yml
+
+- name: Deploy Grafana Stack
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [grafana_stack, deploy]
+
+- name: Configure OIDC for Grafana
+  ansible.builtin.import_tasks: oidc.yml
+  tags: [grafana_stack, oidc]
+  when: grafana_oidc_enabled | default(false)

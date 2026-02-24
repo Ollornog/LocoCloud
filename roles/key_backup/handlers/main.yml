@@ -1,0 +1,3 @@
+---
+# roles/key_backup/handlers/main.yml
+# No handlers needed — key sync is cron-based

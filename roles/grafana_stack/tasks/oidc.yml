@@ -1,0 +1,77 @@
+---
+# roles/grafana_stack/tasks/oidc.yml
+# Register Grafana as OIDC client in PocketID and configure SSO.
+# Only runs when pocketid_api_token is available.
+
+- name: Check if Grafana OIDC client exists in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ pocketid_domain }}/api/oidc/clients"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ pocketid_api_token }}"
+    status_code: 200
+  register: oidc_clients
+
+- name: Find existing Grafana OIDC client
+  ansible.builtin.set_fact:
+    grafana_oidc_client: >-
+      {{ oidc_clients.json | selectattr('name', 'equalto', 'Grafana') | list | first | default(None) }}
+
+- name: Create Grafana OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ pocketid_domain }}/api/oidc/clients"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ pocketid_api_token }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      name: "Grafana"
+      callbackURLs:
+        - "https://{{ grafana_domain }}/login/generic_oauth"
+    status_code: [200, 201]
+  register: oidc_create_result
+  when: grafana_oidc_client is none
+
+- name: Set OIDC client facts from creation
+  ansible.builtin.set_fact:
+    grafana_oidc_client_id: "{{ oidc_create_result.json.id }}"
+    grafana_oidc_client_secret: "{{ oidc_create_result.json.secret }}"
+  when: grafana_oidc_client is none
+
+- name: Set OIDC client facts from existing client
+  ansible.builtin.set_fact:
+    grafana_oidc_client_id: "{{ grafana_oidc_client.id }}"
+    grafana_oidc_client_secret: "{{ grafana_oidc_client.secret | default('') }}"
+  when: grafana_oidc_client is not none
+
+- name: Set OIDC URL facts
+  ansible.builtin.set_fact:
+    grafana_oidc_enabled: true
+    grafana_oidc_auth_url: "https://{{ pocketid_domain }}/authorize"
+    grafana_oidc_token_url: "https://{{ pocketid_domain }}/api/oidc/token"
+
+- name: Redeploy Grafana docker-compose with OIDC config
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ grafana_stack_path }}/docker-compose.yml"
+    mode: "0644"
+  notify: restart grafana
+
+- name: Apply OIDC config immediately
+  ansible.builtin.meta: flush_handlers
+
+- name: Store Grafana OIDC credentials in Vaultwarden
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "Master — Grafana OIDC Client"
+    credential_username: "{{ grafana_oidc_client_id }}"
+    credential_password: "{{ grafana_oidc_client_secret }}"
+    credential_uri: "https://{{ pocketid_domain }}"
+    credential_notes: "PocketID OIDC client for Grafana. Deployed: {{ ansible_date_time.iso8601 }}"
+  when:
+    - loco is defined
+    - grafana_oidc_client_secret | length > 0

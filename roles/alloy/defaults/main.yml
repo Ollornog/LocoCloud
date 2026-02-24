@@ -1,0 +1,21 @@
+---
+# roles/alloy/defaults/main.yml
+# Grafana Alloy — unified telemetry agent
+
+alloy_stack_path: "/opt/stacks/alloy"
+alloy_image: "grafana/alloy:v1"
+alloy_port: 12345  # Alloy UI/health port
+
+# Remote write endpoints (master Grafana Stack)
+alloy_prometheus_url: ""  # e.g. "http://100.64.0.1:9090/api/v1/write"
+alloy_loki_url: ""        # e.g. "http://100.64.0.1:3100/loki/api/v1/push"
+
+# Labels
+alloy_instance_label: ""  # e.g. "kunde-abc-server01"
+alloy_kunde_label: ""     # e.g. "kunde-abc"
+
+# Memory limit for small LXCs
+alloy_memory_limit_mb: 256
+
+# Health check
+alloy_health_path: "/-/ready"

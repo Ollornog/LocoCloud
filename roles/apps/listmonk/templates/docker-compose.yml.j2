@@ -1,0 +1,32 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Listmonk
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  listmonk:
+    image: {{ listmonk_image }}
+    container_name: listmonk
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ listmonk_port }}:9000"
+    volumes:
+      - {{ listmonk_data_path }}:/listmonk/uploads
+    env_file:
+      - .env
+    depends_on:
+      - listmonk-db
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  listmonk-db:
+    image: {{ listmonk_db_image }}
+    container_name: listmonk-db
+    restart: unless-stopped
+    volumes:
+      - {{ listmonk_stack_path }}/db:/var/lib/postgresql
+    environment:
+      POSTGRES_DB: {{ listmonk_db_name }}
+      POSTGRES_USER: {{ listmonk_db_user }}
+      POSTGRES_PASSWORD: {{ listmonk_db_password }}

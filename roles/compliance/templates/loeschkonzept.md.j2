@@ -1,0 +1,152 @@
+# Löschkonzept
+# gemäß Art. 17 DSGVO und GoBD
+
+<!--
+============================================
+GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+Kunde: {{ compliance_kunde_name }} ({{ compliance_kunde_domain }})
+Generiert: {{ ansible_date_time.iso8601 }}
+============================================
+-->
+
+**Kunde:** {{ compliance_kunde_name }}
+**Domain:** {{ compliance_kunde_domain }}
+**Kunden-ID:** {{ compliance_kunde_id }}
+**Betreiber:** {{ compliance_operator_name }}
+**Kontakt:** {{ compliance_operator_email }}
+**Stand:** {{ ansible_date_time.date }}
+
+---
+
+## 1. Zweck und Geltungsbereich
+
+Dieses Löschkonzept beschreibt die Regeln und Verfahren zur Löschung personenbezogener Daten im Rahmen der Cloud-Dienste, die {{ compliance_operator_name }} für {{ compliance_kunde_name }} betreibt.
+
+Das Konzept stellt sicher, dass:
+- Personenbezogene Daten nicht länger als notwendig gespeichert werden (Speicherbegrenzung, Art. 5 Abs. 1 lit. e DSGVO)
+- Betroffene ihr Recht auf Löschung gemäß Art. 17 DSGVO ausüben können
+- Gesetzliche Aufbewahrungsfristen (HGB, AO) eingehalten werden
+- Löschungen nachvollziehbar dokumentiert werden
+
+---
+
+## 2. Datenkategorien und Löschfristen
+
+### 2.1 Benutzerdaten
+
+| Datenkategorie | Aufbewahrungsfrist | Löschmethode | Automatisiert |
+|----------------|-------------------|--------------|---------------|
+| Benutzerkonten (PocketID) | {{ compliance_user_data_retention }} | Löschung über PocketID-Admin-API | Manuell nach Vertragsende |
+| Anwendungsdaten (Dateien, Dokumente) | {{ compliance_user_data_retention }} | Löschung der Container-Volumes und verschlüsselten Partitionen | Manuell nach Vertragsende |
+| Datenbankeinträge | {{ compliance_user_data_retention }} | Löschung der Datenbank-Volumes | Manuell nach Vertragsende |
+
+### 2.2 Protokolldaten
+
+| Datenkategorie | Aufbewahrungsfrist | Löschmethode | Automatisiert |
+|----------------|-------------------|--------------|---------------|
+| Anwendungslogs (Loki) | {{ compliance_log_retention }} | Automatische Retention-Policy in Grafana Loki | Ja |
+| Zugriffslogs (Caddy) | {{ compliance_log_retention }} | Automatische Log-Rotation und Löschung | Ja |
+| Systemlogs | {{ compliance_log_retention }} | Automatische Log-Rotation (logrotate) | Ja |
+| Audit-Logs | {{ compliance_log_retention }} | Automatische Retention-Policy | Ja |
+
+### 2.3 Backup-Daten
+
+| Datenkategorie | Aufbewahrungsfrist | Löschmethode | Automatisiert |
+|----------------|-------------------|--------------|---------------|
+| Restic-Backups | {{ compliance_backup_retention }} | Automatisches Pruning via Restic Retention-Policy (keep-daily, keep-weekly, keep-monthly) | Ja |
+| gocryptfs-Schlüssel (Backup) | Vertragsdauer | Manuelle Löschung vom Backup-Server nach Vertragsende | Manuell |
+
+### 2.4 Infrastrukturdaten
+
+| Datenkategorie | Aufbewahrungsfrist | Löschmethode | Automatisiert |
+|----------------|-------------------|--------------|---------------|
+| Monitoring-Metriken (Prometheus) | {{ compliance_log_retention }} | Automatische Retention-Policy in Prometheus | Ja |
+| VPN-Verbindungsdaten (Netbird) | Sitzungsdauer | Automatisch nach Sitzungsende | Ja |
+| DNS-Auflösungslogs | Keine dauerhafte Speicherung | Flüchtig (nur im Arbeitsspeicher) | Ja |
+
+{% if compliance_apps | length > 0 %}
+### 2.5 App-spezifische Daten
+
+{% for app in compliance_apps %}
+{% if app.name | lower == 'paperless' or app.name | lower == 'paperless-ngx' %}
+**{{ app.name }}:** Archivierte Dokumente unterliegen ggf. handels- und steuerrechtlichen Aufbewahrungsfristen (6 Jahre gem. § 257 HGB / 10 Jahre gem. § 147 AO). Diese Fristen haben Vorrang vor der allgemeinen Löschfrist. Nach Ablauf der gesetzlichen Frist erfolgt die Löschung im Rahmen des regulären Prozesses.
+
+{% endif %}
+{% endfor %}
+{% endif %}
+
+---
+
+## 3. Löschverfahren
+
+### 3.1 Automatische Löschung
+
+Die folgenden Daten werden automatisch nach Ablauf der konfigurierten Fristen gelöscht:
+
+- **Grafana Loki:** Log-Daten werden nach {{ compliance_log_retention }} automatisch durch die Loki-Retention-Policy entfernt
+- **Restic-Backups:** Alte Backup-Snapshots werden automatisch durch `restic forget --prune` gemäß der konfigurierten Retention-Policy entfernt
+- **Prometheus-Metriken:** Metriken werden nach {{ compliance_log_retention }} automatisch durch die Prometheus-Retention entfernt
+- **Systemlogs:** Werden durch logrotate automatisch rotiert und gelöscht
+
+### 3.2 Manuelle Löschung bei Vertragsende
+
+Bei Beendigung des Auftragsverarbeitungsverhältnisses wird folgender Prozess durchgeführt:
+
+1. **Datenexport** (optional, auf Wunsch des Kunden):
+   - Export aller Anwendungsdaten in einem standardisierten Format
+   - Übergabe an den Kunden über einen sicheren Kanal
+
+2. **Löschung der Anwendungsdaten:**
+   - Stoppen aller Docker-Container des Kunden
+   - Löschung aller Container-Volumes und Anwendungsdaten
+   - Vernichtung der gocryptfs-Verschlüsselungsschlüssel (Master und Backup-Server)
+   - Damit sind alle verschlüsselten Datenpartitionen unwiderruflich unlesbar
+
+3. **Löschung der Infrastruktur:**
+   - Entfernung des Kunden-LXC-Containers (bei dedizierten Containern)
+   - Löschung der Kunden-Konfiguration aus dem Ansible-Inventar
+   - Entfernung der DNS-Einträge und Caddy-Konfiguration
+
+4. **Löschung der Backups:**
+   - Entfernung aller Restic-Snapshots des Kunden
+   - Löschung des Restic-Repositories
+
+5. **Löschung der Benutzerkonten:**
+   - Entfernung aller Benutzerkonten des Kunden aus PocketID
+   - Widerruf aller OIDC-Tokens und -Clients
+
+6. **Bestätigung:**
+   - Dokumentation der durchgeführten Löschung
+   - Schriftliche Bestätigung an den Kunden
+
+### 3.3 Löschung auf Anfrage (Art. 17 DSGVO)
+
+Bei einem Löschersuchen einer betroffenen Person:
+
+1. **Prüfung:** Überprüfung, ob der Löschung gesetzliche Aufbewahrungspflichten entgegenstehen
+2. **Durchführung:** Löschung der betreffenden Daten in allen Anwendungen und Backups
+3. **Bestätigung:** Rückmeldung an die betroffene Person innerhalb eines Monats (Art. 12 Abs. 3 DSGVO)
+
+**Hinweis:** Die Löschung aus verschlüsselten Backups (Restic) erfolgt durch Ablauf der Retention-Frist. Eine sofortige Löschung einzelner Datensätze aus Backups ist technisch nicht möglich, die Daten sind jedoch verschlüsselt und nach Ablauf der Retention-Frist nicht mehr vorhanden.
+
+---
+
+## 4. Verantwortlichkeiten
+
+| Rolle | Verantwortung |
+|-------|---------------|
+| {{ compliance_operator_name }} (Auftragsverarbeiter) | Technische Durchführung der Löschung, Konfiguration automatischer Retention-Policies, Löschbestätigung |
+| {{ compliance_kunde_name }} (Verantwortlicher) | Entscheidung über Löschung, Bearbeitung von Löschanfragen betroffener Personen, Einhaltung gesetzlicher Aufbewahrungsfristen |
+
+---
+
+## 5. Dokumentation und Nachweis
+
+- Alle automatischen Löschvorgänge werden in den Systemlogs protokolliert
+- Manuelle Löschvorgänge werden dokumentiert und mit Datum versehen
+- Dieses Löschkonzept wird bei Änderungen der Infrastruktur oder App-Konfiguration automatisch neu generiert
+- Die jeweils aktuelle Version wird unter `{{ compliance_output_path }}/{{ compliance_kunde_id }}/` abgelegt
+
+---
+
+*Dieses Dokument wird bei jeder relevanten Änderung der Infrastruktur automatisch neu generiert.*

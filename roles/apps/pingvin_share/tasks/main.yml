@@ -1,0 +1,11 @@
+---
+# roles/apps/pingvin_share/tasks/main.yml
+
+- name: Deploy Pingvin Share
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [pingvin_share, deploy]
+
+- name: Configure OIDC for Pingvin Share
+  ansible.builtin.import_tasks: oidc.yml
+  tags: [pingvin_share, oidc]
+  when: pingvin_share_oidc_enabled | default(false)

@@ -1,0 +1,38 @@
+---
+# roles/apps/gitea/tasks/deploy.yml
+
+- name: Create Gitea directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ gitea_stack_path }}"
+    - "{{ gitea_data_path }}"
+
+- name: Deploy Gitea docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ gitea_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Deploy Gitea .env
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ gitea_stack_path }}/.env"
+    mode: "0600"
+
+- name: Start Gitea
+  community.docker.docker_compose_v2:
+    project_src: "{{ gitea_stack_path }}"
+    state: present
+
+- name: Wait for Gitea to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ gitea_port }}{{ gitea_health_path }}"
+    method: GET
+    status_code: [200, 301, 302]
+  register: gitea_health
+  until: gitea_health.status in [200, 301, 302]
+  retries: 30
+  delay: 5

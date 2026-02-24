@@ -1,0 +1,40 @@
+---
+# roles/key_backup/tasks/install.yml
+# Create key backup directory and generate SSH key pair
+
+- name: Ensure rsync is installed
+  ansible.builtin.apt:
+    name: rsync
+    state: present
+  become: true
+
+- name: Create key backup directory
+  ansible.builtin.file:
+    path: "{{ key_backup_store_path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ key_backup_dir_mode }}"
+  become: true
+
+- name: Generate SSH key pair for key sync (if not exists)
+  ansible.builtin.openssh_keypair:
+    path: "{{ key_backup_ssh_key }}"
+    type: ed25519
+    comment: "key-backup@{{ inventory_hostname }}"
+    state: present
+  become: true
+  register: key_backup_ssh_keypair
+
+- name: Read SSH public key
+  ansible.builtin.slurp:
+    src: "{{ key_backup_ssh_key }}.pub"
+  become: true
+  register: key_backup_ssh_pubkey
+
+- name: Display SSH public key for deployment to master
+  ansible.builtin.debug:
+    msg: >-
+      Deploy this public key to {{ key_backup_master_host }}
+      ({{ key_backup_master_user }}@{{ key_backup_master_host }}):
+      {{ key_backup_ssh_pubkey.content | b64decode | trim }}

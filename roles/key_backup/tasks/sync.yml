@@ -1,0 +1,42 @@
+---
+# roles/key_backup/tasks/sync.yml
+# Deploy sync script and setup periodic cron job
+
+- name: Create scripts directory
+  ansible.builtin.file:
+    path: "/opt/scripts"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
+
+- name: Deploy key sync script
+  ansible.builtin.template:
+    src: sync-keys.sh.j2
+    dest: /opt/scripts/sync-keys.sh
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+
+- name: Setup cron job for periodic key sync
+  ansible.builtin.cron:
+    name: "gocryptfs key backup sync"
+    job: "/opt/scripts/sync-keys.sh >> /var/log/key-backup-sync.log 2>&1"
+    minute: "{{ key_backup_sync_schedule.split(' ')[0] }}"
+    hour: "{{ key_backup_sync_schedule.split(' ')[1] }}"
+    day: "{{ key_backup_sync_schedule.split(' ')[2] }}"
+    month: "{{ key_backup_sync_schedule.split(' ')[3] }}"
+    weekday: "{{ key_backup_sync_schedule.split(' ')[4] }}"
+    user: root
+    state: present
+  become: true
+
+- name: Run initial key sync
+  ansible.builtin.command:
+    cmd: /opt/scripts/sync-keys.sh
+  become: true
+  register: key_backup_initial_sync
+  changed_when: key_backup_initial_sync.rc == 0
+  when: key_backup_master_host | length > 0

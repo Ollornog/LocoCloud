@@ -1,0 +1,15 @@
+---
+# roles/gocryptfs/tasks/main.yml
+
+- name: Install gocryptfs
+  ansible.builtin.import_tasks: install.yml
+  tags: [gocryptfs, install]
+
+- name: Initialize gocryptfs filesystem
+  ansible.builtin.import_tasks: init.yml
+  tags: [gocryptfs, init]
+
+- name: Setup auto-mount service
+  ansible.builtin.import_tasks: automount.yml
+  tags: [gocryptfs, automount]
+  when: gocryptfs_automount | default(true)

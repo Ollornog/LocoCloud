@@ -1,0 +1,39 @@
+---
+# roles/apps/_template/tasks/deploy.yml
+# TEMPLATE — Replace "myapp" with your app name, adjust directories as needed
+
+- name: Create myapp directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ myapp_stack_path }}"
+    - "{{ myapp_data_path }}"
+
+- name: Deploy myapp docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ myapp_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Deploy myapp .env
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ myapp_stack_path }}/.env"
+    mode: "0600"
+
+- name: Start myapp
+  community.docker.docker_compose_v2:
+    project_src: "{{ myapp_stack_path }}"
+    state: present
+
+- name: Wait for myapp to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ myapp_port }}{{ myapp_health_path }}"
+    method: GET
+    status_code: [200, 301, 302]
+  register: myapp_health
+  until: myapp_health.status in [200, 301, 302]
+  retries: 30
+  delay: 5

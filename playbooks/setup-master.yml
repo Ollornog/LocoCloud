@@ -10,7 +10,9 @@
 #   4. tinyauth   — Forward-auth (needs PocketID OIDC client)
 #   5. vaultwarden — Credential store (needed before credentials role)
 #   6. semaphore  — Ansible Web-UI
-#   7. caddy      — Reverse proxy (last: needs all backends running)
+#   7. grafana    — Monitoring stack (Grafana + Prometheus + Loki)
+#   8. baserow    — Permission management (Berechtigungskonzept)
+#   9. caddy      — Reverse proxy (last: needs all backends running)
 
 - name: Setup Master Server
   hosts: all
@@ -29,8 +31,9 @@
     - role: netbird_client
       vars:
         netbird_setup_key: "{{ vault_master_netbird_setup_key | default('') }}"
-        netbird_management_url: "{{ loco.netbird.manager_url }}"
+        netbird_management_url: "{{ loco.netbird.manager_url | default('') }}"
       tags: [netbird]
+      when: loco.netbird.enabled | default(false)
 
     - role: pocketid
       vars:
@@ -64,6 +67,26 @@
         semaphore_domain: "{{ loco.urls.semaphore }}"
         semaphore_admin_email: "{{ loco.operator.email }}"
       tags: [semaphore]
+
+    - role: grafana_stack
+      vars:
+        grafana_domain: "{{ loco.urls.grafana }}"
+        grafana_admin_password: "{{ loco.grafana.admin_password | default('') }}"
+        prometheus_retention: "{{ loco.grafana.prometheus_retention | default('30d') }}"
+        loki_retention_period: "{{ loco.grafana.loki_retention | default('4320h') }}"
+        grafana_smtp_enabled: "{{ loco.smtp.host | default('') | length > 0 }}"
+        grafana_smtp_host: "{{ loco.smtp.host | default('') }}"
+        grafana_smtp_port: "{{ loco.smtp.port | default(587) }}"
+        grafana_smtp_user: "{{ loco.smtp.user | default('') }}"
+        grafana_smtp_from: "{{ loco.smtp.from | default('') }}"
+        grafana_alert_email_to: "{{ loco.grafana.alerting.email_to | default(loco.operator.email) }}"
+      tags: [grafana, monitoring]
+
+    - role: baserow
+      vars:
+        baserow_domain: "{{ loco.urls.baserow }}"
+        baserow_admin_email: "{{ loco.baserow.admin_email | default(loco.operator.email) }}"
+      tags: [baserow]
 
     - role: caddy
       vars:
@@ -99,11 +122,41 @@
       when: semaphore_admin_password is defined
       tags: [credentials]
 
+    - name: Store Grafana admin credentials in Vaultwarden
+      ansible.builtin.include_role:
+        name: credentials
+        tasks_from: store.yml
+      vars:
+        vw_api_url: "https://{{ loco.urls.vaultwarden }}"
+        credential_name: "Master — Grafana Admin"
+        credential_username: "{{ grafana_admin_user | default('admin') }}"
+        credential_password: "{{ grafana_admin_password }}"
+        credential_uri: "https://{{ loco.urls.grafana }}"
+        credential_notes: "Grafana admin account. Deployed: {{ ansible_date_time.iso8601 }}"
+      when: grafana_admin_password is defined
+      tags: [credentials]
+
+    - name: Store Baserow admin credentials in Vaultwarden
+      ansible.builtin.include_role:
+        name: credentials
+        tasks_from: store.yml
+      vars:
+        vw_api_url: "https://{{ loco.urls.vaultwarden }}"
+        credential_name: "Master — Baserow Admin"
+        credential_username: "{{ baserow_admin_email | default(loco.operator.email) }}"
+        credential_password: "{{ baserow_admin_password }}"
+        credential_uri: "https://{{ loco.urls.baserow }}"
+        credential_notes: "Baserow admin account. Deployed: {{ ansible_date_time.iso8601 }}"
+      when: baserow_admin_password is defined
+      tags: [credentials]
+
     - name: Master setup complete
       ansible.builtin.debug:
         msg: |
           Master setup complete!
-          PocketID:   https://{{ loco.urls.pocketid }}
-          Tinyauth:   https://{{ loco.urls.tinyauth }}
+          PocketID:    https://{{ loco.urls.pocketid }}
+          Tinyauth:    https://{{ loco.urls.tinyauth }}
           Vaultwarden: https://{{ loco.urls.vaultwarden }}
-          Semaphore:  https://{{ loco.urls.semaphore }}
+          Semaphore:   https://{{ loco.urls.semaphore }}
+          Grafana:     https://{{ loco.urls.grafana }}
+          Baserow:     https://{{ loco.urls.baserow }}

@@ -1,0 +1,38 @@
+---
+# roles/apps/outline/tasks/deploy.yml
+
+- name: Create Outline directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ outline_stack_path }}"
+    - "{{ outline_data_path }}"
+
+- name: Deploy Outline docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ outline_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Deploy Outline .env
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ outline_stack_path }}/.env"
+    mode: "0600"
+
+- name: Start Outline
+  community.docker.docker_compose_v2:
+    project_src: "{{ outline_stack_path }}"
+    state: present
+
+- name: Wait for Outline to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ outline_port }}{{ outline_health_path }}"
+    method: GET
+    status_code: [200, 301, 302]
+  register: outline_health
+  until: outline_health.status in [200, 301, 302]
+  retries: 30
+  delay: 5

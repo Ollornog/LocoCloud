@@ -3,17 +3,17 @@
 # Onboard a new customer — creates Netbird resources, deploys auth stack + Caddy.
 # Usage: ansible-playbook playbooks/onboard-customer.yml -i inventories/kunde-abc/
 #
-# Play 1: Netbird API setup (runs on localhost)
-# Play 2: Entry-point setup (hosts with gateway/customer_master roles)
+# Play 1: API setup on localhost (Netbird if enabled, Compliance docs)
+# Play 2: Entry-point setup (base, auth, gocryptfs, Alloy, Caddy)
 # Play 3: LXC creation on Proxmox (only if proxmox hosts exist in inventory)
 
 # =====================================================
-# Play 1: Netbird API setup (runs on localhost/master)
+# Play 1: API setup + Compliance docs (runs on localhost/master)
 # =====================================================
-- name: "Onboarding — Netbird API Setup"
+- name: "Onboarding — API Setup & Compliance"
   hosts: localhost
   connection: local
-  gather_facts: false
+  gather_facts: true
 
   pre_tasks:
     - name: Load global config
@@ -21,8 +21,12 @@
         file: "{{ playbook_dir }}/../config/lococloudd.yml"
         name: loco
 
+    - name: Load customer config
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/group_vars/all.yml"
+
   tasks:
-    # Find loco-admin group ID
+    # --- Netbird API setup (only if enabled) ---
     - name: Get loco-admin group ID
       ansible.builtin.uri:
         url: "{{ loco.netbird.manager_url }}/api/groups"
@@ -31,12 +35,13 @@
           Authorization: "Token {{ loco.netbird.api_token }}"
         status_code: 200
       register: nb_all_groups
+      when: loco.netbird.enabled | default(false)
 
     - name: Set loco-admin group ID
       ansible.builtin.set_fact:
         loco_admin_group_id: "{{ nb_all_groups.json | selectattr('name', 'equalto', 'loco-admin') | map(attribute='id') | first | default('') }}"
+      when: loco.netbird.enabled | default(false)
 
-    # Create customer group
     - name: Create Netbird customer group
       ansible.builtin.include_role:
         name: netbird_client
@@ -45,8 +50,8 @@
         netbird_api_url: "{{ loco.netbird.manager_url }}"
         netbird_api_token: "{{ loco.netbird.api_token }}"
         netbird_group_name: "kunde-{{ kunde_id }}"
+      when: loco.netbird.enabled | default(false)
 
-    # Create policies
     - name: Create Netbird policies
       ansible.builtin.include_role:
         name: netbird_client
@@ -55,8 +60,8 @@
         netbird_api_url: "{{ loco.netbird.manager_url }}"
         netbird_api_token: "{{ loco.netbird.api_token }}"
         backup_enabled: "{{ backup.enabled | default(false) }}"
+      when: loco.netbird.enabled | default(false)
 
-    # Generate setup key
     - name: Generate Netbird setup key
       ansible.builtin.include_role:
         name: netbird_client
@@ -64,8 +69,8 @@
       vars:
         netbird_api_url: "{{ loco.netbird.manager_url }}"
         netbird_api_token: "{{ loco.netbird.api_token }}"
+      when: loco.netbird.enabled | default(false)
 
-    # Store setup key in Vaultwarden
     - name: Store Netbird setup key in Vaultwarden
       ansible.builtin.include_role:
         name: credentials
@@ -76,6 +81,13 @@
         credential_username: "kunde-{{ kunde_id }}"
         credential_password: "{{ nb_generated_setup_key }}"
         credential_notes: "Netbird setup key for onboarding. Expires in 24h. Generated: {{ ansible_date_time.iso8601 | default('N/A') }}"
+      when: loco.netbird.enabled | default(false)
+
+    # --- Generate compliance documents ---
+    - name: Generate compliance documents
+      ansible.builtin.include_role:
+        name: compliance
+      tags: [compliance]
 
 # =====================================================
 # Play 2: Deploy on customer entry-point server
@@ -95,14 +107,22 @@
     - role: base
       tags: [base]
 
-    # 2. Netbird VPN
+    # 2. Netbird VPN (optional)
     - role: netbird_client
       vars:
         netbird_setup_key: "{{ netbird_setup_key | default('') }}"
-        netbird_management_url: "{{ loco.netbird.manager_url }}"
+        netbird_management_url: "{{ loco.netbird.manager_url | default('') }}"
       tags: [netbird]
+      when: loco.netbird.enabled | default(false)
 
-    # 3. PocketID (customer instance — on hosts with customer_master role)
+    # 3. gocryptfs encryption for /mnt/data
+    - role: gocryptfs
+      vars:
+        gocryptfs_master_host: "{{ loco.admin.full_domain | default('') }}"
+      tags: [gocryptfs]
+      when: "'backup_server' not in (server_roles | default([]))"
+
+    # 4. PocketID (customer instance — on hosts with customer_master role)
     - role: pocketid
       vars:
         pocketid_domain: "id.{{ kunde_domain }}"
@@ -110,7 +130,7 @@
       tags: [pocketid]
       when: "'customer_master' in server_roles"
 
-    # 4. Tinyauth (customer instance — on hosts with customer_master role)
+    # 5. Tinyauth (customer instance — on hosts with customer_master role)
     - role: tinyauth
       vars:
         tinyauth_domain: "auth.{{ kunde_domain }}"
@@ -120,12 +140,21 @@
       tags: [tinyauth]
       when: "'customer_master' in server_roles"
 
-    # 5. Caddy (customer Caddyfile — on gateway hosts)
+    # 6. Caddy (customer Caddyfile — on gateway hosts)
     - role: caddy
       vars:
         caddy_mode: "customer"
       tags: [caddy]
       when: "'gateway' in server_roles"
+
+    # 7. Grafana Alloy monitoring agent
+    - role: alloy
+      vars:
+        alloy_prometheus_url: "{{ loco.grafana.prometheus_remote_write_url | default('') }}"
+        alloy_loki_url: "{{ loco.grafana.loki_push_url | default('') }}"
+        alloy_instance_label: "{{ inventory_hostname }}"
+        alloy_kunde_label: "{{ kunde_id | default('') }}"
+      tags: [alloy, monitoring]
 
   post_tasks:
     # Store credentials
@@ -218,9 +247,12 @@
       ansible.builtin.debug:
         msg: |
           Entry-point onboarding complete!
-          Customer: {{ kunde_name }} ({{ kunde_domain }})
-          PocketID:  https://id.{{ kunde_domain }}
-          Tinyauth:  https://auth.{{ kunde_domain }}
+          Customer:    {{ kunde_name }} ({{ kunde_domain }})
+          PocketID:    https://id.{{ kunde_domain }}
+          Tinyauth:    https://auth.{{ kunde_domain }}
+          gocryptfs:   /mnt/data (encrypted)
+          Monitoring:  Alloy agent configured
+          Compliance:  Documents generated on master
           Next: Deploy apps with site.yml or add-app.yml
       when: "'customer_master' in server_roles"
 
@@ -255,7 +287,7 @@
         lxc_memory: "{{ item.memory | default(2048) }}"
         proxmox_host: "{{ inventory_hostname }}"
         netbird_setup_key: "{{ hostvars['localhost']['nb_generated_setup_key'] | default(netbird_setup_key | default('')) }}"
-        netbird_management_url: "{{ loco.netbird.manager_url }}"
+        netbird_management_url: "{{ loco.netbird.manager_url | default('') }}"
       loop: "{{ apps_enabled | default([]) }}"
       loop_control:
         label: "{{ item.name }}"
@@ -276,7 +308,7 @@
         lxc_memory: "{{ single_lxc_memory | default(4096) }}"
         proxmox_host: "{{ inventory_hostname }}"
         netbird_setup_key: "{{ hostvars['localhost']['nb_generated_setup_key'] | default(netbird_setup_key | default('')) }}"
-        netbird_management_url: "{{ loco.netbird.manager_url }}"
+        netbird_management_url: "{{ loco.netbird.manager_url | default('') }}"
       when:
         - isolation_mode | default('single_lxc') == 'single_lxc'
         - apps_enabled | default([]) | length > 0
@@ -294,7 +326,7 @@
         lxc_memory: "{{ gateway_lxc_memory | default(2048) }}"
         proxmox_host: "{{ inventory_hostname }}"
         netbird_setup_key: "{{ hostvars['localhost']['nb_generated_setup_key'] | default(netbird_setup_key | default('')) }}"
-        netbird_management_url: "{{ loco.netbird.manager_url }}"
+        netbird_management_url: "{{ loco.netbird.manager_url | default('') }}"
       when: gateway_lxc_vmid is defined
       tags: [lxc, proxmox, gateway]
 
@@ -302,5 +334,5 @@
       ansible.builtin.debug:
         msg: |
           Proxmox LXC creation complete for {{ kunde_name }}.
-          Created LXCs are now reachable via Netbird.
+          Created LXCs are now reachable{{ ' via Netbird' if loco.netbird.enabled | default(false) else '' }}.
           Next: Run base + app roles on each LXC via site.yml.

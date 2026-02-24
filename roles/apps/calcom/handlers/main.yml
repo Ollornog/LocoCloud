@@ -1,0 +1,10 @@
+---
+# roles/apps/calcom/handlers/main.yml
+
+- name: restart caddy
+  ansible.builtin.command: docker restart caddy
+  changed_when: true
+
+- name: restart calcom
+  ansible.builtin.command: docker restart calcom
+  changed_when: true

@@ -1,0 +1,12 @@
+---
+# roles/apps/_template/tasks/main.yml
+# TEMPLATE — Replace "myapp" with your app name
+
+- name: Deploy myapp
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [myapp, deploy]
+
+- name: Configure OIDC for myapp
+  ansible.builtin.import_tasks: oidc.yml
+  tags: [myapp, oidc]
+  when: myapp_oidc_enabled | default(false)

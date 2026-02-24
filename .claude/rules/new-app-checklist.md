@@ -23,11 +23,19 @@ Wenn eine neue App als Ansible-Rolle implementiert wird:
 ## Konfiguration
 
 - [ ] Public Paths definiert (oder leer = komplett geschützt)
-- [ ] Backup-Pfade definiert
-- [ ] Health-Check definiert (Port + Path für Monitoring)
+- [ ] Backup-Pfade definiert (auf `/mnt/data/`)
+- [ ] Pre-Backup-Hook: DB-Dump definiert falls DB vorhanden
+- [ ] Health-Check definiert (Port + Path für Grafana Monitoring)
+- [ ] Audit-Logging aktiviert und dokumentiert
 - [ ] PostgreSQL 18: Mount auf `/var/lib/postgresql`
 - [ ] Redis: Bei `single_lxc` DB-Nummer zuweisen, bei `lxc_per_app` eigener Container
 - [ ] CSP: Nur setzen wenn App keinen eigenen hat
+
+## Compliance
+
+- [ ] VVT-Eintrag: Verarbeitungstätigkeit im `compliance`-Template definiert
+- [ ] Daten in `/mnt/data/` ablegen (gocryptfs-geschützt)
+- [ ] Löschfristen im Löschkonzept-Template definiert
 
 ## Qualität
 

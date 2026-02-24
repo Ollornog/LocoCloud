@@ -1,0 +1,38 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Outline
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  outline:
+    image: {{ outline_image }}
+    container_name: outline
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ outline_port }}:3000"
+    volumes:
+      - {{ outline_data_path }}:/var/lib/outline/data
+    env_file:
+      - .env
+    depends_on:
+      - outline-db
+      - outline-redis
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  outline-db:
+    image: {{ outline_db_image }}
+    container_name: outline-db
+    restart: unless-stopped
+    volumes:
+      - {{ outline_stack_path }}/db:/var/lib/postgresql
+    environment:
+      POSTGRES_DB: {{ outline_db_name }}
+      POSTGRES_USER: {{ outline_db_user }}
+      POSTGRES_PASSWORD: {{ outline_db_password }}
+
+  outline-redis:
+    image: {{ outline_redis_image }}
+    container_name: outline-redis
+    restart: unless-stopped

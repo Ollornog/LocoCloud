@@ -1,0 +1,51 @@
+---
+# roles/apps/pingvin_share/tasks/oidc.yml
+# Register OIDC client in PocketID for Pingvin Share
+
+- name: Create OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ pingvin_share_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ loco.pocketid.api_token }}"
+    body_format: json
+    body:
+      name: "Pingvin Share ({{ kunde_name }})"
+      callbackURLs:
+        - "https://{{ pingvin_share_domain }}/api/oauth/callback/oidc"
+    status_code: [200, 201]
+  register: pingvin_share_oidc_client
+  when:
+    - pingvin_share_oidc_client_id | length == 0
+    - loco.pocketid.api_token | default('') | length > 0
+
+- name: Set OIDC credentials from API response
+  ansible.builtin.set_fact:
+    pingvin_share_oidc_client_id: "{{ pingvin_share_oidc_client.json.id }}"
+    pingvin_share_oidc_client_secret: "{{ pingvin_share_oidc_client.json.secret }}"
+  when: pingvin_share_oidc_client is not skipped and pingvin_share_oidc_client is changed
+
+- name: Store Pingvin Share OIDC credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — Pingvin Share OIDC Client"
+    credential_username: "{{ pingvin_share_oidc_client_id }}"
+    credential_password: "{{ pingvin_share_oidc_client_secret }}"
+    credential_uri: "https://{{ pingvin_share_domain }}"
+    credential_notes: "PocketID OIDC client for Pingvin Share. Deployed: {{ ansible_date_time.iso8601 }}"
+  when:
+    - loco is defined
+    - pingvin_share_oidc_client_id | length > 0
+
+- name: Redeploy Pingvin Share .env with OIDC credentials
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ pingvin_share_stack_path }}/.env"
+    mode: "0600"
+  notify: restart pingvin-share
+
+- name: Apply OIDC config immediately
+  ansible.builtin.meta: flush_handlers

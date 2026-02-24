@@ -1,0 +1,51 @@
+---
+# roles/baserow/tasks/oidc.yml
+# Register OIDC client in PocketID for Baserow
+
+- name: Create OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ baserow_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ loco.pocketid.api_token }}"
+    body_format: json
+    body:
+      name: "Baserow ({{ kunde_name | default('admin') }})"
+      callbackURLs:
+        - "https://{{ baserow_domain }}/api/sso/oauth2/callback/"
+    status_code: [200, 201]
+  register: baserow_oidc_client
+  when:
+    - baserow_oidc_client_id | length == 0
+    - loco.pocketid.api_token | default('') | length > 0
+
+- name: Set OIDC credentials from API response
+  ansible.builtin.set_fact:
+    baserow_oidc_client_id: "{{ baserow_oidc_client.json.id }}"
+    baserow_oidc_client_secret: "{{ baserow_oidc_client.json.secret }}"
+  when: baserow_oidc_client is not skipped and baserow_oidc_client is changed
+
+- name: Store Baserow OIDC credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "Baserow OIDC Client"
+    credential_username: "{{ baserow_oidc_client_id }}"
+    credential_password: "{{ baserow_oidc_client_secret }}"
+    credential_uri: "https://{{ baserow_domain }}"
+    credential_notes: "PocketID OIDC client for Baserow. Deployed: {{ ansible_date_time.iso8601 }}"
+  when:
+    - loco is defined
+    - baserow_oidc_client_id | length > 0
+
+- name: Redeploy Baserow docker-compose with OIDC credentials
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ baserow_stack_path }}/docker-compose.yml"
+    mode: "0644"
+  notify: restart baserow
+
+- name: Apply OIDC config immediately
+  ansible.builtin.meta: flush_handlers

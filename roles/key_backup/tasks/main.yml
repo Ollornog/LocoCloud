@@ -1,0 +1,10 @@
+---
+# roles/key_backup/tasks/main.yml
+
+- name: Install key backup prerequisites
+  ansible.builtin.import_tasks: install.yml
+  tags: [key_backup, install]
+
+- name: Setup key sync from master
+  ansible.builtin.import_tasks: sync.yml
+  tags: [key_backup, sync]

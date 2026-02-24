@@ -1,0 +1,53 @@
+---
+# roles/apps/outline/defaults/main.yml
+# Outline — Team wiki and knowledge base
+
+outline_stack_path: "/opt/stacks/outline"
+outline_data_path: "/mnt/data/outline"
+outline_image: "outlinewiki/outline:0"
+outline_port: 8089
+
+# Domain for Outline
+outline_domain: ""  # e.g. "wiki.firma-abc.de"
+
+# PostgreSQL
+outline_db_image: "postgres:18"
+outline_db_name: "outline"
+outline_db_user: "outline"
+outline_db_password: ""  # Generated if empty
+
+# Redis
+outline_redis_image: "redis:7-alpine"
+outline_redis_db: 1
+
+# Application secrets
+outline_secret_key: ""  # Generated if empty
+outline_utils_secret: ""  # Generated if empty
+
+# OIDC via PocketID
+outline_oidc_enabled: false
+outline_oidc_client_id: ""
+outline_oidc_client_secret: ""
+outline_oidc_provider_url: ""  # e.g. "https://id.firma-abc.de"
+
+# SMTP for notifications
+outline_smtp_host: ""
+outline_smtp_port: 587
+outline_smtp_user: ""
+outline_smtp_from: ""  # e.g. "wiki@firma-abc.de"
+
+# Public paths (none — fully protected by Tinyauth or native OIDC)
+outline_public_paths: []
+
+# Backup paths
+outline_backup_paths:
+  - "/opt/stacks/outline"
+  - "/mnt/data/outline"
+
+# Pre-backup command: dump PostgreSQL before backup
+outline_pre_backup_cmd: >
+  docker exec outline-db pg_dump -U {{ outline_db_user }} {{ outline_db_name }}
+  > {{ outline_stack_path }}/backup-pre.sql
+
+# Health check
+outline_health_path: "/api/info"

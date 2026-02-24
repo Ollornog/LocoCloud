@@ -1,0 +1,33 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Gitea
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  gitea:
+    image: {{ gitea_image }}
+    container_name: gitea
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ gitea_port }}:3000"
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ gitea_ssh_port }}:222"
+    volumes:
+      - {{ gitea_data_path }}:/data
+    env_file:
+      - .env
+    depends_on:
+      - gitea-db
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  gitea-db:
+    image: {{ gitea_db_image }}
+    container_name: gitea-db
+    restart: unless-stopped
+    volumes:
+      - {{ gitea_stack_path }}/db:/var/lib/postgresql
+    environment:
+      POSTGRES_DB: {{ gitea_db_name }}
+      POSTGRES_USER: {{ gitea_db_user }}
+      POSTGRES_PASSWORD: {{ gitea_db_password }}

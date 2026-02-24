@@ -1,0 +1,28 @@
+---
+# playbooks/update-caddy.yml
+# Regenerate and deploy Caddy configuration for a customer.
+# Usage: ansible-playbook playbooks/update-caddy.yml -i inventories/kunde-abc/
+
+- name: "Update Caddy Configuration"
+  hosts: all:!localhost
+  become: true
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+  roles:
+    - role: caddy
+      vars:
+        caddy_mode: "{{ 'master' if 'master' in (server_roles | default([])) else 'customer' }}"
+      tags: [caddy]
+
+  post_tasks:
+    - name: Caddy configuration updated
+      ansible.builtin.debug:
+        msg: |
+          Caddy configuration regenerated and deployed.
+          Mode: {{ 'master' if 'master' in (server_roles | default([])) else 'customer' }}
+          Note: Caddy was restarted (not reloaded) due to bind-mount inode behavior.

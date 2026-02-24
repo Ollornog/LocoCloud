@@ -22,16 +22,18 @@ urls:
   tinyauth: "auth.admin.example.com"
   vaultwarden: "vault.admin.example.com"
   semaphore: "deploy.admin.example.com"
-  zabbix: "monitor.admin.example.com"
+  grafana: "grafana.admin.example.com"
+  baserow: "permissions.admin.example.com"
 
-# --- Netbird (geteilter Manager) ---
+# --- Netbird (optional, geteilter Manager) ---
 netbird:
+  enabled: false                               # true wenn Netbird verwendet wird
   manager_url: "https://netbird.example.com"
-  api_token: ""                              # Netbird API Token (NICHT im Repo!)
+  api_token: ""                                # Netbird API Token (NICHT im Repo!)
 
 # --- PocketID (Admin-Instanz) ---
 pocketid:
-  api_token: ""                              # PocketID REST-API Token
+  api_token: ""                                # PocketID REST-API Token
   # Wird fuer User/Gruppen/OIDC-Client-Automation benoetigt
 
 # --- SMTP ---
@@ -52,23 +54,53 @@ repo:
 vaultwarden:
   url: "https://vault.admin.example.com"
   api_token_path: "/root/.loco-vaultwarden-token"  # Pfad zum API-Token auf dem Master
-  organization_id: ""                          # Wird nach Setup eingetragen
+  organization_id: ""                              # Wird nach Setup eingetragen
 
 # --- Bitwarden CLI (fuer Ansible Vault Passwort + Lookup-Plugin) ---
 bitwarden_cli:
   # Das Ansible-Vault-Passwort wird via scripts/vault-pass.sh aus Vaultwarden geholt.
   # Voraussetzung: bw CLI installiert, BITWARDENCLI_APPDATA_DIR konfiguriert
-  server_url: "https://vault.admin.example.com"  # Muss auf die Vaultwarden-Instanz zeigen
-  vault_item_name: "lococloudd-ansible-vault"     # Name des Items mit dem Vault-Passwort
+  server_url: "https://vault.admin.example.com"    # Muss auf die Vaultwarden-Instanz zeigen
+  vault_item_name: "lococloudd-ansible-vault"       # Name des Items mit dem Vault-Passwort
 
 # --- Oeffentlicher Einstiegspunkt fuer Admin-Dienste ---
 admin_gateway:
-  # Server der *.admin.example.com via Caddy + Netbird an den Master weiterleitet
-  public_ip: ""                                # z.B. "203.0.113.10"
+  # Server der *.admin.example.com via Caddy (+ optional Netbird) an den Master weiterleitet
+  public_ip: ""                                    # z.B. "203.0.113.10"
   # DNS: *.admin.example.com -> A-Record auf diese IP
+
+# --- gocryptfs (Verschluesselung) ---
+gocryptfs:
+  key_store_path: "/opt/lococloudd/keys"           # Zentraler Key-Store auf dem Master
+  # Keyfiles werden pro Kunde/Server hier abgelegt: keys/<kunde-id>/<hostname>.key
+
+# --- Key-Backup-Server (optional, fuer gocryptfs-Schluessel) ---
+# key_backup:
+#   enabled: false
+#   host: ""                                       # IP oder Netbird-IP des Key-Backup-Servers
+#   user: "root"
+#   sync_interval: "0 */4 * * *"                   # Sync alle 4 Stunden
+
+# --- Grafana Stack (Monitoring, Logging, Alerting) ---
+grafana:
+  admin_password_path: "/root/.grafana-admin-pass" # Pfad zum Grafana-Admin-Passwort auf dem Master
+  prometheus_retention: "30d"                       # Metriken-Aufbewahrung
+  loki_retention: "4320h"                          # Log-Aufbewahrung (6 Monate = 4320h)
+  alerting:
+    email_to: "admin@example.com"                  # Alert-Empfaenger
+
+# --- Baserow (Berechtigungskonzept) ---
+baserow:
+  admin_email: "admin@example.com"
+  # Passwort wird beim Setup generiert und in Vaultwarden gespeichert
+
+# --- Compliance ---
+compliance:
+  docs_output_path: "/opt/lococloudd/docs/kunden"  # Wo die generierten Dokumente landen
+  # TOM, VVT, Loeschkonzept werden als Jinja2-Templates pro Kunde generiert
 
 # --- Netbird Server (optional, fuer Self-Hosting) ---
 # netbird_server:
-#   self_hosted: false                          # true wenn eigener Netbird-Server
-#   domain: "netbird.example.com"              # Domain fuer Netbird Management UI
-#   relay_domain: "relay.example.com"          # Domain fuer Relay
+#   self_hosted: false                              # true wenn eigener Netbird-Server
+#   domain: "netbird.example.com"                   # Domain fuer Netbird Management UI
+#   relay_domain: "relay.example.com"               # Domain fuer Relay

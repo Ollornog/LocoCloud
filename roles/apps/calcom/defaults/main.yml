@@ -1,0 +1,41 @@
+---
+# roles/apps/calcom/defaults/main.yml
+# Cal.com — Scheduling and booking platform
+
+calcom_stack_path: "/opt/stacks/calcom"
+calcom_image: "calcom/cal.com:4"
+calcom_port: 8091
+
+# Domain for Cal.com
+calcom_domain: ""  # e.g. "cal.firma-abc.de"
+
+# PostgreSQL
+calcom_db_image: "postgres:18"
+calcom_db_name: "calcom"
+calcom_db_user: "calcom"
+calcom_db_password: ""  # Generated if empty
+
+# Application secrets
+calcom_nextauth_secret: ""  # Generated if empty
+calcom_calendso_encryption_key: ""  # Generated if empty
+
+# OIDC via PocketID
+calcom_oidc_enabled: false
+calcom_oidc_client_id: ""
+calcom_oidc_client_secret: ""
+calcom_oidc_provider_url: ""  # e.g. "https://id.firma-abc.de"
+
+# Public paths (none — fully protected by Tinyauth or native OIDC)
+calcom_public_paths: []
+
+# Backup paths
+calcom_backup_paths:
+  - "/opt/stacks/calcom"
+
+# Pre-backup command: dump PostgreSQL before backup
+calcom_pre_backup_cmd: >
+  docker exec calcom-db pg_dump -U {{ calcom_db_user }} {{ calcom_db_name }}
+  > {{ calcom_stack_path }}/backup-pre.sql
+
+# Health check
+calcom_health_path: "/api/health"

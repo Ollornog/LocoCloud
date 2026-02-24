@@ -1,0 +1,131 @@
+---
+# roles/gocryptfs/tasks/init.yml
+# Initialize gocryptfs encrypted filesystem (idempotent)
+# Keyfile is generated locally, used for init, then moved to master and removed
+
+- name: Check if gocryptfs is already initialized
+  ansible.builtin.stat:
+    path: "{{ gocryptfs_cipher_dir }}/gocryptfs.conf"
+  register: gocryptfs_conf
+
+- name: Check if filesystem is already mounted
+  ansible.builtin.command:
+    cmd: mountpoint -q {{ gocryptfs_plain_dir }}
+  register: gocryptfs_mounted
+  changed_when: false
+  failed_when: false
+
+# --- First-time initialization block ---
+- name: Initialize gocryptfs (first time only)
+  when: not gocryptfs_conf.stat.exists
+  block:
+    - name: Generate random keyfile
+      ansible.builtin.command:
+        cmd: dd if=/dev/urandom of={{ gocryptfs_keyfile_local }} bs=64 count=1
+      changed_when: true
+
+    - name: Restrict keyfile permissions
+      ansible.builtin.file:
+        path: "{{ gocryptfs_keyfile_local }}"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Initialize gocryptfs filesystem with keyfile
+      ansible.builtin.command:
+        cmd: >
+          gocryptfs -init
+          -passfile {{ gocryptfs_keyfile_local }}
+          {{ gocryptfs_cipher_dir }}
+      changed_when: true
+
+    - name: Ensure master key store directory exists
+      ansible.builtin.file:
+        path: "{{ gocryptfs_master_key_store }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      delegate_to: "{{ gocryptfs_master_host }}"
+      when: gocryptfs_master_host | length > 0
+
+    - name: Copy keyfile to master key store
+      ansible.builtin.fetch:
+        src: "{{ gocryptfs_keyfile_local }}"
+        dest: "{{ gocryptfs_master_key_store }}/{{ inventory_hostname }}.key"
+        flat: true
+      when: gocryptfs_master_host | length > 0
+
+    - name: Deploy keyfile on master server
+      ansible.builtin.copy:
+        src: "{{ gocryptfs_master_key_store }}/{{ inventory_hostname }}.key"
+        dest: "{{ gocryptfs_master_key_store }}/{{ inventory_hostname }}.key"
+        owner: root
+        group: root
+        mode: "0600"
+      delegate_to: "{{ gocryptfs_master_host }}"
+      when: gocryptfs_master_host | length > 0
+
+    - name: Store gocryptfs keyfile reference in Vaultwarden
+      ansible.builtin.include_role:
+        name: credentials
+        tasks_from: store.yml
+      vars:
+        vw_api_url: "{{ loco.vaultwarden.url }}"
+        credential_name: "{{ kunde_name | default(kunde_id) }} — gocryptfs Key ({{ inventory_hostname }})"
+        credential_username: "gocryptfs"
+        credential_password: "Keyfile stored at {{ gocryptfs_master_host }}:{{ gocryptfs_master_key_store }}/{{ inventory_hostname }}.key"
+        credential_notes: "gocryptfs encryption keyfile location. Cipher dir: {{ gocryptfs_cipher_dir }}. Plain dir: {{ gocryptfs_plain_dir }}. Initialized: {{ ansible_date_time.iso8601 }}. KEEP THIS SAFE — data is unrecoverable without the keyfile."
+      when: loco is defined
+
+    - name: Mount gocryptfs filesystem after init
+      ansible.builtin.command:
+        cmd: >
+          gocryptfs
+          -passfile {{ gocryptfs_keyfile_local }}
+          {{ gocryptfs_cipher_dir }}
+          {{ gocryptfs_plain_dir }}
+      changed_when: true
+
+    - name: Remove keyfile from local server (security)
+      ansible.builtin.file:
+        path: "{{ gocryptfs_keyfile_local }}"
+        state: absent
+
+    # Clean up fetched keyfile from Ansible controller
+    - name: Remove fetched keyfile from Ansible controller
+      ansible.builtin.file:
+        path: "{{ gocryptfs_master_key_store }}/{{ inventory_hostname }}.key"
+        state: absent
+      delegate_to: localhost
+      become: false
+
+# --- Mount existing filesystem if not mounted ---
+- name: Mount existing gocryptfs filesystem
+  when:
+    - gocryptfs_conf.stat.exists
+    - gocryptfs_mounted.rc != 0
+    - gocryptfs_master_host | length > 0
+  block:
+    - name: Fetch keyfile from master for mount
+      ansible.builtin.command:
+        cmd: >
+          scp -i {{ gocryptfs_master_ssh_key }}
+          -o StrictHostKeyChecking=accept-new
+          {{ gocryptfs_master_user }}@{{ gocryptfs_master_host }}:{{ gocryptfs_master_key_store }}/{{ inventory_hostname }}.key
+          {{ gocryptfs_keyfile_local }}
+      changed_when: true
+
+    - name: Mount gocryptfs filesystem
+      ansible.builtin.command:
+        cmd: >
+          gocryptfs
+          -passfile {{ gocryptfs_keyfile_local }}
+          {{ gocryptfs_cipher_dir }}
+          {{ gocryptfs_plain_dir }}
+      changed_when: true
+
+    - name: Remove keyfile after mount (security)
+      ansible.builtin.file:
+        path: "{{ gocryptfs_keyfile_local }}"
+        state: absent

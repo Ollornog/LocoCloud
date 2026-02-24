@@ -1,0 +1,38 @@
+---
+# roles/baserow/tasks/deploy.yml
+
+- name: Create Baserow directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ baserow_stack_path }}"
+    - "{{ baserow_stack_path }}/data"
+
+- name: Generate Baserow admin password if not set
+  ansible.builtin.set_fact:
+    baserow_admin_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: baserow_admin_password | length == 0
+
+- name: Deploy Baserow docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ baserow_stack_path }}/docker-compose.yml"
+    mode: "0644"
+  notify: restart baserow
+
+- name: Start Baserow
+  community.docker.docker_compose_v2:
+    project_src: "{{ baserow_stack_path }}"
+    state: present
+
+- name: Wait for Baserow to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ baserow_port }}{{ baserow_health_path }}"
+    method: GET
+    status_code: [200]
+  register: baserow_health
+  until: baserow_health.status == 200
+  retries: 60
+  delay: 10

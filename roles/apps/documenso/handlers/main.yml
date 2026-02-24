@@ -1,0 +1,10 @@
+---
+# roles/apps/documenso/handlers/main.yml
+
+- name: restart caddy
+  ansible.builtin.command: docker restart caddy
+  changed_when: true
+
+- name: restart documenso
+  ansible.builtin.command: docker restart documenso
+  changed_when: true

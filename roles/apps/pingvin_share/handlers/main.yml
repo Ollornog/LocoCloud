@@ -1,0 +1,10 @@
+---
+# roles/apps/pingvin_share/handlers/main.yml
+
+- name: restart caddy
+  ansible.builtin.command: docker restart caddy
+  changed_when: true
+
+- name: restart pingvin-share
+  ansible.builtin.command: docker restart pingvin-share
+  changed_when: true

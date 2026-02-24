@@ -1,0 +1,18 @@
+---
+# roles/grafana_stack/handlers/main.yml
+
+- name: restart grafana
+  ansible.builtin.command: docker restart grafana
+  changed_when: true
+
+- name: restart prometheus
+  ansible.builtin.command: docker restart prometheus
+  changed_when: true
+
+- name: restart loki
+  ansible.builtin.command: docker restart loki
+  changed_when: true
+
+- name: restart caddy
+  ansible.builtin.command: docker restart caddy
+  changed_when: true

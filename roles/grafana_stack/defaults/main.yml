@@ -1,0 +1,50 @@
+---
+# roles/grafana_stack/defaults/main.yml
+# Grafana Stack — Grafana + Prometheus + Loki on master
+
+grafana_stack_path: "/opt/stacks/grafana"
+
+# Images (pinned to major version — no watchtower!)
+grafana_image: "grafana/grafana:11"
+prometheus_image: "prom/prometheus:v2"
+loki_image: "grafana/loki:3"
+
+# Ports
+grafana_port: 3000
+prometheus_port: 9090
+loki_port: 3100
+
+# Grafana domain
+grafana_domain: ""  # e.g. "grafana.admin.example.com"
+
+# Grafana admin (password stored in Vaultwarden)
+grafana_admin_user: "admin"
+grafana_admin_password: ""  # Generated if empty
+
+# Prometheus retention
+prometheus_retention: "30d"
+
+# Loki retention
+loki_retention_period: "4320h"  # 6 months = 4320h
+
+# SMTP for Grafana alerting
+grafana_smtp_enabled: false
+grafana_smtp_host: ""
+grafana_smtp_port: 587
+grafana_smtp_user: ""
+grafana_smtp_from: ""
+grafana_alert_email_to: ""
+
+# OIDC via PocketID (admin instance)
+grafana_oidc_enabled: false
+grafana_oidc_client_id: ""
+grafana_oidc_client_secret: ""
+grafana_oidc_auth_url: ""
+grafana_oidc_token_url: ""
+
+# Health check
+grafana_health_path: "/api/health"
+
+# Backup paths
+grafana_stack_backup_paths:
+  - "/opt/stacks/grafana"

@@ -1,0 +1,28 @@
+#!/bin/bash
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Key Backup Sync Script
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+# Syncs gocryptfs keyfiles from master to backup server
+set -euo pipefail
+
+MASTER="{{ key_backup_master_host }}"
+MASTER_USER="{{ key_backup_master_user }}"
+SOURCE="{{ key_backup_master_key_path }}/"
+DEST="{{ key_backup_store_path }}/"
+SSH_KEY="{{ key_backup_ssh_key }}"
+
+LOG_PREFIX="$(date -Iseconds) [key-backup-sync]"
+
+echo "${LOG_PREFIX} Starting key sync from ${MASTER_USER}@${MASTER}:${SOURCE}"
+
+rsync -avz --delete \
+  -e "ssh -i ${SSH_KEY} -o StrictHostKeyChecking=accept-new" \
+  "${MASTER_USER}@${MASTER}:${SOURCE}" \
+  "${DEST}"
+
+chmod -R {{ key_backup_dir_mode }} "${DEST}"
+find "${DEST}" -type f -exec chmod {{ key_backup_file_mode }} {} \;
+
+echo "${LOG_PREFIX} Key sync complete"

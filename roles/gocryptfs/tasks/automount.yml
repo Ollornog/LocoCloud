@@ -1,0 +1,31 @@
+---
+# roles/gocryptfs/tasks/automount.yml
+# Deploy mount script and systemd service for auto-mount on boot
+
+- name: Deploy gocryptfs mount script
+  ansible.builtin.template:
+    src: gocryptfs-mount.sh.j2
+    dest: "{{ gocryptfs_mount_script }}"
+    owner: root
+    group: root
+    mode: "0700"
+  notify:
+    - reload systemd
+    - restart gocryptfs-mount
+
+- name: Deploy gocryptfs-mount systemd service
+  ansible.builtin.template:
+    src: gocryptfs-mount.service.j2
+    dest: /etc/systemd/system/gocryptfs-mount.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart gocryptfs-mount
+
+- name: Enable gocryptfs-mount service
+  ansible.builtin.systemd:
+    name: gocryptfs-mount
+    enabled: true
+    daemon_reload: true

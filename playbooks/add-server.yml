@@ -1,0 +1,99 @@
+---
+# playbooks/add-server.yml
+# Add a fresh server to a customer infrastructure.
+# Usage: ansible-playbook playbooks/add-server.yml -i inventories/kunde-abc/ \
+#   -e "server_ip=203.0.113.10 server_user=root server_pass=xxx server_name=hauptserver"
+
+# Play 1: Bootstrap — deploy SSH key via password auth
+- name: "Add Server — Bootstrap SSH Key"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+  tasks:
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - server_ip is defined and server_ip | length > 0
+          - server_user is defined and server_user | length > 0
+          - server_pass is defined and server_pass | length > 0
+          - server_name is defined and server_name | length > 0
+        fail_msg: "Required: -e 'server_ip=... server_user=... server_pass=... server_name=...'"
+
+    - name: Read master SSH public key
+      ansible.builtin.slurp:
+        src: "/root/.ssh/id_ed25519.pub"
+      register: master_ssh_pubkey
+
+    - name: Deploy SSH key to new server
+      ansible.builtin.shell: |
+        sshpass -p '{{ server_pass }}' ssh-copy-id \
+          -o StrictHostKeyChecking=accept-new \
+          -i /root/.ssh/id_ed25519.pub \
+          {{ server_user }}@{{ server_ip }}
+      changed_when: true
+
+    - name: Verify SSH key authentication
+      ansible.builtin.command:
+        cmd: ssh -o BatchMode=yes -o ConnectTimeout=10 {{ server_user }}@{{ server_ip }} echo ok
+      changed_when: false
+
+    - name: Bootstrap complete
+      ansible.builtin.debug:
+        msg: "SSH key deployed to {{ server_ip }}. Proceeding with base setup."
+
+# Play 2: Base setup on new server
+- name: "Add Server — Base Setup"
+  hosts: "{{ server_ip | default('') }}"
+  become: true
+  gather_facts: true
+
+  vars:
+    ansible_host: "{{ server_ip }}"
+    ansible_user: "{{ server_user | default('root') }}"
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+  roles:
+    - role: base
+      tags: [base]
+
+    - role: netbird_client
+      vars:
+        netbird_setup_key: "{{ netbird_setup_key | default('') }}"
+        netbird_management_url: "{{ loco.netbird.manager_url | default('') }}"
+      tags: [netbird]
+      when: loco.netbird.enabled | default(false)
+
+    - role: gocryptfs
+      tags: [gocryptfs]
+      when: "'backup_server' not in (server_roles | default([]))"
+
+    - role: alloy
+      vars:
+        alloy_prometheus_url: "{{ loco.grafana.prometheus_remote_write_url | default('') }}"
+        alloy_loki_url: "{{ loco.grafana.loki_push_url | default('') }}"
+        alloy_instance_label: "{{ server_name }}"
+        alloy_kunde_label: "{{ kunde_id | default('') }}"
+      tags: [alloy]
+
+  post_tasks:
+    - name: Server added successfully
+      ansible.builtin.debug:
+        msg: |
+          Server {{ server_name }} ({{ server_ip }}) added successfully!
+          Base hardening: done
+          Netbird: {{ 'joined' if loco.netbird.enabled | default(false) else 'skipped (disabled)' }}
+          gocryptfs: {{ 'initialized' if 'backup_server' not in (server_roles | default([])) else 'skipped (backup server)' }}
+          Alloy monitoring: configured
+          Next: Configure apps in inventory and run site.yml

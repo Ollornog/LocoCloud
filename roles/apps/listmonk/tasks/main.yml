@@ -1,0 +1,6 @@
+---
+# roles/apps/listmonk/tasks/main.yml
+
+- name: Deploy Listmonk
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [listmonk, deploy]

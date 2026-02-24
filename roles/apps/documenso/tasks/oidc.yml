@@ -1,0 +1,51 @@
+---
+# roles/apps/documenso/tasks/oidc.yml
+# Register OIDC client in PocketID for Documenso
+
+- name: Create OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ documenso_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ loco.pocketid.api_token }}"
+    body_format: json
+    body:
+      name: "Documenso ({{ kunde_name }})"
+      callbackURLs:
+        - "https://{{ documenso_domain }}/api/auth/callback/oidc"
+    status_code: [200, 201]
+  register: documenso_oidc_client
+  when:
+    - documenso_oidc_client_id | length == 0
+    - loco.pocketid.api_token | default('') | length > 0
+
+- name: Set OIDC credentials from API response
+  ansible.builtin.set_fact:
+    documenso_oidc_client_id: "{{ documenso_oidc_client.json.id }}"
+    documenso_oidc_client_secret: "{{ documenso_oidc_client.json.secret }}"
+  when: documenso_oidc_client is not skipped and documenso_oidc_client is changed
+
+- name: Store Documenso OIDC credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — Documenso OIDC Client"
+    credential_username: "{{ documenso_oidc_client_id }}"
+    credential_password: "{{ documenso_oidc_client_secret }}"
+    credential_uri: "https://{{ documenso_domain }}"
+    credential_notes: "PocketID OIDC client for Documenso. Deployed: {{ ansible_date_time.iso8601 }}"
+  when:
+    - loco is defined
+    - documenso_oidc_client_id | length > 0
+
+- name: Redeploy Documenso .env with OIDC credentials
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ documenso_stack_path }}/.env"
+    mode: "0600"
+  notify: restart documenso
+
+- name: Apply OIDC config immediately
+  ansible.builtin.meta: flush_handlers

@@ -1,0 +1,11 @@
+---
+# roles/apps/outline/tasks/main.yml
+
+- name: Deploy Outline
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [outline, deploy]
+
+- name: Configure OIDC for Outline
+  ansible.builtin.import_tasks: oidc.yml
+  tags: [outline, oidc]
+  when: outline_oidc_enabled | default(false)

@@ -1,0 +1,68 @@
+---
+# playbooks/restore-test.yml
+# Monthly restore test — verifies backup integrity
+# Usage: ansible-playbook playbooks/restore-test.yml -i inventories/kunde-abc/
+
+- name: "Restore Test"
+  hosts: all:!localhost
+  become: true
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+  tasks:
+    - name: Validate backup is configured
+      ansible.builtin.assert:
+        that:
+          - backup is defined
+          - backup.enabled | default(false)
+          - backup.targets | default([]) | length > 0
+        fail_msg: "Backup not configured for this customer. Skipping restore test."
+
+    - name: Create temp restore directory
+      ansible.builtin.file:
+        path: "/tmp/restore-test-{{ ansible_date_time.date }}"
+        state: directory
+        mode: "0700"
+
+    - name: Run Restic restore (latest snapshot)
+      ansible.builtin.command:
+        cmd: >-
+          restic restore latest
+          --repo {{ backup.targets[0].type }}:{{ backup.targets[0].path | default('') }}
+          --target /tmp/restore-test-{{ ansible_date_time.date }}
+          --password-file /opt/scripts/backup/.restic-password
+      environment:
+        RESTIC_PASSWORD_FILE: "/opt/scripts/backup/.restic-password"
+      register: restore_result
+      changed_when: false
+
+    - name: Verify restored files exist
+      ansible.builtin.find:
+        paths: "/tmp/restore-test-{{ ansible_date_time.date }}"
+        file_type: any
+        recurse: true
+      register: restored_files
+
+    - name: Assert restore produced files
+      ansible.builtin.assert:
+        that:
+          - restored_files.matched > 0
+        fail_msg: "Restore test FAILED — no files restored!"
+        success_msg: "Restore test PASSED — {{ restored_files.matched }} files restored."
+
+    - name: Cleanup temp restore directory
+      ansible.builtin.file:
+        path: "/tmp/restore-test-{{ ansible_date_time.date }}"
+        state: absent
+
+    - name: Log restore test result
+      ansible.builtin.debug:
+        msg: |
+          Restore test completed successfully.
+          Customer: {{ kunde_name | default('unknown') }}
+          Date: {{ ansible_date_time.iso8601 }}
+          Files restored: {{ restored_files.matched }}

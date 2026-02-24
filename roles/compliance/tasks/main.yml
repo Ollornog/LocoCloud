@@ -1,0 +1,6 @@
+---
+# roles/compliance/tasks/main.yml
+
+- name: Generate compliance documents
+  ansible.builtin.import_tasks: generate.yml
+  tags: [compliance, generate]

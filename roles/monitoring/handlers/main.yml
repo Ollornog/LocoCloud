@@ -1,7 +1,3 @@
 ---
 # roles/monitoring/handlers/main.yml
-
-- name: restart zabbix agent
-  ansible.builtin.systemd:
-    name: "{{ zabbix_agent_service }}"
-    state: restarted
+# Handlers delegated to alloy role — this file kept for role structure completeness

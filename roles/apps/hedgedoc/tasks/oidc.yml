@@ -1,0 +1,51 @@
+---
+# roles/apps/hedgedoc/tasks/oidc.yml
+# Register OIDC client in PocketID for HedgeDoc
+
+- name: Create OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ hedgedoc_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ loco.pocketid.api_token }}"
+    body_format: json
+    body:
+      name: "HedgeDoc ({{ kunde_name }})"
+      callbackURLs:
+        - "https://{{ hedgedoc_domain }}/auth/oauth2/callback"
+    status_code: [200, 201]
+  register: hedgedoc_oidc_client
+  when:
+    - hedgedoc_oidc_client_id | length == 0
+    - loco.pocketid.api_token | default('') | length > 0
+
+- name: Set OIDC credentials from API response
+  ansible.builtin.set_fact:
+    hedgedoc_oidc_client_id: "{{ hedgedoc_oidc_client.json.id }}"
+    hedgedoc_oidc_client_secret: "{{ hedgedoc_oidc_client.json.secret }}"
+  when: hedgedoc_oidc_client is not skipped and hedgedoc_oidc_client is changed
+
+- name: Store HedgeDoc OIDC credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — HedgeDoc OIDC Client"
+    credential_username: "{{ hedgedoc_oidc_client_id }}"
+    credential_password: "{{ hedgedoc_oidc_client_secret }}"
+    credential_uri: "https://{{ hedgedoc_domain }}"
+    credential_notes: "PocketID OIDC client for HedgeDoc. Deployed: {{ ansible_date_time.iso8601 }}"
+  when:
+    - loco is defined
+    - hedgedoc_oidc_client_id | length > 0
+
+- name: Redeploy HedgeDoc .env with OIDC credentials
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ hedgedoc_stack_path }}/.env"
+    mode: "0600"
+  notify: restart hedgedoc
+
+- name: Apply OIDC config immediately
+  ansible.builtin.meta: flush_handlers
