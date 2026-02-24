@@ -10,4 +10,4 @@ docker_install: true
 server_roles: [master]
 
 # Master-specific: admin services bind to localhost, Caddy terminates TLS
-# Ports defined in roles (pocketid: 1411, tinyauth: 9090, vaultwarden: 8222, semaphore: 3000, zabbix: 8080)
+# Ports defined in roles (pocketid: 1411, tinyauth: 9090, vaultwarden: 8222, semaphore: 3000, grafana: 3001, baserow: 8085)

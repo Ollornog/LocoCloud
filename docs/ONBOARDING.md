@@ -271,4 +271,6 @@ ansible-playbook playbooks/offboard-customer.yml -i inventories/kunde-abc001/ \
 - [ ] Kunden-Benutzer können sich anmelden
 - [ ] Credentials in Vaultwarden gespeichert
 - [ ] Backup konfiguriert und getestet (falls aktiviert)
-- [ ] Monitoring-Agent meldet sich beim Zabbix-Server (falls aktiviert)
+- [ ] Alloy-Agent sendet Metriken/Logs an Grafana Stack auf Master
+- [ ] gocryptfs auf /mnt/data aktiv, Auto-Mount konfiguriert
+- [ ] Compliance-Dokumente generiert (TOM, VVT, Löschkonzept)
