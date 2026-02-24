@@ -1,0 +1,22 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Stirling PDF
+# Generiert: {{ ansible_date_time.iso8601 }}
+# ============================================
+
+services:
+  stirling-pdf:
+    image: {{ stirling_pdf_image }}
+    container_name: stirling-pdf
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ stirling_pdf_port }}:8080"
+    volumes:
+      - {{ stirling_pdf_stack_path }}/configs:/configs
+      - {{ stirling_pdf_stack_path }}/tessdata:/usr/share/tessdata
+      - {{ stirling_pdf_stack_path }}/logs:/logs
+      - {{ stirling_pdf_stack_path }}/pipeline:/pipeline
+    env_file:
+      - .env
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"

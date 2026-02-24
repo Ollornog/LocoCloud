@@ -1,0 +1,10 @@
+---
+# roles/apps/stirling_pdf/handlers/main.yml
+
+- name: restart caddy
+  ansible.builtin.command: docker restart caddy
+  changed_when: true
+
+- name: restart stirling-pdf
+  ansible.builtin.command: docker restart stirling-pdf
+  changed_when: true

@@ -1,0 +1,20 @@
+---
+# roles/apps/stirling_pdf/tasks/remove.yml
+# Archive Stirling PDF data, stop containers — do NOT delete data.
+
+- name: Stop Stirling PDF
+  community.docker.docker_compose_v2:
+    project_src: "{{ stirling_pdf_stack_path }}"
+    state: absent
+  ignore_errors: true
+
+- name: Archive Stirling PDF data
+  ansible.builtin.command: >
+    tar czf /opt/archives/stirling-pdf-{{ ansible_date_time.date }}.tar.gz
+    -C {{ stirling_pdf_stack_path }} .
+  args:
+    creates: "/opt/archives/stirling-pdf-{{ ansible_date_time.date }}.tar.gz"
+
+- name: Archive complete
+  ansible.builtin.debug:
+    msg: "Stirling PDF stopped. Data archived to /opt/archives/stirling-pdf-{{ ansible_date_time.date }}.tar.gz."
