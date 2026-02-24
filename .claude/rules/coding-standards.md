@@ -51,7 +51,7 @@
 ## Docker Compose — Watchtower-Labels
 
 - **Kunden-Apps** (Nextcloud, Paperless, Vaultwarden-Kunde, Uptime Kuma): `com.centurylinklabs.watchtower.enable=true`
-- **Infrastruktur-Container** (Caddy, Netbird, PocketID, Tinyauth, Semaphore, Zabbix): **KEIN Watchtower-Label**. Updates nur über Ansible.
+- **Infrastruktur-Container** (Caddy, Netbird, PocketID, Tinyauth, Semaphore, Grafana, Alloy, Baserow): **KEIN Watchtower-Label**. Updates nur über Ansible.
 - Grund: Watchtower hat Netbird-Server aktualisiert → Relay-Endpoint geändert → VPN-Ausfall.
 
 ## Secrets

@@ -3,7 +3,7 @@
 ## Konzept & Bauplan für das GitHub-Repository
 
 **Repo:** `github.com/Ollornog/LocoCloud`
-**Version:** 4.0 — Februar 2026
+**Version:** 5.0 — Februar 2026
 
 ---
 
@@ -20,16 +20,18 @@
 9. [App-Template-System](#9-app-template-system)
 10. [Credential-Management (Vaultwarden)](#10-credential-management-vaultwarden)
 11. [Backup-Architektur](#11-backup-architektur)
-12. [Monitoring & Alerting](#12-monitoring--alerting)
-13. [Repo-Struktur & Konfiguration](#13-repo-struktur--konfiguration)
-14. [Semaphore-Konfiguration](#14-semaphore-konfiguration)
-15. [Deployment-Abläufe](#15-deployment-abläufe)
-16. [Sicherheits-Hardening](#16-sicherheits-hardening)
-17. [Wartung & Updates](#17-wartung--updates)
-18. [Kunden-Inventar-System](#18-kunden-inventar-system)
-19. [Repo Public-Readiness](#19-repo-public-readiness)
-20. [Bekannte Fallstricke & Lessons Learned](#20-bekannte-fallstricke--lessons-learned)
-21. [Offene Design-Entscheidungen](#21-offene-design-entscheidungen)
+12. [Verschlüsselung (gocryptfs)](#12-verschlüsselung-gocryptfs)
+13. [Monitoring, Logging & Alerting (Grafana Stack)](#13-monitoring-logging--alerting-grafana-stack)
+14. [Compliance & Dokumentation (DSGVO/GoBD)](#14-compliance--dokumentation-dsgvogobd)
+15. [Repo-Struktur & Konfiguration](#15-repo-struktur--konfiguration)
+16. [Semaphore-Konfiguration](#16-semaphore-konfiguration)
+17. [Deployment-Abläufe](#17-deployment-abläufe)
+18. [Sicherheits-Hardening](#18-sicherheits-hardening)
+19. [Wartung & Updates](#19-wartung--updates)
+20. [Kunden-Inventar-System](#20-kunden-inventar-system)
+21. [Repo Public-Readiness](#21-repo-public-readiness)
+22. [Bekannte Fallstricke & Lessons Learned](#22-bekannte-fallstricke--lessons-learned)
+23. [Offene Design-Entscheidungen](#23-offene-design-entscheidungen)
 
 ---
 
@@ -44,12 +46,15 @@ Ein Ansible-basiertes Deployment-System in einem Git-Repository, das schlüsself
 1. **Alles ist öffentlich erreichbar** — Kein VPN für Endbenutzer, nur Browser nötig
 2. **Alles ist hinter Auth** — Default: blockiert. Öffentliche Pfade werden explizit gewhitelistet
 3. **PocketID + Tinyauth pro Kunde** — Eigene Instanzen, kein Sharing zwischen Kunden
-4. **Netbird nur für Admin & Infrastruktur** — Endbenutzer bekommen kein VPN
+4. **Netbird nur für Admin & Infrastruktur** — Endbenutzer bekommen kein VPN (Netbird ist optional bei der Master-Installation)
 5. **Ein Repo, viele Kunden** — Monorepo mit Inventar-Trennung
 6. **Credentials automatisch in Vaultwarden** — Bei jedem Deploy/Update
 7. **Der Betreiber ist überall Admin** — PocketID-Admin auf jeder Kundeninstanz
 8. **Kunden vollständig isoliert** — Kein Kunde sieht einen anderen
 9. **Repo-Agnostik** — Alles Spezifische (Domain, E-Mail, Netbird-URL) ist konfigurierbar. Das Repo soll public-fähig sein
+10. **Daten immer verschlüsselt** — `/mnt/data` auf jedem Kundenserver mit gocryptfs gesichert, Keyfile auf dem Master
+11. **Compliance by Design** — TOM-Dokumentation, Verarbeitungsverzeichnis und Löschkonzept als Ansible-Templates pro Kunde
+12. **Nachweisbare Sicherheit** — Backup-Restore-Tests monatlich automatisiert, Audit-Logs für alle Apps, zentrale Log-Sammlung
 
 ### Was LocoCloud NICHT ist
 
@@ -67,12 +72,13 @@ LocoCloud definiert folgende Server-Rollen. Jeder Host im Inventar bekommt eine 
 
 | Rolle | Zweck | Typische Dienste |
 |-------|-------|------------------|
-| `master` | Betreiber-Administration | Ansible, PocketID, Tinyauth, Vaultwarden, Semaphore, Zabbix |
+| `master` | Betreiber-Administration | Ansible, PocketID, Tinyauth, Vaultwarden, Semaphore, Grafana Stack, Baserow, gocryptfs Key-Store |
 | `netbird_server` | VPN-Management (optional, kann extern sein) | Netbird Management + Relay + Signal |
 | `gateway` | Öffentlicher Entry-Point pro Kunde | Caddy (TLS-Terminierung), Reverse Proxy |
 | `customer_master` | Kunden-Auth & -Verwaltung | PocketID, Tinyauth (+ optional Vaultwarden) |
 | `app_server` | Kunden-Applikationen | Nextcloud, Paperless, etc. + Datenbanken |
 | `backup_server` | Backup-Ziel | Restic-Repos (übergreifend oder kundenspezifisch) |
+| `key_backup` | Backup der gocryptfs-Schlüssel | Redundante Kopie aller Encryption-Keys vom Master |
 | `proxmox` | Hypervisor (nur API-Zugang, kein Deployment) | LXC-Erstellung via Proxmox API |
 
 ### 2.2 Multi-Role per Host
@@ -112,11 +118,19 @@ Jeder Host hat einen `hosting_type`, der bestimmt wo er läuft:
 │  ├── Tinyauth (Admin Forward-Auth)                           │
 │  ├── Vaultwarden (Admin-Credentials, alle Kunden)            │
 │  ├── Semaphore (Ansible Web-UI)                              │
-│  ├── Zabbix (Zentrales Monitoring)                           │
-│  └── Netbird Client                                          │
+│  ├── Grafana Stack (Monitoring + Logging + Alerting)         │
+│  │   ├── Grafana (Web-UI + Alerting)                         │
+│  │   ├── Prometheus (Metriken)                               │
+│  │   └── Loki (Logs)                                         │
+│  ├── Baserow (Berechtigungskonzept pro Kunde)                │
+│  ├── gocryptfs Key-Store (/opt/lococloudd/keys/)             │
+│  └── Netbird Client (optional)                               │
 │                                                              │
 │  Netbird-Server (optional self-hosted oder extern)           │
 │  └── Netbird Management + Relay + Signal                     │
+│                                                              │
+│  Key-Backup-Server (optional, für gocryptfs-Schlüssel)       │
+│  └── Redundante Kopie aller Encryption-Keys                  │
 │                                                              │
 │  Backup-Server(s) (übergreifend oder pro Kunde)              │
 │  └── Restic-Repos                                            │
@@ -161,7 +175,7 @@ Dedizierter Server oder LXC für die Betreiber-Administration.
 
 **Empfohlene Spezifikationen:**
 - **OS:** Debian 13 (Trixie), unprivileged LXC mit nesting=1 (oder VM/VPS)
-- **RAM:** 8192 MB (Semaphore + Zabbix + Vaultwarden + PocketID + Ansible)
+- **RAM:** 8192 MB (Semaphore + Grafana Stack + Baserow + Vaultwarden + PocketID + Ansible)
 - **CPU:** 4 Cores
 - **Disk:** 64 GB
 
@@ -176,23 +190,27 @@ Alle Dienste laufen als Docker Container auf `127.0.0.1`. Caddy terminiert TLS.
 | Tinyauth | auth.admin.example.com | 127.0.0.1:9090 | Forward-Auth für Admin-Dienste |
 | Vaultwarden | vault.admin.example.com | 127.0.0.1:8222 | Credential-Management (alle Kunden) |
 | Semaphore | deploy.admin.example.com | 127.0.0.1:3000 | Ansible Web-UI |
-| Zabbix | monitor.admin.example.com | 127.0.0.1:8080 | Zentrales Monitoring |
+| Grafana | grafana.admin.example.com | 127.0.0.1:3100 | Monitoring-Dashboard + Alerting |
+| Prometheus | — | 127.0.0.1:9091 | Metriken-Speicherung (intern, kein externer Zugang) |
+| Loki | — | 127.0.0.1:3110 | Log-Speicherung (intern, kein externer Zugang) |
+| Baserow | permissions.admin.example.com | 127.0.0.1:8231 | Berechtigungskonzept pro Kunde (Tabellen) |
 | Ansible | — | — | Direkt installiert (apt/pip) |
 | Git | — | — | LocoCloud-Repo (geklont) |
 | msmtp | — | — | Alert-Mails |
-| Netbird Client | — | — | VPN zu allen Kunden |
+| Netbird Client | — | — | VPN zu allen Kunden (optional) |
 
 ### 3.3 Subdomain-Schema
 
 Alle Admin-Dienste laufen unter einer konfigurierbaren Admin-Subdomain (`admin.subdomain` in `lococloudd.yml`):
 
 ```
-admin.example.com           → Landingpage / Dashboard (optional)
-id.admin.example.com        → PocketID (Admin-SSO)
-auth.admin.example.com      → Tinyauth (Admin Forward-Auth)
-vault.admin.example.com     → Vaultwarden (Admin-Credentials)
-deploy.admin.example.com    → Semaphore (Ansible-UI)
-monitor.admin.example.com   → Zabbix (Monitoring)
+admin.example.com              → Landingpage / Dashboard (optional)
+id.admin.example.com           → PocketID (Admin-SSO)
+auth.admin.example.com         → Tinyauth (Admin Forward-Auth)
+vault.admin.example.com        → Vaultwarden (Admin-Credentials)
+deploy.admin.example.com       → Semaphore (Ansible-UI)
+grafana.admin.example.com      → Grafana (Monitoring + Logging + Alerting)
+permissions.admin.example.com  → Baserow (Berechtigungskonzept)
 ```
 
 **DNS-Setup:**
@@ -210,9 +228,11 @@ Internet → Gateway-Caddy (öffentliche IP) → Netbird → Master-Server
 - Leitet über Netbird an den Master weiter (HTTP, kein TLS nötig im Tunnel)
 - Master-Caddy lauscht auf HTTP und fügt Header hinzu
 
-### 3.5 Repo auf dem Master
+### 3.5 Repo auf dem Master & Betriebsablauf
 
-Das Repo ist öffentlich auf GitHub. Setup-Flow für den Master:
+Das Repo ist öffentlich auf GitHub. Der Master-Server ist IMMER der erste Schritt — alles beginnt hier.
+
+**Setup-Flow für den Master:**
 
 ```bash
 # 1. Repo klonen (öffentlich, kein Key nötig für read-only)
@@ -224,14 +244,38 @@ cp config/lococloudd.yml.example config/lococloudd.yml
 nano config/lococloudd.yml  # Domain, E-Mail, Tokens ausfüllen
 
 # 3. Master-Inventar anpassen
-nano inventories/master/hosts.yml         # Netbird-IP eintragen
-nano inventories/master/group_vars/all.yml  # SSH-Keys eintragen
+nano inventories/master/hosts.yml         # Server-IP eintragen
+nano inventories/master/group_vars/all.yml  # SSH-Keys, Netbird (optional)
 
 # 4. Vault-Datei für Secrets erstellen
 ansible-vault create inventories/master/group_vars/vault.yml
 
-# 5. Setup ausführen
+# 5. Setup ausführen (Netbird optional, alle Tools + Grafana Stack + Baserow)
 ansible-playbook playbooks/setup-master.yml -i inventories/master/
+```
+
+**Danach — Betriebsablauf in 4 Schritten:**
+
+```
+Schritt 1: Kunde hinzufügen
+  → Input: Kundenadmin-Name, Kunden-URL (Domain)
+  → bash scripts/new-customer.sh kunde-abc "Firma ABC" "firma-abc.de"
+  → Erzeugt Inventar aus Template
+
+Schritt 2: Server zum Kunden hinzufügen
+  → Input: Servername, Beschreibung, IP, User, Passwort
+  → Frisch installierte Server (Debian) — kein Netbird/Docker nötig
+  → Ansible bootstrappt den Server (base-Rolle, Docker, optional Netbird)
+
+Schritt 3: Serverrolle & App-Auswahl konfigurieren
+  → Serverrolle: gateway, app_server, backup_server (oder Kombination)
+  → App-Auswahl mit Konfiguration (URL, Subdomains)
+  → Backup-Ziel wählen (ohne Ziel = kein Backup)
+
+Schritt 4: Deployment
+  → ansible-playbook playbooks/onboard-customer.yml -i inventories/kunde-abc/
+  → gocryptfs auf /mnt/data, Keyfile vom Master
+  → Apps + Auth + Monitoring + Backup
 ```
 
 Für Push-Zugriff (Änderungen vom Master aus committen) wird ein Deploy-Key oder SSH-Key benötigt:
@@ -241,7 +285,53 @@ GIT_SSH_COMMAND="ssh -i /root/.ssh/github-deploy-key" git pull origin main
 
 Änderungen werden primär lokal gemacht, gepusht, und auf dem Master per `git pull` aktualisiert (manuell oder per Semaphore-Task).
 
-### 3.6 Backup-Server
+### 3.6 gocryptfs Key-Store auf dem Master
+
+Der Master-Server speichert alle gocryptfs-Schlüsseldateien zentral:
+
+```
+/opt/lococloudd/keys/
+├── kunde-abc/
+│   ├── abc-server.key       ← gocryptfs Keyfile für den Server
+│   └── abc-nextcloud.key    ← gocryptfs Keyfile für Nextcloud-LXC
+├── kunde-xyz/
+│   └── xyz-server.key
+└── ...
+```
+
+**Zugriffskontrolle:**
+- Verzeichnis: `chmod 700 /opt/lococloudd/keys/`
+- Dateien: `chmod 600 /opt/lococloudd/keys/**/*.key`
+- Nur root auf dem Master hat Zugriff
+
+**Key-Backup:** Siehe Kapitel 12 (Verschlüsselung) für die `key_backup`-Server-Rolle.
+
+### 3.7 Baserow für Berechtigungskonzept
+
+Baserow läuft auf dem Master-Server und dient der dokumentierten Zugriffskontrolle pro Kunde.
+
+**Tabellenstruktur pro Kunde:**
+
+| Spalte | Typ | Beschreibung |
+|--------|-----|-------------|
+| Benutzer | Text | Name des Mitarbeiters |
+| E-Mail | E-Mail | Login-E-Mail (PocketID) |
+| Rolle | Single Select | Admin, Standard, Readonly |
+| Nextcloud | Boolean | Zugriff ja/nein |
+| Paperless | Boolean | Zugriff ja/nein |
+| Vaultwarden | Boolean | Zugriff ja/nein |
+| Weitere Apps... | Boolean | Zugriff ja/nein |
+| Gültig ab | Datum | Start der Berechtigung |
+| Gültig bis | Datum | Ende (leer = unbefristet) |
+| Anmerkungen | Long Text | Sonderregelungen |
+
+**Zweck:**
+- Dokumentiertes Berechtigungskonzept für TOM-Dokumentation
+- Nachweis für Behörden (wer darf was)
+- Wird bei Kunden-Audits als Referenz verwendet
+- Kein automatischer Sync mit PocketID — Baserow ist die Dokumentation, PocketID die Umsetzung
+
+### 3.8 Backup-Server
 
 Dedizierter Server oder LXC für Kunden-Backups. Kann übergreifend oder kundenspezifisch sein.
 
@@ -272,8 +362,8 @@ Cloud-Server (firma.de)
     ├── Tinyauth (auth.firma.de)
     ├── Alle Apps (Docker Container)
     ├── Alle Datenbanken (Docker Container)
-    ├── Netbird Client (Admin-Zugang)
-    └── Zabbix Agent
+    ├── Netbird Client (Admin-Zugang, optional)
+    └── Grafana Alloy Agent
 ```
 
 **Einfachstes Setup.** Ein Server mit allen Rollen kombiniert.
@@ -389,7 +479,7 @@ Proxmox
 │   ├── Docker: Vaultwarden
 │   └── Netbird Client (100.114.x.3)
 └── LXC "infra"
-    ├── Zabbix Agent
+    ├── Grafana Alloy Agent
     ├── Restic Backup
     └── Netbird Client (100.114.x.4)
 ```
@@ -880,7 +970,17 @@ API-Endpoints: `https://id.firma.de/api/...` mit Bearer-Token-Auth (`Authorizati
 3. Ansible konfiguriert die App mit diesen Credentials
 4. Credentials werden in Admin-Vaultwarden gespeichert (via `credentials`-Rolle)
 
-### 7.8 Tinyauth-Warnung
+### 7.8 Berechtigungskonzept (Baserow)
+
+Pro Kunde wird in Baserow auf dem Master-Server eine Berechtigungstabelle gepflegt (siehe Kap. 3.7). Diese Tabelle dokumentiert:
+
+- Welcher Benutzer Zugriff auf welche Apps hat
+- Welche Rolle (Admin/Standard/Readonly) zugewiesen ist
+- Zeitliche Befristungen
+
+Die Tabelle ist die **Soll-Dokumentation** — PocketID + Tinyauth sind die **Ist-Umsetzung**. Bei Kunden-Audits (DSGVO Art. 5 Abs. 1 lit. f) kann die Baserow-Tabelle als Nachweis exportiert werden.
+
+### 7.9 Tinyauth-Warnung
 
 > **Entschieden: PocketID + Tinyauth.** Tinyauth wird ausschließlich als OIDC-Forward-Auth genutzt (Login nur über PocketID Passkeys). Brute-Force-Schutz ist irrelevant, da kein direkter Login stattfindet. Im Produktivbetrieb bewährt — kein Fallback nötig.
 
@@ -1141,7 +1241,7 @@ volumes:
 4. Deployed Docker Container
 5. Registriert OIDC-Client in PocketID via API
 6. Regeneriert Caddyfile + restart
-7. Registriert Zabbix-Check
+7. Registriert Grafana-Monitoring (Alloy Agent auf dem Host)
 
 **Hinzufügen (bei `lxc_per_app` mit `target: lokal`) — erweiterter Workflow:**
 
@@ -1179,7 +1279,7 @@ Bei `lxc_per_app` muss `add-app.yml` einen komplett neuen LXC erstellen und boot
 │  7. Caddyfile auf Entry-Point regenerieren + restart            │
 │     └── Neue Route: subdomain.domain → Netbird-IP:Port         │
 │                                                                │
-│  8. Zabbix-Check registrieren                                  │
+│  8. Grafana Alloy Agent deployen                               │
 │                                                                │
 └────────────────────────────────────────────────────────────────┘
 ```
@@ -1191,7 +1291,7 @@ Bei `lxc_per_app` muss `add-app.yml` einen komplett neuen LXC erstellen und boot
 2. Stoppt Container, archiviert Daten
 3. Entfernt OIDC-Client
 4. Regeneriert Caddyfile + restart
-5. Entfernt Zabbix-Check
+5. Entfernt Grafana-Monitoring (Alloy Agent)
 
 **Bearbeiten** (z.B. öffentliche Pfade ändern):
 1. Inventar-YAML editieren
@@ -1242,7 +1342,8 @@ LocoCloud Organisation/
 │   ├── Master-LXC SSH Key
 │   ├── GitHub Deploy Key
 │   ├── Netbird API Credentials
-│   ├── Zabbix Admin
+│   ├── Grafana Admin
+│   ├── Baserow Admin
 │   └── Master PocketID Admin
 ├── Kunde ABC (firma-abc.de)/
 │   ├── Server/
@@ -1322,14 +1423,17 @@ Backup-Ziel (pro Kunde konfigurierbar)
 
 Das Backup-Ziel ist **pro Kunde konfigurierbar**, nicht eine globale Entscheidung. Alle Ziele sind über Netbird oder direkt per SFTP erreichbar. Restic verschlüsselt client-seitig — der Backup-Server sieht nur verschlüsselte Blobs.
 
+**Ohne Backup-Ziel = kein Backup.** Wenn im Inventar kein `backup.targets` definiert ist, wird kein Backup konfiguriert. Der Betreiber entscheidet bewusst pro Kunde, ob und wohin gesichert wird.
+
 ### 11.2 Was wird gesichert
 
-1. Docker Volumes aller Apps
-2. Datenbank-Dumps (Pre-Backup: `pg_dump`, `mysqldump`)
+1. Docker Volumes aller Apps (aus `/mnt/data/`)
+2. Datenbank-Dumps (Pre-Backup-Hooks, siehe 11.4)
 3. PocketID Daten (SQLite + Config)
 4. Tinyauth Config
 5. Caddy Caddyfile
 6. Docker Compose + .env Files
+7. gocryptfs-Konfiguration (nicht die Keyfiles — die liegen auf dem Master)
 
 ### 11.3 Konfiguration im Inventar
 
@@ -1361,28 +1465,421 @@ backup:
     keep_daily: 7
     keep_weekly: 4
     keep_monthly: 6
+  restore_test:
+    enabled: true
+    schedule: "0 3 1 * *"  # Monatlich am 1. um 03:00
 ```
+
+### 11.4 Pre-Backup-Hooks (Datenbank-Dumps)
+
+Vor jedem Restic-Backup werden automatisch Datenbank-Dumps erstellt. Der Cron-Job ruft ein Wrapper-Script auf:
+
+```bash
+#!/bin/bash
+# /opt/lococloudd/scripts/pre-backup.sh
+# Wird vor jedem Restic-Backup ausgeführt
+
+DUMP_DIR="/mnt/data/db-dumps"
+mkdir -p "$DUMP_DIR"
+
+# PostgreSQL-Dumps (für Paperless, etc.)
+for db in $(docker exec postgres psql -U postgres -t -c "SELECT datname FROM pg_database WHERE datistemplate=false AND datname != 'postgres'"); do
+  docker exec postgres pg_dump -U postgres "$db" | gzip > "$DUMP_DIR/${db}_$(date +%Y%m%d_%H%M%S).sql.gz"
+done
+
+# MariaDB/MySQL-Dumps (für Nextcloud, etc.)
+if docker ps --format '{{.Names}}' | grep -q mariadb; then
+  docker exec mariadb mysqldump -u root --all-databases | gzip > "$DUMP_DIR/mariadb_all_$(date +%Y%m%d_%H%M%S).sql.gz"
+fi
+
+# Alte Dumps aufräumen (nur letzte 3 behalten)
+find "$DUMP_DIR" -name "*.sql.gz" -mtime +3 -delete
+```
+
+**Ansible konfiguriert den Cron-Job:**
+```yaml
+- name: Configure backup cron with pre-hook
+  cron:
+    name: "restic-backup-{{ kunde_id }}"
+    minute: "0"
+    hour: "*/6"
+    job: "/opt/lococloudd/scripts/pre-backup.sh && /opt/lococloudd/scripts/restic-backup.sh"
+    user: root
+```
+
+### 11.5 Monatlicher Restore-Test
+
+**Die Behörde will sehen, dass Restores funktionieren.** Der Restore-Test wird als Ansible-Playbook automatisiert und monatlich per Cron (oder Semaphore-Schedule) ausgeführt:
+
+```
+┌─ restore-test.yml ──────────────────────────────────────────┐
+│                                                              │
+│  1. Letzten Restic-Snapshot identifizieren                   │
+│  2. Restore in temporäres Verzeichnis (/tmp/restore-test/)   │
+│  3. Prüfungen:                                               │
+│     ├── Dateien vorhanden? (Mindestanzahl pro App)           │
+│     ├── DB-Dump lesbar? (gunzip + Integrity-Check)           │
+│     ├── Docker Compose valide? (docker compose config)       │
+│     └── Dateigröße plausibel? (nicht 0 Bytes)                │
+│  4. Ergebnis loggen + Alert bei Fehler                       │
+│  5. Temporäres Verzeichnis aufräumen                         │
+│                                                              │
+│  → Ergebnis wird in Grafana als Metrik sichtbar              │
+│  → Bei Fehlschlag: E-Mail-Alert an Betreiber                 │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**Nachweis:** Jeder Restore-Test wird mit Timestamp und Ergebnis in einer Log-Datei protokolliert (`/var/log/lococloudd/restore-tests.log`). Diese Datei kann bei Audits vorgelegt werden.
 
 ---
 
-## 12. Monitoring & Alerting
+## 12. Verschlüsselung (gocryptfs)
 
-### 12.1 Zabbix auf Master-Server
+### 12.1 Prinzip
 
-`monitor.admin.example.com` — zentrales Monitoring für alle Kunden.
+Alle Kundendaten auf jedem Server werden mit gocryptfs verschlüsselt. Das verschlüsselte Verzeichnis ist `/mnt/data` — dort liegen alle Docker-Volumes, Datenbank-Dateien und App-Daten.
 
-### 12.2 Was wird überwacht
+```
+Kundenserver:
+/mnt/data/                    ← gocryptfs-Mountpoint (entschlüsselt)
+/mnt/data.encrypted/          ← Cipher-Verzeichnis (verschlüsselt auf Disk)
 
-| Check | Methode | Hinweis |
-|-------|---------|---------|
-| CPU, RAM, Disk | Zabbix Agent | Standard |
-| Docker Container | Zabbix Agent + Script | |
-| HTTP-Status Apps | Zabbix HTTP Agent | **Über Backend-Port (localhost), NICHT öffentliche URL!** Tinyauth gibt sonst 401 |
-| SSL-Zertifikat | HTTP Agent | Über öffentliche URL (kein Auth auf TLS-Ebene) |
-| Netbird Peer | Script | Ping über Netbird-IP |
-| Backup-Status | Script | Letzter Restic-Snapshot |
+Master-Server:
+/opt/lococloudd/keys/kunde-abc/server.key  ← Keyfile (nur auf Master)
+```
 
-### 12.3 Uptime Kuma (optionale Kunden-App)
+**Vorteile:**
+- Daten auf dem Kundenserver sind im Ruhezustand verschlüsselt (Disk-Diebstahl, Server-Rückgabe)
+- Ohne Keyfile vom Master sind die Daten nicht lesbar
+- gocryptfs ist FUSE-basiert — keine Kernel-Patches nötig, läuft in LXC
+- Transparent für alle Apps (Dateisystem-Ebene)
+
+### 12.2 Setup pro Server (Ansible)
+
+```yaml
+- name: Install gocryptfs
+  apt:
+    name: gocryptfs
+    state: present
+
+- name: Create encrypted directory
+  file:
+    path: /mnt/data.encrypted
+    state: directory
+    mode: '0700'
+
+- name: Create mountpoint
+  file:
+    path: /mnt/data
+    state: directory
+    mode: '0755'
+
+- name: Initialize gocryptfs (only if not yet initialized)
+  command: >
+    gocryptfs -init -passfile /tmp/gocryptfs.key /mnt/data.encrypted
+  args:
+    creates: /mnt/data.encrypted/gocryptfs.conf
+
+- name: Store keyfile on master
+  fetch:
+    src: /tmp/gocryptfs.key
+    dest: "/opt/lococloudd/keys/{{ kunde_id }}/{{ inventory_hostname }}.key"
+    flat: yes
+  delegate_to: localhost
+
+- name: Remove keyfile from server
+  file:
+    path: /tmp/gocryptfs.key
+    state: absent
+
+- name: Mount encrypted filesystem
+  command: >
+    gocryptfs -passfile /dev/stdin /mnt/data.encrypted /mnt/data
+  args:
+    stdin: "{{ lookup('file', '/opt/lococloudd/keys/' + kunde_id + '/' + inventory_hostname + '.key') }}"
+```
+
+### 12.3 Automatische Entschlüsselung nach Reboot
+
+Solange der Master-Server erreichbar ist, entschlüsselt sich der Kundenserver nach dem Reboot automatisch. Ein Systemd-Service holt das Keyfile temporär vom Master:
+
+```ini
+# /etc/systemd/system/gocryptfs-mount.service
+[Unit]
+Description=Mount gocryptfs encrypted data
+After=network-online.target
+Wants=network-online.target
+Before=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/lococloudd/scripts/gocryptfs-mount.sh
+ExecStop=/bin/fusermount -u /mnt/data
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+#!/bin/bash
+# /opt/lococloudd/scripts/gocryptfs-mount.sh
+MASTER_IP="{{ master_server_ip }}"
+KUNDE_ID="{{ kunde_id }}"
+HOSTNAME="$(hostname)"
+KEY_PATH="/opt/lococloudd/keys/${KUNDE_ID}/${HOSTNAME}.key"
+
+# Keyfile vom Master holen (SSH-Key-Auth)
+MAX_RETRIES=30
+RETRY_DELAY=10
+for i in $(seq 1 $MAX_RETRIES); do
+  scp -o ConnectTimeout=5 root@${MASTER_IP}:${KEY_PATH} /tmp/gocryptfs.key && break
+  sleep $RETRY_DELAY
+done
+
+if [ ! -f /tmp/gocryptfs.key ]; then
+  echo "ERROR: Could not retrieve keyfile from master after ${MAX_RETRIES} attempts"
+  exit 1
+fi
+
+# Mount
+gocryptfs -passfile /tmp/gocryptfs.key /mnt/data.encrypted /mnt/data
+
+# Keyfile sofort löschen
+rm -f /tmp/gocryptfs.key
+```
+
+**Reihenfolge:** `gocryptfs-mount.service` startet VOR `docker.service` — so sind die Daten entschlüsselt bevor Container starten.
+
+### 12.4 Key-Backup-Server
+
+Für den Fall dass der Master-Server ausfällt, können die gocryptfs-Schlüssel auf einen Key-Backup-Server repliziert werden.
+
+**Server-Rolle:** `key_backup` — kann per Ansible ausgerollt werden.
+
+```yaml
+# Im Master-Inventar oder separatem Inventar:
+key_backup_server:
+  ansible_host: "100.114.x.x"   # Netbird-IP oder öffentliche IP
+  server_roles: [key_backup]
+```
+
+**Sync-Mechanismus (Ansible-Rolle `key_backup`):**
+```yaml
+- name: Sync keys to backup server
+  synchronize:
+    src: /opt/lococloudd/keys/
+    dest: /opt/lococloudd/keys/
+    mode: push
+    rsync_opts:
+      - "--delete"
+      - "--chmod=D700,F600"
+  delegate_to: "{{ master_host }}"
+
+- name: Schedule periodic key sync
+  cron:
+    name: "sync-gocryptfs-keys"
+    minute: "0"
+    hour: "*/4"
+    job: "rsync -az --delete /opt/lococloudd/keys/ root@{{ key_backup_ip }}:/opt/lococloudd/keys/"
+    user: root
+  delegate_to: "{{ master_host }}"
+```
+
+**Disaster Recovery:** Wenn der Master ausfällt, kann der Key-Backup-Server als neuer Keyfile-Quelle konfiguriert werden (IP im Systemd-Service anpassen oder neuen Master aufsetzen und Keys rückkopieren).
+
+### 12.5 Sicherheitshinweise
+
+- **Keyfiles NIEMALS im Git-Repo** — sie liegen nur auf dem Master und optional auf dem Key-Backup-Server
+- **Keyfiles NIEMALS im Restic-Backup** — sonst wäre die Verschlüsselung sinnlos (verschlüsselte Daten + Schlüssel am selben Ort)
+- **SSH-Zugang zum Master** ist die kritischste Berechtigung — wer den Master kontrolliert, hat Zugang zu allen Daten
+- **Master und Key-Backup physisch trennen** — nicht auf demselben Proxmox-Host
+
+---
+
+## 13. Monitoring, Logging & Alerting (Grafana Stack)
+
+### 13.1 Architektur-Übersicht
+
+Zabbix ist aus dem Stack gestrichen. Stattdessen kommt der Grafana-Stack:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Master-Server                                                │
+│                                                               │
+│  ┌──────────────────────────────────────────────────────┐     │
+│  │  Grafana (grafana.admin.example.com)                  │     │
+│  │  ├── Dashboards pro Kunde (Labels/Filter)             │     │
+│  │  ├── Alerting (E-Mail)                                │     │
+│  │  └── Data Sources: Prometheus + Loki                  │     │
+│  └──────────────────────────────────────────────────────┘     │
+│                                                               │
+│  ┌──────────────┐  ┌──────────────┐                           │
+│  │  Prometheus   │  │  Loki        │                           │
+│  │  (Metriken)   │  │  (Logs)      │                           │
+│  │  :9091        │  │  :3110       │                           │
+│  └──────┬────────┘  └──────┬───────┘                          │
+│         │                  │                                   │
+│         │  Scrape/Push     │  Push                             │
+└─────────┼──────────────────┼───────────────────────────────────┘
+          │                  │
+          │   Netbird / SSH  │
+          │                  │
+┌─────────┴──────────────────┴───────────────────────────────────┐
+│  Kundenserver (jeder Server / jeder LXC)                       │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────┐      │
+│  │  Grafana Alloy (einziger Agent)                       │      │
+│  │  ├── node_exporter (integriert) → Metriken            │      │
+│  │  ├── cAdvisor (integriert) → Container-Metriken       │      │
+│  │  ├── journald → Logs                                  │      │
+│  │  └── Docker Logs → Logs                               │      │
+│  └──────────────────────────────────────────────────────┘      │
+└────────────────────────────────────────────────────────────────┘
+```
+
+**Ein Agent für alles:** Grafana Alloy ersetzt Zabbix Agent, node_exporter und separate Log-Shipper. Es sammelt Metriken UND Logs und schickt sie an Prometheus bzw. Loki auf dem Master.
+
+### 13.2 Was wird überwacht (Alerting)
+
+| Check | Methode | Alert-Schwellwert |
+|-------|---------|-------------------|
+| Disk-Auslastung | Alloy → Prometheus | > 85% |
+| RAM-Auslastung | Alloy → Prometheus | > 90% |
+| CPU-Auslastung (sustained) | Alloy → Prometheus | > 90% für > 5 Min |
+| Container-Health | Alloy cAdvisor → Prometheus | Container nicht running |
+| HTTP-Status Apps | Grafana Synthetic Monitoring / Blackbox | Status != 200 (über Backend-Port, NICHT öffentliche URL!) |
+| SSL-Zertifikat-Ablauf | Blackbox Exporter | < 14 Tage |
+| Backup-Status | Custom Metrik aus Restic-Script | Letzter Snapshot > 24h alt |
+| Restore-Test-Ergebnis | Custom Metrik | Letzter Test fehlgeschlagen |
+| SSH-Logins | Loki (journald) | Ungewöhnliche Logins (root, neue IP) |
+| Netbird Peer | Custom Metrik | Peer offline |
+| gocryptfs Mount | Custom Metrik | `/mnt/data` nicht gemountet |
+
+### 13.3 Grafana Alloy auf Kundenservern
+
+Alloy wird auf jedem Kundenserver/-LXC als Docker-Container deployt:
+
+```yaml
+services:
+  alloy:
+    image: grafana/alloy:latest
+    container_name: alloy
+    restart: unless-stopped
+    volumes:
+      - /opt/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log:/var/log:ro
+      - /:/host:ro
+    command: run /etc/alloy/config.alloy
+    network_mode: host
+    pid: host
+    # KEIN Watchtower-Label — Updates nur über Ansible
+```
+
+**Alloy-Konfiguration (Auszug):**
+```hcl
+// Metriken sammeln (node_exporter-kompatibel)
+prometheus.exporter.unix "default" {
+  set_collectors = ["cpu", "diskstats", "filesystem", "loadavg", "meminfo", "netdev"]
+}
+
+// Container-Metriken (cAdvisor-kompatibel)
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// Metriken an Prometheus auf dem Master senden
+prometheus.remote_write "master" {
+  endpoint {
+    url = "http://{{ master_ip }}:9091/api/v1/write"
+    basic_auth {
+      username = "{{ kunde_id }}"
+      password = "{{ alloy_push_token }}"
+    }
+  }
+  external_labels = {
+    kunde = "{{ kunde_id }}",
+    server = "{{ inventory_hostname }}",
+  }
+}
+
+// Logs aus journald
+loki.source.journal "system" {
+  forward_to = [loki.write.master.receiver]
+  labels = {
+    kunde = "{{ kunde_id }}",
+    server = "{{ inventory_hostname }}",
+    source = "journald",
+  }
+}
+
+// Docker-Container-Logs
+loki.source.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+  targets = discovery.docker.containers.targets
+  forward_to = [loki.write.master.receiver]
+  labels = {
+    kunde = "{{ kunde_id }}",
+    server = "{{ inventory_hostname }}",
+    source = "docker",
+  }
+}
+
+// Logs an Loki auf dem Master senden
+loki.write "master" {
+  endpoint {
+    url = "http://{{ master_ip }}:3110/loki/api/v1/push"
+    basic_auth {
+      username = "{{ kunde_id }}"
+      password = "{{ alloy_push_token }}"
+    }
+  }
+}
+```
+
+### 13.4 DSGVO- und GoBD-konforme Logs
+
+**Personenbezogene Daten minimieren:**
+- Keine Passwörter in Logs (Alloy Filter-Pipeline)
+- IP-Adressen: Minimale Retention (werden nach 6 Monaten gelöscht)
+- Benutzernamen nur in Audit-Logs der Apps (nicht in System-Logs)
+
+**Aufbewahrung:**
+- Loki Retention: 6 Monate (`retention_period: 4320h`)
+- journald: `MaxRetentionSec=6month` in `/etc/systemd/journald.conf`
+- Nach Ablauf: Automatische Löschung (kein manuelles Eingreifen)
+
+**Manipulationsschutz:**
+- journald FSS (Forward Secure Sealing) aktivieren: `Seal=yes` in `journald.conf`
+- Zentrale Log-Sammlung in Loki macht lokale Manipulation nachweisbar
+
+**GoBD-Relevanz bei Paperless:**
+- Löschschutz aktivieren: `PAPERLESS_CONSUMER_DELETE_DUPLICATES: false`
+- PDF/A-Archivierung: `PAPERLESS_OCR_OUTPUT_TYPE: pdfa`
+- Audit-Trail: Paperless loggt alle Dokumentzugriffe nativ
+
+### 13.5 App-spezifisches Audit-Logging
+
+Alle Apps werden bei Deployment automatisch so konfiguriert, dass Audit-Logging aktiviert ist:
+
+| App | Audit-Logging | Konfiguration |
+|-----|--------------|---------------|
+| Nextcloud | Activity App + Audit-Log App | `occ app:enable activity && occ app:enable admin_audit` |
+| Paperless-NGX | Eingebaut | Loggt Zugriffe nativ, kein Extra-Setup |
+| Kimai | Eingebaut | Aktiviert per Default |
+| Invoice Ninja | Eingebaut | Aktiviert per Default |
+| Vaultwarden | Event-Log | Aktiviert per Default |
+
+### 13.6 Kunden-Sichtbarkeit
+
+**Kunden sehen KEINE Logs direkt** in Grafana. Stattdessen:
+
+- **App-eigene Audit-Feeds:** Nextcloud Activity, Paperless Logs (in der jeweiligen App-UI)
+- **Uptime Kuma Status-Page:** `status.kunde.de` — optionale Kunden-App für Service-Status
+- **Der Admin sieht alles zentral in Grafana**, gefiltert nach Kunde via Labels (`kunde = "abc"`)
+
+### 13.7 Uptime Kuma (optionale Kunden-App)
 
 `status.firma.de` — optionales Status-Dashboard pro Kunde. Zeigt Kunden ob ihre Dienste online sind.
 
@@ -1392,25 +1889,148 @@ backup:
 - **Optional:** Wird nur deployt wenn `uptime_kuma_enabled: true` im Kunden-Inventar
 - **Status-Page:** Kann eine öffentliche Status-Seite generieren (konfigurierbar)
 
-> Uptime Kuma ersetzt NICHT Zabbix. Zabbix = Admin-Monitoring (Infra, Ressourcen). Uptime Kuma = Kunden-Dashboard ("Sind meine Dienste online?").
+> Uptime Kuma ersetzt NICHT Grafana. Grafana = Admin-Monitoring (Infra, Logs, Alerting). Uptime Kuma = Kunden-Dashboard ("Sind meine Dienste online?").
 
-### 12.4 Zabbix Agent auf Kunden-Servern
+---
 
-Meldet über Netbird an den Master-Zabbix. TLS-PSK für verschlüsselte Kommunikation:
+## 14. Compliance & Dokumentation (DSGVO/GoBD)
 
-```ini
-Server={{ loco_master_netbird_ip }}
-Hostname={{ kunde_id }}-{{ inventory_hostname }}
-TLSConnect=psk
-TLSPSKIdentity={{ kunde_id }}-{{ inventory_hostname }}
-TLSPSKFile=/etc/zabbix/zabbix_agent2.psk
+### 14.1 Übersicht
+
+Pro Kunde werden automatisch drei Compliance-Dokumente als Ansible-Templates generiert:
+
+| Dokument | Rechtsgrundlage | Zweck |
+|----------|----------------|-------|
+| **TOM-Dokumentation** | Art. 32 DSGVO | Technische und organisatorische Maßnahmen |
+| **Verarbeitungsverzeichnis** | Art. 30 DSGVO | Welche Daten werden wie verarbeitet |
+| **Löschkonzept** | Art. 17 DSGVO / GoBD | Wann werden welche Daten gelöscht |
+
+**Prinzip:** Einmal schreiben, pro Kunde die Variablen austauschen. Die Templates leben im Repo unter `roles/compliance/templates/`.
+
+### 14.2 TOM-Dokumentation (Art. 32 DSGVO)
+
+Die TOM-Dokumentation wird als Jinja2-Template generiert und beschreibt alle technischen und organisatorischen Maßnahmen:
+
+```
+roles/compliance/templates/tom.md.j2
+```
+
+**Inhalt (automatisch aus Variablen befüllt):**
+
+| TOM-Kategorie | Maßnahme (aus LocoCloud) |
+|---------------|--------------------------|
+| **Zutrittskontrolle** | Server in Rechenzentrum (Provider-Verantwortung) / On-Premise (Kunden-Verantwortung) |
+| **Zugangskontrolle** | SSH Key-Only + Netbird VPN, Fail2ban, UFW Firewall |
+| **Zugriffskontrolle** | PocketID SSO + Tinyauth Forward-Auth, Berechtigungskonzept in Baserow |
+| **Weitergabekontrolle** | TLS überall (Caddy Let's Encrypt), Netbird WireGuard-Tunnel |
+| **Eingabekontrolle** | Audit-Logs (Nextcloud Activity, Paperless nativ), zentrale Logs in Loki |
+| **Auftragskontrolle** | Isolierte Kunden-Infrastruktur, kein Sharing |
+| **Verfügbarkeitskontrolle** | Restic-Backup mit Restore-Tests, Monitoring via Grafana |
+| **Trennungsgebot** | Kunden vollständig isoliert (Netbird-Gruppen, separate Container, separate Auth) |
+| **Verschlüsselung** | gocryptfs auf `/mnt/data`, Restic-Backup client-seitig verschlüsselt |
+
+**Generierung:**
+```yaml
+- name: Generate TOM documentation
+  template:
+    src: tom.md.j2
+    dest: "/opt/lococloudd/docs/kunden/{{ kunde_id }}/TOM-{{ kunde_name }}.md"
+    mode: '0644'
+```
+
+### 14.3 Verarbeitungsverzeichnis (Art. 30 DSGVO)
+
+Pro Kunde ein Verarbeitungsverzeichnis das beschreibt welche personenbezogenen Daten in welcher App verarbeitet werden:
+
+```
+roles/compliance/templates/vvt.md.j2
+```
+
+**Automatisch befüllte Felder:**
+- Verantwortlicher: `{{ kunde_name }}` (aus Inventar)
+- Auftragsverarbeiter: `{{ loco.operator.name }}`
+- Verarbeitungstätigkeiten: Dynamisch aus `apps_enabled[]`
+- Kategorien betroffener Personen: Mitarbeiter (`{{ kunden_users }}`)
+- Kategorien personenbezogener Daten: Pro App definiert (Dateien, Dokumente, Zugangsdaten)
+- Löschfristen: Aus Löschkonzept (Kap. 14.4)
+- TOM-Verweis: Link auf die TOM-Dokumentation
+
+**Beispiel-Verarbeitungstätigkeit (Nextcloud):**
+```markdown
+### Verarbeitungstätigkeit: Cloud-Speicher (Nextcloud)
+- **Zweck:** Dateispeicherung und -freigabe für Mitarbeiter
+- **Rechtsgrundlage:** Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung)
+- **Betroffene:** Mitarbeiter von {{ kunde_name }}
+- **Datenarten:** Dateien, Metadaten (Dateiname, Größe, Änderungsdatum), Benutzernamen
+- **Empfänger:** Keine Weitergabe an Dritte
+- **Drittland-Transfer:** Nein (Self-Hosted)
+- **Löschfrist:** Nach Kündigung + 90 Tage Archivierung
+- **TOM:** Siehe TOM-Dokumentation {{ kunde_name }}
+```
+
+### 14.4 Löschkonzept
+
+Das Löschkonzept definiert Aufbewahrungsfristen und automatische Löschung:
+
+```
+roles/compliance/templates/loeschkonzept.md.j2
+```
+
+| Datenkategorie | Aufbewahrungsfrist | Löschmethode |
+|----------------|-------------------|--------------|
+| App-Daten (Dateien, Dokumente) | Bis Kündigung + 90 Tage | Restic-Backup-Retention, dann `offboard-customer.yml` |
+| Logs (System, Access) | 6 Monate | Loki Retention (`retention_period: 4320h`) + journald `MaxRetentionSec` |
+| Audit-Logs (App-intern) | 6 Monate | App-spezifische Retention-Settings |
+| Backup-Snapshots | 6 Monate (Restic Retention) | `restic forget --keep-monthly 6 --prune` |
+| Benutzerkonten | Sofort bei Entfernung | `remove-user.yml` (PocketID + Tinyauth) |
+| Kunden-Credentials | Archivierung bei Offboarding | Vaultwarden Ordner "[ARCHIV]" |
+| gocryptfs-Keyfiles | Bis Kündigung + Archiv-Frist | Manuelles Löschen nach Offboarding + Bestätigung |
+| DB-Dumps (Pre-Backup) | 3 Tage lokal | `find -mtime +3 -delete` im Pre-Backup-Script |
+
+**GoBD-Relevanz:**
+- Paperless-Dokumente mit Löschschutz: `PAPERLESS_CONSUMER_DELETE_DUPLICATES: false`
+- PDF/A-Archivierung: `PAPERLESS_OCR_OUTPUT_TYPE: pdfa`
+- Dokumente die unter GoBD fallen (Rechnungen, Belege) dürfen NICHT vor Ablauf der handelsrechtlichen Aufbewahrungsfrist (10 Jahre) gelöscht werden — das Löschkonzept verweist darauf, die Umsetzung liegt beim Kunden (Paperless-Tags für Aufbewahrungsfristen)
+
+### 14.5 Ansible-Rolle `compliance`
+
+```
+roles/compliance/
+├── defaults/main.yml          # Fristen, Kontaktdaten
+├── tasks/
+│   ├── main.yml               # Dispatcher
+│   ├── generate-tom.yml       # TOM generieren
+│   ├── generate-vvt.yml       # VVT generieren
+│   └── generate-loeschkonzept.yml  # Löschkonzept generieren
+├── templates/
+│   ├── tom.md.j2              # TOM-Template
+│   ├── vvt.md.j2              # Verarbeitungsverzeichnis-Template
+│   └── loeschkonzept.md.j2    # Löschkonzept-Template
+└── handlers/main.yml
+```
+
+**Wann wird generiert:**
+- Bei `onboard-customer.yml` (erstmalig)
+- Bei `add-app.yml` / `remove-app.yml` (VVT aktualisieren)
+- Bei `add-user.yml` / `remove-user.yml` (VVT aktualisieren)
+- Manuell per `ansible-playbook playbooks/generate-docs.yml -i inventories/kunde-abc/`
+
+**Output:**
+```
+/opt/lococloudd/docs/kunden/
+├── kunde-abc/
+│   ├── TOM-Firma-ABC-GmbH.md
+│   ├── VVT-Firma-ABC-GmbH.md
+│   └── Loeschkonzept-Firma-ABC-GmbH.md
+├── kunde-xyz/
+│   └── ...
 ```
 
 ---
 
-## 13. Repo-Struktur & Konfiguration
+## 15. Repo-Struktur & Konfiguration
 
-### 13.1 Vollständige Struktur
+### 15.1 Vollständige Struktur
 
 ```
 LocoCloud/
@@ -1440,10 +2060,15 @@ LocoCloud/
 │   ├── caddy/                        # Reverse Proxy + TLS
 │   ├── pocketid/                     # OIDC Provider
 │   ├── tinyauth/                     # Forward Auth
-│   ├── netbird_client/               # Netbird Installation + Join
-│   ├── monitoring/                   # Zabbix Agent
-│   ├── backup/                       # Restic
+│   ├── netbird_client/               # Netbird Installation + Join (optional)
+│   ├── gocryptfs/                    # Verschlüsselung /mnt/data + Auto-Mount
+│   ├── grafana_stack/                # Grafana + Prometheus + Loki (Master)
+│   ├── alloy/                        # Grafana Alloy Agent (Kundenserver)
+│   ├── baserow/                      # Baserow (Master, Berechtigungskonzept)
+│   ├── backup/                       # Restic + Pre-Backup-Hooks + Restore-Tests
+│   ├── key_backup/                   # gocryptfs Key-Backup auf separatem Server
 │   ├── credentials/                  # Vaultwarden API
+│   ├── compliance/                   # TOM, VVT, Löschkonzept (Jinja2-Templates)
 │   ├── lxc_create/                   # Proxmox LXC erstellen (bei LXC-pro-App)
 │   └── apps/
 │       ├── _template/
@@ -1462,6 +2087,7 @@ LocoCloud/
 ├── playbooks/
 │   ├── site.yml                      # Full Deploy
 │   ├── setup-master.yml              # Master-Server initial einrichten
+│   ├── add-server.yml                # Frischen Server zum Kunden hinzufügen
 │   ├── add-app.yml
 │   ├── remove-app.yml
 │   ├── update-app.yml
@@ -1471,13 +2097,16 @@ LocoCloud/
 │   ├── update-all.yml
 │   ├── backup-now.yml
 │   ├── restore.yml
+│   ├── restore-test.yml              # Monatlicher Restore-Test
+│   ├── generate-docs.yml             # Compliance-Dokumente regenerieren
 │   ├── onboard-customer.yml
 │   └── offboard-customer.yml
 │
 ├── scripts/
 │   ├── init-master.sh                # Bootstrap-Script für Master-Server
 │   ├── new-customer.sh               # Inventar aus Template generieren
-│   └── health-check.sh
+│   ├── pre-backup.sh                 # DB-Dumps vor Restic-Backup
+│   └── gocryptfs-mount.sh            # Auto-Mount nach Reboot
 │
 └── docs/
     ├── SETUP.md                      # Master-Server Setup
@@ -1486,13 +2115,13 @@ LocoCloud/
     └── TROUBLESHOOTING.md
 ```
 
-### 13.2 Globale Konfiguration: `config/lococloudd.yml`
+### 15.2 Globale Konfiguration: `config/lococloudd.yml`
 
 **ALLES Spezifische wird hier konfiguriert.** So kann das Repo public sein — keine persönlichen Daten im Code.
 
-Die Datei `config/lococloudd.yml.example` zeigt die vollständige Struktur (siehe Kap. 13.4).
+Die Datei `config/lococloudd.yml.example` zeigt die vollständige Struktur (siehe Kap. 15.4).
 
-### 13.3 `.gitignore`
+### 15.3 `.gitignore`
 
 ```gitignore
 # Betreiber-spezifische Config (NIEMALS committen)
@@ -1515,7 +2144,7 @@ __pycache__/
 .venv/
 ```
 
-### 13.4 `config/lococloudd.yml.example`
+### 15.4 `config/lococloudd.yml.example`
 
 Wird committed als Template:
 
@@ -1537,9 +2166,11 @@ urls:
   tinyauth: "auth.admin.example.com"
   vaultwarden: "vault.admin.example.com"
   semaphore: "deploy.admin.example.com"
-  zabbix: "monitor.admin.example.com"
+  grafana: "grafana.admin.example.com"
+  baserow: "permissions.admin.example.com"
 
 netbird:
+  enabled: false                               # true wenn Netbird verwendet wird
   manager_url: "https://netbird.example.com"
   api_token: ""
 
@@ -1571,7 +2202,7 @@ admin_gateway:
   public_ip: ""                              # IP des Cloud-Servers fuer Admin-Routing
 ```
 
-### 13.5 `ansible.cfg`
+### 15.5 `ansible.cfg`
 
 ```ini
 [defaults]
@@ -1607,13 +2238,13 @@ ssh_args = -o ControlMaster=auto -o ControlPersist=60s
 
 ---
 
-## 14. Semaphore-Konfiguration
+## 16. Semaphore-Konfiguration
 
-### 14.1 Zugang
+### 16.1 Zugang
 
 `deploy.admin.example.com` — hinter Tinyauth (nur Betreiber)
 
-### 14.2 Projekte
+### 16.2 Projekte
 
 | Projekt | Inventar | Zweck |
 |---------|----------|-------|
@@ -1622,7 +2253,7 @@ ssh_args = -o ControlMaster=auto -o ControlPersist=60s
 | Kunde XYZ | `kunde-xyz` | Alles für Kunde XYZ |
 | Global | alle | Cross-Kunde-Updates |
 
-### 14.3 Templates pro Kunde
+### 16.3 Templates pro Kunde
 
 | Template | Playbook | Extra-Variablen |
 |----------|----------|-----------------|
@@ -1639,7 +2270,7 @@ ssh_args = -o ControlMaster=auto -o ControlPersist=60s
 | Restore | `restore.yml` | `app_name`, `snapshot_id` |
 | Update All | `update-all.yml` | — |
 
-### 14.4 Öffentliche Pfade in Semaphore editieren
+### 16.4 Öffentliche Pfade in Semaphore editieren
 
 Da die öffentlichen Pfade im Inventar (`apps_enabled[].public_paths`) definiert sind, können sie über Semaphore geändert werden:
 
@@ -1649,9 +2280,9 @@ Da die öffentlichen Pfade im Inventar (`apps_enabled[].public_paths`) definiert
 
 ---
 
-## 15. Deployment-Abläufe
+## 17. Deployment-Abläufe
 
-### 15.1 Master-Server erstmalig einrichten
+### 17.1 Master-Server erstmalig einrichten
 
 ```bash
 # 1. LXC auf Proxmox erstellen (manuell oder per Script)
@@ -1671,62 +2302,129 @@ ansible-playbook playbooks/setup-master.yml -i inventories/master/
 
 **`setup-master.yml` macht:**
 1. base-Rolle (Hardening, Docker, UFW)
-2. Netbird-Client installieren + joinen (Gruppe: `loco-admin`)
+2. Netbird-Client installieren + joinen (optional, Gruppe: `loco-admin`)
 3. PocketID deployen (`id.admin.example.com`)
 4. Tinyauth deployen (`auth.admin.example.com`)
 5. Vaultwarden deployen (`vault.admin.example.com`)
 6. Semaphore deployen (`deploy.admin.example.com`)
-7. Zabbix Server deployen (`monitor.admin.example.com`)
-8. Caddy deployen mit Admin-Caddyfile
-9. Alle Credentials in Vaultwarden speichern
+7. Grafana Stack deployen (Grafana + Prometheus + Loki auf `grafana.admin.example.com`)
+8. Baserow deployen (`permissions.admin.example.com`)
+9. gocryptfs Key-Store einrichten (`/opt/lococloudd/keys/`)
+10. Caddy deployen mit Admin-Caddyfile
+11. Alle Credentials in Vaultwarden speichern
 
-### 15.2 Neuer Kunde
+### 17.2 Neuer Kunde (Schritt 1: Kunde anlegen)
 
-**Proxmox-Onboarding (Hybrid/Lokal-Only mit `lxc_per_app`):**
-
-Der Kunden-Proxmox wird minimal vorbereitet — nur Netbird wird manuell installiert. Alles andere (LXC-Erstellung, App-Deployment) erledigt Ansible remote:
-
-```
-Manuelle Vorbereitung (einmalig am Kunden-Proxmox):
-1. Proxmox aufsetzen (Standard-Installation)
-2. Netbird auf dem Proxmox-Host installieren + joinen (Gruppe: kunde-xxx)
-3. API-Token für Ansible erstellen (Datacenter → API Tokens)
-4. SSH-Key von Master deployen
-→ Proxmox ist jetzt über Netbird vom Master erreichbar
-
-Inventar vorbereiten:
-1. bash scripts/new-customer.sh kunde-abc "Firma ABC GmbH" "firma-abc.de" "hybrid"
-2. hosts.yml + group_vars/all.yml anpassen (Proxmox API-Token, Netbird-IP)
-3. DNS-Records anlegen (A + Wildcard *.firma-abc.de)
-4. Cloud-Server bestellen (falls Hybrid/Cloud)
-5. Git commit + push → Auf Master: git pull
-
-Automatisiert (Semaphore → onboard-customer.yml):
- 1. Netbird-Gruppe "kunde-xxx" erstellen (Netbird API)
- 2. Netbird-Policies erstellen: intern + loco-admin→kunde + loco-backup→kunde (API)
- 3. Netbird-Setup-Key generieren (reusable, 24h Ablauf) (API)
- 4. LXC-Template herunterladen falls fehlend (pveam download, delegiert an Proxmox)
- 5. LXC-Container erstellen auf Proxmox (community.general.proxmox über Netbird)
-    └── TUN-Device konfigurieren (für Netbird im LXC)
- 6. Bootstrap via pct exec (delegiert an Proxmox-Host):
-    ├── SSH-Key injizieren
-    ├── Netbird installieren + joinen (Setup-Key aus Schritt 3)
-    └── Netbird-IP ermitteln → hosts.yml aktualisieren
- 7. base-Rolle (direkte SSH via Netbird-IP): Hardening + Docker + UFW
- 8. Entry-Point konfigurieren (Gateway-Server):
-    ├── PocketID deployen (id.firma.de)
-    ├── Tinyauth deployen (auth.firma.de)
-    └── Admin-User in PocketID anlegen (API)
- 9. Pro App: Deploy + OIDC-Client (PocketID API) + Credentials → Vaultwarden
-10. Caddy → Caddyfile generieren + restart
-11. Monitoring → Zabbix Agent auf jedem Host + Checks registrieren
-12. Backup → Restic Setup + initiales Backup
-13. Smoke-Test → HTTP-Checks auf alle Subdomains
+```bash
+# Input: Kundenadmin-Name, Kunden-Domain
+bash scripts/new-customer.sh kunde-abc "Firma ABC GmbH" "firma-abc.de"
 ```
 
-> **Kernidee:** Der Proxmox-Host braucht nur Netbird + API-Token. Ansible erstellt Netbird-Gruppen, -Policies und -Keys automatisch via API, erstellt und bootstrappt alle LXC-Container remote über die Proxmox API und `pct exec`, und verbindet sich dann direkt via Netbird für alles Weitere. Kein manuelles LXC-Setup nötig.
+**Was passiert:**
+1. Inventar-Verzeichnis `inventories/kunde-abc/` wird aus Template erstellt
+2. `hosts.yml` und `group_vars/all.yml` werden generiert
+3. Vault-Datei `group_vars/vault.yml` wird initialisiert
+4. Berechtigungstabelle in Baserow wird angelegt (Kap. 3.7)
 
-### 15.3 Benutzer hinzufügen
+### 17.3 Server zum Kunden hinzufügen (Schritt 2)
+
+**Frische Server werden mit IP, User und Passwort hinzugefügt.** Kein Netbird, kein Docker — nur ein frisches Debian.
+
+```yaml
+# inventories/kunde-abc/hosts.yml — Server hinzufügen
+all:
+  hosts:
+    abc-server:
+      ansible_host: "203.0.113.10"        # Öffentliche IP oder LAN-IP
+      ansible_user: "root"                 # Initialer User
+      ansible_ssh_pass: "{{ vault_abc_server_password }}"  # Initiales Passwort (nur für Bootstrap)
+      server_name: "Hauptserver"
+      server_description: "Cloud-VPS bei Provider X"
+      server_roles: [gateway, customer_master, app_server]  # Serverrolle zuweisen
+```
+
+**Ansible bootstrappt den frischen Server:**
+
+```
+┌─ add-server.yml ─────────────────────────────────────────────┐
+│                                                                │
+│  Input: Servername, Beschreibung, IP, User, Passwort           │
+│                                                                │
+│  1. SSH-Verbindung mit Passwort (erster Zugriff)               │
+│  2. SSH-Key deployen (Master → Server)                         │
+│  3. Passwort-Auth deaktivieren                                 │
+│  4. base-Rolle: Hardening, Docker, UFW, Fail2ban              │
+│  5. Netbird-Client installieren + joinen (optional)            │
+│     └── Wenn aktiviert: Netbird-IP in Inventar eintragen       │
+│  6. gocryptfs installieren + /mnt/data verschlüsseln           │
+│     ├── Keyfile generieren                                     │
+│     ├── Keyfile auf Master speichern (keys/kunde-abc/)         │
+│     ├── Keyfile vom Server löschen                             │
+│     └── Auto-Mount Systemd-Service einrichten                  │
+│  7. Grafana Alloy Agent installieren                           │
+│     └── Metriken + Logs → Master (Prometheus/Loki)             │
+│                                                                │
+│  → Server ist jetzt bereit für App-Deployment                  │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### 17.4 App-Auswahl & Konfiguration (Schritt 3)
+
+Nach dem Server-Bootstrap werden Apps und Konfiguration festgelegt:
+
+```yaml
+# inventories/kunde-abc/group_vars/all.yml
+apps_enabled:
+  - name: "Nextcloud"
+    subdomain: "cloud"         # → cloud.firma-abc.de
+    port: 8080
+    # ... (App-Konfiguration wie bisher)
+
+# Serverrolle und Backup-Ziel
+backup:
+  enabled: true                # Ohne Backup-Ziel: kein Backup
+  targets:
+    - type: "sftp"
+      host: "{{ backup_server_ip }}"
+      user: "backup"
+      path: "/backup/{{ kunde_id }}"
+```
+
+**Deployment:**
+```bash
+ansible-playbook playbooks/onboard-customer.yml -i inventories/kunde-abc/
+```
+
+### 17.5 Onboarding-Ablauf (Schritt 4 — automatisiert)
+
+```
+┌─ onboard-customer.yml ────────────────────────────────────────┐
+│                                                                │
+│  1. Netbird-Gruppe + Policies erstellen (falls Netbird aktiv)  │
+│  2. Server vorbereiten (falls nicht schon per add-server.yml)  │
+│     ├── base-Rolle (Hardening, Docker, UFW)                    │
+│     ├── gocryptfs auf /mnt/data                                │
+│     └── Grafana Alloy Agent                                    │
+│  3. Entry-Point konfigurieren (Gateway-Server):                │
+│     ├── PocketID deployen (id.firma.de)                        │
+│     ├── Tinyauth deployen (auth.firma.de)                      │
+│     └── Admin-User in PocketID anlegen (API)                   │
+│  4. Pro App: Deploy + OIDC-Client (PocketID API)               │
+│     └── Credentials → Vaultwarden                              │
+│  5. Caddy → Caddyfile generieren + restart                     │
+│  6. Monitoring → Grafana Alloy auf jedem Host                  │
+│  7. Backup → Restic Setup + Pre-Backup-Hooks + initiales Backup│
+│  8. Compliance-Dokumente generieren (TOM, VVT, Löschkonzept)  │
+│  9. Smoke-Test → HTTP-Checks auf alle Subdomains               │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+> **Proxmox-Onboarding** (Hybrid/Lokal-Only mit `lxc_per_app`): Wie bisher — Proxmox braucht nur Netbird + API-Token. Ansible erstellt LXC-Container remote über die Proxmox API und `pct exec`, bootstrappt sie (inkl. gocryptfs), und verbindet sich dann direkt für alles Weitere.
+
+### 17.6 Benutzer hinzufügen
+
+### 17.6 Benutzer hinzufügen
 
 ```yaml
 # Aufruf: ansible-playbook add-user.yml -i inventories/kunde-abc/ \
@@ -1740,7 +2438,7 @@ Automatisiert (Semaphore → onboard-customer.yml):
 # 5. Inventar-YAML aktualisieren (kunden_users Liste)
 ```
 
-### 15.4 Kunde offboarden
+### 17.7 Kunde offboarden
 
 **`offboard-customer.yml`** — gestufter Prozess mit Sicherheitsabfragen.
 
@@ -1767,8 +2465,8 @@ Automatisiert (Semaphore → onboard-customer.yml):
 │     ├── Policies entfernen (API)                               │
 │     └── Kundengruppe entfernen (API)                           │
 │                                                                │
-│  5. Zabbix-Hosts entfernen                                     │
-│     └── Alle Hosts mit Prefix "{{ kunde_id }}-"               │
+│  5. Grafana-Monitoring aufräumen                               │
+│     └── Alloy Agent deaktivieren, Dashboards entfernen         │
 │                                                                │
 │  6. Credentials in Vaultwarden archivieren                     │
 │     └── Kunden-Ordner umbenennen: "[ARCHIV] Firma ABC"         │
@@ -1801,9 +2499,9 @@ Automatisiert (Semaphore → onboard-customer.yml):
 
 ---
 
-## 16. Sicherheits-Hardening
+## 18. Sicherheits-Hardening
 
-### 16.1 Ansible-Rolle `base`
+### 18.1 Ansible-Rolle `base`
 
 Identisch für alle Server (Master + Kunden):
 
@@ -1821,14 +2519,14 @@ Identisch für alle Server (Master + Kunden):
 | .env chmod 600 | Alle Secrets-Files |
 | Docker Port-Bind | Entry-Point: `127.0.0.1:PORT` / App-LXCs: `0.0.0.0:PORT` + UFW auf wt0 |
 
-### 16.2 LXC-spezifisch
+### 18.2 LXC-spezifisch
 
 Variable `is_lxc: true/false` in der Rolle steuert:
 - Kernel-Parameter: Nur netzwerkbezogene sysctl (LXC kann `kernel.*` und `fs.*` nicht setzen)
 - USB: Nicht deaktivieren in LXC
 - TUN-Device: Für Netbird in LXC nötig (`lxc.cgroup2.devices.allow: c 10:200 rwm`)
 
-### 16.3 Admin-User pro Server
+### 18.3 Admin-User pro Server
 
 ```yaml
 admin_user: "srvadmin"     # Konfigurierbar pro Kunde
@@ -1837,9 +2535,9 @@ admin_user_nopasswd: true  # NOPASSWD für Ansible-Kompatibilität
 
 ---
 
-## 17. Wartung & Updates
+## 19. Wartung & Updates
 
-### 17.1 Grundregel: Alle Updates über Ansible
+### 19.1 Grundregel: Alle Updates über Ansible
 
 **Kein automatisches Update darf Infrastruktur kaputt machen.** Erfahrung: Watchtower hat den Netbird-Server automatisch aktualisiert → neuer Relay-Endpoint `/relay` (ohne Slash) → Caddy-Route `handle /relay/*` hat nicht mehr gematcht → VPN-Tunnel weg → alle Dienste unerreichbar.
 
@@ -1849,12 +2547,12 @@ admin_user_nopasswd: true  # NOPASSWD für Ansible-Kompatibilität
 |-----------|-------------|---------|
 | OS-Sicherheitspatches | Ja | `unattended-upgrades` (apt, niedrig-riskant) |
 | Backup | Ja | Restic Cron |
-| Health-Checks | Ja | Zabbix |
+| Health-Checks | Ja | Grafana Alerting |
 | SSL-Erneuerung | Ja | Caddy (ACME) |
-| **Infrastruktur-Container** (Netbird, Caddy, PocketID, Tinyauth, Semaphore, Zabbix) | **NEIN** | **Nur über Ansible** (`update-all.yml` / `update-app.yml`) |
+| **Infrastruktur-Container** (Netbird, Caddy, PocketID, Tinyauth, Semaphore, Grafana, Alloy) | **NEIN** | **Nur über Ansible** (`update-all.yml` / `update-app.yml`) |
 | **Kunden-App-Container** (Nextcloud, Paperless, Vaultwarden, etc.) | Ja (Patches) | Watchtower (Label-basiert, Major-Version gepinnt) |
 
-### 17.2 Watchtower-Strategie: Nur Kunden-Apps, nie Infrastruktur
+### 19.2 Watchtower-Strategie: Nur Kunden-Apps, nie Infrastruktur
 
 **Watchtower darf NUR Kunden-App-Container updaten.** Infrastruktur-Container (alles was Netzwerk, Auth oder Routing betrifft) bekommen KEIN Watchtower-Label.
 
@@ -1864,7 +2562,9 @@ admin_user_nopasswd: true  # NOPASSWD für Ansible-Kompatibilität
 - PocketID
 - Tinyauth
 - Semaphore
-- Zabbix
+- Grafana, Prometheus, Loki (Master)
+- Grafana Alloy (Kundenserver)
+- Baserow (Master)
 - Watchtower selbst
 
 **Container MIT Watchtower-Label (Patches automatisch):**
@@ -1893,7 +2593,7 @@ services:
 2. `update-app.yml` ausführen → neues Image pullen, Container neu starten
 3. Post-Update-Checks (Health-Check, DB-Migration prüfen)
 
-### 17.3 Manuell (Semaphore)
+### 19.3 Manuell (Semaphore)
 
 | Task | Playbook |
 |------|----------|
@@ -1905,9 +2605,9 @@ services:
 
 ---
 
-## 18. Kunden-Inventar-System
+## 20. Kunden-Inventar-System
 
-### 18.1 Grundprinzip
+### 20.1 Grundprinzip
 
 Jeder Host im Kunden-Inventar bekommt:
 - **`server_roles`**: Liste von Rollen (siehe Kap. 2.1)
@@ -1916,7 +2616,7 @@ Jeder Host im Kunden-Inventar bekommt:
 
 Es gibt keine festen Deployment-Varianten. Der Betreiber definiert frei, welche Rollen auf welchem Host laufen. Rollen können kombiniert werden (siehe Kap. 2.2).
 
-### 18.2 Beispiel: Alles-auf-einem-Server (Cloud)
+### 20.2 Beispiel: Alles-auf-einem-Server (Cloud)
 
 Ein einzelner Cloud-Server übernimmt alle Rollen.
 
@@ -1933,7 +2633,7 @@ all:
       is_lxc: false
 ```
 
-### 18.3 Beispiel: Cloud-Gateway + lokale App-Server (ein LXC)
+### 20.3 Beispiel: Cloud-Gateway + lokale App-Server (ein LXC)
 
 Cloud-Server als Entry-Point, eine lokale Proxmox-LXC für alle Apps.
 
@@ -1971,7 +2671,7 @@ all:
 
 > **Der Proxmox-Host** hat `server_roles: [proxmox]`. Er wird NICHT wie ein App-Server gehärtet (kein Docker, andere UFW-Regeln). Er dient nur als Ziel für LXC-Erstellung via Proxmox API und `pct exec`-Bootstrap. Netbird auf dem Proxmox-Host wird beim Kunden-Onboarding manuell installiert (einmaliger Schritt).
 
-### 18.4 Beispiel: Cloud-Gateway + lokale App-Server (LXC pro App)
+### 20.4 Beispiel: Cloud-Gateway + lokale App-Server (LXC pro App)
 
 Cloud-Server als Entry-Point, separate LXCs pro App auf Proxmox.
 
@@ -2017,7 +2717,7 @@ all:
 
 > **Jeder LXC hat seine eigene Netbird-IP.** Ansible erreicht jeden einzelnen direkt über Netbird — kein SSH-Hopping, kein Gateway. Der Proxmox-Host wird nur für LXC-Erstellung und Bootstrap benötigt.
 
-### 18.5 Beispiel: Komplett lokal (LXC pro App)
+### 20.5 Beispiel: Komplett lokal (LXC pro App)
 
 Kein Cloud-Server. Ein Gateway-LXC auf Proxmox übernimmt den öffentlichen Zugang (via Port-Forward oder DynDNS).
 
@@ -2063,7 +2763,7 @@ all:
 
 > **Bei komplett lokaler Installation:** Der Gateway-LXC übernimmt die Rolle des Cloud-Servers (Caddy + Auth). Routing zu App-LXCs geht über Netbird — kein Unterschied zum Cloud-Gateway aus Sicht der App-Server.
 
-### 18.6 group_vars/all.yml (Hauptkonfiguration)
+### 20.6 group_vars/all.yml (Hauptkonfiguration)
 
 ```yaml
 # =====================================================================
@@ -2167,9 +2867,9 @@ dyndns:
 
 ---
 
-## 19. Repo Public-Readiness
+## 21. Repo Public-Readiness
 
-### 19.1 Was NICHT ins Repo darf
+### 21.1 Was NICHT ins Repo darf
 
 | Typ | Wo stattdessen |
 |-----|----------------|
@@ -2179,7 +2879,7 @@ dyndns:
 | Netbird Setup-Keys | Vaultwarden |
 | Passwörter jeder Art | Vaultwarden |
 
-### 19.2 Was ins Repo darf
+### 21.2 Was ins Repo darf
 
 - Alle Rollen, Playbooks, Templates
 - `config/lococloudd.yml.example`
@@ -2187,7 +2887,7 @@ dyndns:
 - Dokumentation
 - Scripts
 
-### 19.3 Ansible Vault für sensible Inventar-Daten
+### 21.3 Ansible Vault für sensible Inventar-Daten
 
 Für Kunden-Inventare die nicht in `.gitignore` stehen sollen (z.B. wenn das Repo privat bleibt), können sensitive Werte mit Ansible Vault verschlüsselt werden:
 
@@ -2197,7 +2897,7 @@ vault_netbird_key_online: "encrypted-value"
 vault_netbird_key_primary: "encrypted-value"
 ```
 
-### 19.4 README.md (Auszug)
+### 21.4 README.md (Auszug)
 
 ```markdown
 # LocoCloud
@@ -2218,7 +2918,7 @@ Microsoft 365 / Google Workspace.
 
 ---
 
-## 20. Bekannte Fallstricke & Lessons Learned
+## 22. Bekannte Fallstricke & Lessons Learned
 
 ### Allgemein
 
@@ -2241,6 +2941,10 @@ Microsoft 365 / Google Workspace.
 | **Shared Redis** | Bei `single_lxc`: DB-Nummern nutzen (db=0, db=1). Bei `lxc_per_app`: Jeder LXC hat eigenen Redis → DB-Nummern nicht nötig | Docker Compose |
 | **USB in LXC** | NICHT deaktivieren (existiert nicht) | base-Rolle |
 | **Tinyauth nicht prod-ready** | Im Betrieb bewährt — nur OIDC-Forward-Auth, kein Brute-Force-Risiko | Architektur |
+| **gocryptfs nach Reboot nicht gemountet** | Systemd-Service `gocryptfs-mount.service` prüfen. Muss VOR `docker.service` starten. Master erreichbar? SSH-Key gültig? | gocryptfs |
+| **gocryptfs Keyfile auf Server vergessen** | SOFORT löschen! Keyfile darf nur auf Master + Key-Backup liegen. Neues Keyfile generieren, altes revoken. | gocryptfs |
+| **Grafana Alloy hoher RAM-Verbrauch** | `--storage.path` auf `/tmp/alloy` setzen, WAL-Größe begrenzen. Auf kleinen LXCs (2GB): `--server.http.memory-limit-mb=256` | Monitoring |
+| **Loki Retention greift nicht** | `compactor` muss in der Loki-Config aktiviert sein. Ohne Compactor werden alte Chunks nicht gelöscht. | Monitoring |
 
 ### Ansible-spezifisch
 
@@ -2255,7 +2959,7 @@ Microsoft 365 / Google Workspace.
 
 ---
 
-## 21. Offene Design-Entscheidungen
+## 23. Offene Design-Entscheidungen
 
 ### Gelöste Entscheidungen (zur Referenz)
 
@@ -2269,13 +2973,19 @@ Microsoft 365 / Google Workspace.
 | Isolation auf Proxmox | `lxc_per_app` empfohlen, `single_lxc` als Option | Kap. 5 |
 | LXC-Bootstrap-Methode | `pct exec` via Proxmox-Host (SSH-Key + Netbird injizieren, dann direkte Verbindung) | Kap. 5.6 |
 | Netbird-Gruppen/Keys/Policies | Vollautomatisch via Netbird REST-API durch Ansible (kein manueller Eingriff) | Kap. 6.3 |
-| Watchtower-Strategie | NUR für Kunden-Apps (Label-basiert + gepinnte Major-Versionen). Infra-Container (Netbird, Caddy, PocketID, Tinyauth, Semaphore, Zabbix) OHNE Label — Updates nur über Ansible. Vorfall: Watchtower hat Netbird aktualisiert → Relay kaputt → VPN-Ausfall | Kap. 17.2 |
+| Watchtower-Strategie | NUR für Kunden-Apps (Label-basiert + gepinnte Major-Versionen). Infra-Container OHNE Label — Updates nur über Ansible. | Kap. 19.2 |
 | LXC-Template auf Proxmox | Ansible lädt Template via `pveam download` automatisch herunter wenn fehlend | Kap. 5.6 |
-| Offboarding-Strategie | Gestuft: Archivieren (Standard) oder komplett löschen. Server manuell beim Provider löschen. Credentials archiviert | Kap. 15.4 |
-| Tinyauth als Forward-Auth | PocketID + Tinyauth — im Betrieb bewährt. Nur OIDC via PocketID (kein direkter Login, kein Brute-Force-Risiko) | Kap. 7.8 |
-| DynDNS (komplett lokal) | Master-Server übernimmt DNS-Updates für lokale Kunden — immer online, kennt die Netbird-IPs | Kap. 18 |
-| Admin sudo | NOPASSWD — SSH nur über Netbird (`wt0`) + Key-Only. Netbird ist die zweite Sicherheitsstufe | Kap. 16.3 |
-| Monitoring | Zabbix auf Master für Infrastruktur-Monitoring. Uptime Kuma als optionale Kunden-App für Status-Dashboards (`status.firma.de`) | Kap. 12 |
+| Offboarding-Strategie | Gestuft: Archivieren (Standard) oder komplett löschen. Server manuell beim Provider löschen. Credentials archiviert | Kap. 17.7 |
+| Tinyauth als Forward-Auth | PocketID + Tinyauth — im Betrieb bewährt. Nur OIDC via PocketID (kein direkter Login, kein Brute-Force-Risiko) | Kap. 7.9 |
+| DynDNS (komplett lokal) | Master-Server übernimmt DNS-Updates für lokale Kunden — immer online, kennt die Netbird-IPs | Kap. 20 |
+| Admin sudo | NOPASSWD — SSH nur über Netbird (`wt0`) + Key-Only. Netbird ist die zweite Sicherheitsstufe | Kap. 18.3 |
+| Monitoring | Grafana Stack auf Master (Grafana + Prometheus + Loki). Alloy als einziger Agent. Uptime Kuma als optionale Kunden-App | Kap. 13 |
+| Verschlüsselung at Rest | gocryptfs auf `/mnt/data` auf jedem Kundenserver. Keyfile nur auf Master + Key-Backup. Auto-Mount nach Reboot via Systemd | Kap. 12 |
+| Compliance-Dokumentation | TOM, VVT, Löschkonzept als Jinja2-Templates. Automatisch generiert pro Kunde bei Onboarding/App-Änderung | Kap. 14 |
+| Berechtigungskonzept | Baserow auf Master-Server. Pro Kunde eine Tabelle mit Benutzern und App-Zugriff. Dokumentation, nicht automatischer Sync | Kap. 7.8, 3.7 |
+| Server-Onboarding | Frische Server mit IP/User/Passwort. Ansible bootstrappt alles (SSH-Key, base-Rolle, gocryptfs, Alloy). Netbird optional | Kap. 17.3 |
+| Backup-Pflicht | Ohne Backup-Ziel = kein Backup. Bewusste Entscheidung pro Kunde. Pre-Backup-Hooks für DB-Dumps. Monatlicher Restore-Test | Kap. 11 |
+| Logging & DSGVO | Loki mit 6 Monate Retention. journald FSS Sealing. Personenbezogene Daten minimiert. Automatische Löschung | Kap. 13.4 |
 
 ### Noch offene Entscheidungen
 
@@ -2289,7 +2999,9 @@ Keine — alle Entscheidungen sind getroffen.
 |------|--------|
 | 1411 | PocketID |
 | 3000 | Semaphore (nur Master) |
-| 8080 | Nextcloud / Zabbix Web |
+| 3100 | Grafana (nur Master) |
+| 3110 | Loki (nur Master, intern) |
+| 8080 | Nextcloud |
 | 8081 | Paperless-NGX |
 | 8222 | Vaultwarden |
 | 8223 | Documenso |
@@ -2300,8 +3012,10 @@ Keine — alle Entscheidungen sind getroffen.
 | 8228 | Cal.com |
 | 8229 | Uptime Kuma |
 | 8230 | Listmonk |
+| 8231 | Baserow (nur Master) |
 | 9090 | Tinyauth |
-| 10050 | Zabbix Agent |
+| 9091 | Prometheus (nur Master, intern) |
+| 12345 | Grafana Alloy (Kundenserver, intern) |
 
 ---
 
@@ -2312,8 +3026,10 @@ Keine — alle Entscheidungen sind getroffen.
 - [ ] `.env.j2` — Secrets als Variablen
 - [ ] `oidc.yml` — OIDC-Client via PocketID REST-API erstellen, Credentials in Vaultwarden speichern
 - [ ] Public Paths definieren (oder leer = komplett geschützt)
-- [ ] Backup-Pfade definieren
-- [ ] Health-Check: Port + Path für Monitoring
+- [ ] Backup-Pfade definieren (auf `/mnt/data/`)
+- [ ] Pre-Backup-Hook: DB-Dump definieren falls DB vorhanden
+- [ ] Health-Check: Port + Path für Grafana Monitoring
+- [ ] Audit-Logging: Aktiviert und dokumentiert
 - [ ] Handler: `docker restart caddy`
 - [ ] PG 18: Mount `/var/lib/postgresql`
 - [ ] Redis: DB-Nummer zuweisen (single_lxc) oder eigener Container (lxc_per_app)
@@ -2321,6 +3037,8 @@ Keine — alle Entscheidungen sind getroffen.
 - [ ] `remove.yml`: Daten archivieren, nicht löschen
 - [ ] Idempotenz testen (2x laufen lassen)
 - [ ] Keine hardcodierten Domains/E-Mails (alles aus Config/Inventar)
+- [ ] VVT-Eintrag: Verarbeitungstätigkeit im Template definiert
+- [ ] Daten in `/mnt/data/` (gocryptfs-geschützt)
 
 ---
 
