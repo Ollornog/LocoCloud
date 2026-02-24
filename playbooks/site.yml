@@ -22,12 +22,20 @@
     - role: base
       tags: [base]
 
-    # Netbird VPN
+    # Netbird VPN (optional)
     - role: netbird_client
       vars:
         netbird_setup_key: "{{ netbird_setup_key | default('') }}"
-        netbird_management_url: "{{ loco.netbird.manager_url }}"
+        netbird_management_url: "{{ loco.netbird.manager_url | default('') }}"
       tags: [netbird]
+      when: loco.netbird.enabled | default(false)
+
+    # gocryptfs encryption for /mnt/data
+    - role: gocryptfs
+      vars:
+        gocryptfs_master_host: "{{ loco.admin.full_domain | default('') }}"
+      tags: [gocryptfs]
+      when: "'backup_server' not in (server_roles | default([]))"
 
     # Auth stack (only on hosts with customer_master role)
     - role: pocketid
@@ -50,12 +58,14 @@
     - role: watchtower
       tags: [watchtower]
 
-    # Monitoring (Zabbix Agent)
+    # Monitoring (Grafana Alloy agent)
     - role: monitoring
       vars:
-        zabbix_server_ip: "{{ loco.monitoring.zabbix_server_ip | default('') }}"
-      tags: [monitoring]
-      when: loco.monitoring.zabbix_server_ip | default('') | length > 0
+        monitoring_prometheus_url: "{{ loco.grafana.prometheus_remote_write_url | default('') }}"
+        monitoring_loki_url: "{{ loco.grafana.loki_push_url | default('') }}"
+        monitoring_instance_label: "{{ inventory_hostname }}"
+        monitoring_kunde_label: "{{ kunde_id | default('') }}"
+      tags: [monitoring, alloy]
 
     # Backup (Restic)
     - role: backup

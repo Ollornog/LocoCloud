@@ -56,11 +56,18 @@
 	reverse_proxy 127.0.0.1:{{ semaphore_port }}
 }
 
-# --- Zabbix (Monitoring) ---
-{{ loco.urls.zabbix }} {
+# --- Grafana (Monitoring) ---
+{{ loco.urls.grafana }} {
 	import public
 	import auth
-	reverse_proxy 127.0.0.1:{{ zabbix_web_port }}
+	reverse_proxy 127.0.0.1:{{ grafana_port }}
+}
+
+# --- Baserow (Berechtigungskonzept) ---
+{{ loco.urls.baserow }} {
+	import public
+	import auth
+	reverse_proxy 127.0.0.1:{{ baserow_port }}
 }
 
 # --- Catch-All ---

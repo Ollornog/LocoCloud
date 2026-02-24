@@ -273,12 +273,12 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 
 **Ziel:** Produktionsbetrieb absichern.
 
-### 6.1 Monitoring-Rolle (`roles/monitoring/`)
+### 6.1 Monitoring (`roles/grafana_stack/`, `roles/alloy/`, `roles/monitoring/`)
 
-- [ ] Zabbix Server auf Master deployen (Docker Compose)
-- [x] Zabbix Agent Rolle (auf jedem Kunden-Server)
-- [x] TLS-PSK Konfiguration
-- [x] Standard-Checks: CPU, RAM, Disk, Docker, HTTP-Status, Netbird, Backup
+- [x] Grafana Stack auf Master deployen (Grafana + Prometheus + Loki)
+- [x] Alloy Agent Rolle (auf jedem Kunden-Server, ersetzt Zabbix Agent)
+- [x] Monitoring-Rolle als Wrapper → delegiert an Alloy
+- [x] Standard-Checks: CPU, RAM, Disk, Docker, HTTP-Status, Backup
 - [x] Health-Checks auf Backend-Ports (nicht öffentliche URL!)
 
 ### 6.2 Uptime-Kuma-Rolle (`roles/apps/uptime-kuma/`)

@@ -52,11 +52,10 @@
       loop: "{{ lookup('fileglob', '/opt/stacks/*/docker-compose.yml', wantlist=True) | map('dirname') | list }}"
       ignore_errors: true
 
-    - name: Stop Zabbix Agent
-      ansible.builtin.systemd:
-        name: zabbix-agent2
-        state: stopped
-        enabled: false
+    - name: Stop Alloy monitoring agent
+      community.docker.docker_compose_v2:
+        project_src: "/opt/stacks/alloy"
+        state: absent
       ignore_errors: true
 
     - name: Disable backup cron
@@ -83,9 +82,9 @@
         name: loco
 
   tasks:
-    - name: Skip Netbird cleanup if not destroying
+    - name: Skip Netbird cleanup if not destroying or Netbird disabled
       ansible.builtin.meta: end_play
-      when: not (destroy | default(false) | bool)
+      when: not (destroy | default(false) | bool) or not (loco.netbird.enabled | default(false))
 
     # List peers in customer group
     - name: List Netbird peers
