@@ -338,6 +338,11 @@ info "Phase 7: Ansible installieren"
 
 export PATH="$PATH:/root/.local/bin"
 
+# Persist PATH for future shells (ansible-playbook, ansible-galaxy etc.)
+if ! grep -q '/root/.local/bin' /root/.bashrc 2>/dev/null; then
+  echo 'export PATH="$PATH:/root/.local/bin"' >> /root/.bashrc
+fi
+
 if command -v ansible &>/dev/null; then
   ok "Ansible ist bereits installiert: $(ansible --version | head -1)"
 else
@@ -537,6 +542,7 @@ all:
       ansible_connection: local
       ansible_host: "${NETBIRD_IP:-127.0.0.1}"
       ansible_user: root
+      ansible_python_interpreter: /usr/bin/python3
       server_roles: [master]
       is_lxc: true
 YAML
