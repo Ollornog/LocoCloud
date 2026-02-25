@@ -37,7 +37,7 @@
     credential_username: "{{ nextcloud_oidc_client_id }}"
     credential_password: "{{ nextcloud_oidc_client_secret }}"
     credential_uri: "https://{{ nextcloud_domain }}"
-    credential_notes: "PocketID OIDC client for Nextcloud. Deployed: {{ ansible_date_time.iso8601 }}"
+    credential_notes: "PocketID OIDC client for Nextcloud. Deployed: {{ ansible_facts.date_time.iso8601 }}"
   when:
     - loco is defined
     - nextcloud_oidc_client_id | length > 0

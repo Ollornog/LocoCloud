@@ -35,5 +35,5 @@
     credential_name: "{{ kunde_name | default(kunde_id) }} — Restic Encryption Key"
     credential_username: "restic"
     credential_password: "{{ backup_restic_password }}"
-    credential_notes: "Restic backup encryption key. KEEP THIS SAFE — data is unrecoverable without it. Deployed: {{ ansible_date_time.iso8601 }}"
+    credential_notes: "Restic backup encryption key. KEEP THIS SAFE — data is unrecoverable without it. Deployed: {{ ansible_facts.date_time.iso8601 }}"
   when: loco is defined

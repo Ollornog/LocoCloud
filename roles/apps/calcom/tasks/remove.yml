@@ -10,11 +10,11 @@
 
 - name: Archive Cal.com data
   ansible.builtin.command: >
-    tar czf /opt/archives/calcom-{{ ansible_date_time.date }}.tar.gz
+    tar czf /opt/archives/calcom-{{ ansible_facts.date_time.date }}.tar.gz
     -C {{ calcom_stack_path }} .
   args:
-    creates: "/opt/archives/calcom-{{ ansible_date_time.date }}.tar.gz"
+    creates: "/opt/archives/calcom-{{ ansible_facts.date_time.date }}.tar.gz"
 
 - name: Archive complete
   ansible.builtin.debug:
-    msg: "Cal.com stopped. Data archived to /opt/archives/calcom-{{ ansible_date_time.date }}.tar.gz."
+    msg: "Cal.com stopped. Data archived to /opt/archives/calcom-{{ ansible_facts.date_time.date }}.tar.gz."

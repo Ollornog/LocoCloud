@@ -10,11 +10,11 @@
 
 - name: Archive Documenso data
   ansible.builtin.command: >
-    tar czf /opt/archives/documenso-{{ ansible_date_time.date }}.tar.gz
+    tar czf /opt/archives/documenso-{{ ansible_facts.date_time.date }}.tar.gz
     -C {{ documenso_stack_path }} .
   args:
-    creates: "/opt/archives/documenso-{{ ansible_date_time.date }}.tar.gz"
+    creates: "/opt/archives/documenso-{{ ansible_facts.date_time.date }}.tar.gz"
 
 - name: Archive complete
   ansible.builtin.debug:
-    msg: "Documenso stopped. Data archived to /opt/archives/documenso-{{ ansible_date_time.date }}.tar.gz."
+    msg: "Documenso stopped. Data archived to /opt/archives/documenso-{{ ansible_facts.date_time.date }}.tar.gz."

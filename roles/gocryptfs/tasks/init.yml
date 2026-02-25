@@ -75,7 +75,7 @@
         credential_name: "{{ kunde_name | default(kunde_id) }} — gocryptfs Key ({{ inventory_hostname }})"
         credential_username: "gocryptfs"
         credential_password: "Keyfile stored at {{ gocryptfs_master_host }}:{{ gocryptfs_master_key_store }}/{{ inventory_hostname }}.key"
-        credential_notes: "gocryptfs encryption keyfile location. Cipher dir: {{ gocryptfs_cipher_dir }}. Plain dir: {{ gocryptfs_plain_dir }}. Initialized: {{ ansible_date_time.iso8601 }}. KEEP THIS SAFE — data is unrecoverable without the keyfile."
+        credential_notes: "gocryptfs encryption keyfile location. Cipher dir: {{ gocryptfs_cipher_dir }}. Plain dir: {{ gocryptfs_plain_dir }}. Initialized: {{ ansible_facts.date_time.iso8601 }}. KEEP THIS SAFE — data is unrecoverable without the keyfile."
       when: loco is defined
 
     - name: Mount gocryptfs filesystem after init

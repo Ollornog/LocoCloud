@@ -9,7 +9,7 @@
 
 - name: Archive Uptime Kuma data
   ansible.builtin.command: >
-    tar czf /opt/archives/uptime-kuma-{{ ansible_date_time.date }}.tar.gz
+    tar czf /opt/archives/uptime-kuma-{{ ansible_facts.date_time.date }}.tar.gz
     -C {{ uptime_kuma_stack_path }}/data .
   args:
-    creates: "/opt/archives/uptime-kuma-{{ ansible_date_time.date }}.tar.gz"
+    creates: "/opt/archives/uptime-kuma-{{ ansible_facts.date_time.date }}.tar.gz"

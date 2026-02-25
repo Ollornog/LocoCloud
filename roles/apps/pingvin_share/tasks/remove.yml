@@ -10,11 +10,11 @@
 
 - name: Archive Pingvin Share data
   ansible.builtin.command: >
-    tar czf /opt/archives/pingvin-share-{{ ansible_date_time.date }}.tar.gz
+    tar czf /opt/archives/pingvin-share-{{ ansible_facts.date_time.date }}.tar.gz
     -C {{ pingvin_share_stack_path }} .
   args:
-    creates: "/opt/archives/pingvin-share-{{ ansible_date_time.date }}.tar.gz"
+    creates: "/opt/archives/pingvin-share-{{ ansible_facts.date_time.date }}.tar.gz"
 
 - name: Archive complete
   ansible.builtin.debug:
-    msg: "Pingvin Share stopped. Data archived to /opt/archives/pingvin-share-{{ ansible_date_time.date }}.tar.gz."
+    msg: "Pingvin Share stopped. Data archived to /opt/archives/pingvin-share-{{ ansible_facts.date_time.date }}.tar.gz."

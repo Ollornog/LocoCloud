@@ -176,7 +176,7 @@ OIDC-Client über PocketID REST-API registrieren:
     credential_username: "{{ meineapp_oidc_client_id }}"
     credential_password: "{{ meineapp_oidc_client_secret }}"
     credential_uri: "https://{{ meineapp_domain }}"
-    credential_notes: "OIDC Client for MeineApp. Created: {{ ansible_date_time.iso8601 }}"
+    credential_notes: "OIDC Client for MeineApp. Created: {{ ansible_facts.date_time.iso8601 }}"
   when: oidc_client is not skipped
 
 # Redeploy .env with OIDC credentials
@@ -207,10 +207,10 @@ OIDC-Client über PocketID REST-API registrieren:
 
 - name: Archive MeineApp data
   ansible.builtin.command: >
-    tar czf /opt/archives/meineapp-{{ ansible_date_time.date }}.tar.gz
+    tar czf /opt/archives/meineapp-{{ ansible_facts.date_time.date }}.tar.gz
     -C {{ meineapp_stack_path }} .
   args:
-    creates: "/opt/archives/meineapp-{{ ansible_date_time.date }}.tar.gz"
+    creates: "/opt/archives/meineapp-{{ ansible_facts.date_time.date }}.tar.gz"
 ```
 
 ### 6. templates/docker-compose.yml.j2
@@ -219,7 +219,7 @@ OIDC-Client über PocketID REST-API registrieren:
 # ============================================
 # GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
 # Kunde: {{ kunde_name | default('N/A') }} ({{ kunde_domain | default('N/A') }})
-# Generiert: {{ ansible_date_time.iso8601 }}
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
 # ============================================
 services:
   meineapp:
@@ -252,7 +252,7 @@ services:
 ```
 # ============================================
 # GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
-# Generiert: {{ ansible_date_time.iso8601 }}
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
 # ============================================
 DATABASE_URL=postgresql://{{ meineapp_db_user }}:{{ meineapp_db_password }}@meineapp-db/{{ meineapp_db_name }}
 {% if meineapp_oidc_enabled and meineapp_oidc_client_id | default('') | length > 0 %}

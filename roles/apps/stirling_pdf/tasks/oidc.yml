@@ -35,7 +35,7 @@
     credential_username: "{{ stirling_pdf_oidc_client_id }}"
     credential_password: "{{ stirling_pdf_oidc_client_secret }}"
     credential_uri: "https://{{ stirling_pdf_domain }}"
-    credential_notes: "PocketID OIDC client for Stirling PDF. Deployed: {{ ansible_date_time.iso8601 }}"
+    credential_notes: "PocketID OIDC client for Stirling PDF. Deployed: {{ ansible_facts.date_time.iso8601 }}"
   when:
     - loco is defined
     - stirling_pdf_oidc_client_id | length > 0
