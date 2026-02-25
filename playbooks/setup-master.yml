@@ -21,6 +21,9 @@
     # Local PocketID API URL for server-to-server calls during bootstrap.
     # Public URL is not resolvable until DNS/Caddy are configured.
     pocketid_api_url: "http://127.0.0.1:{{ pocketid_port | default(1411) }}"
+    # Local Vaultwarden URL for credential storage during bootstrap.
+    # Public domain not resolvable until DNS is configured.
+    vw_local_api_url: "http://127.0.0.1:{{ vaultwarden_port | default(8222) }}"
     # Initial token from config — PocketID role may auto-generate and override via set_fact.
     # Do NOT re-assign this in downstream role vars, or it overwrites the generated value.
     pocketid_api_token: "{{ loco.pocketid.api_token | default('') }}"
@@ -104,7 +107,7 @@
         name: credentials
         tasks_from: store.yml
       vars:
-        vw_api_url: "https://{{ loco.urls.vaultwarden }}"
+        vw_api_url: "{{ vw_local_api_url }}"
         credential_name: "Master — PocketID API Token"
         credential_username: "STATIC_API_KEY"
         credential_password: "{{ pocketid_api_token }}"
@@ -118,7 +121,7 @@
         name: credentials
         tasks_from: store.yml
       vars:
-        vw_api_url: "https://{{ loco.urls.vaultwarden }}"
+        vw_api_url: "{{ vw_local_api_url }}"
         credential_name: "Master — Semaphore Admin"
         credential_username: "{{ semaphore_admin_user | default('admin') }}"
         credential_password: "{{ semaphore_admin_password }}"
@@ -132,7 +135,7 @@
         name: credentials
         tasks_from: store.yml
       vars:
-        vw_api_url: "https://{{ loco.urls.vaultwarden }}"
+        vw_api_url: "{{ vw_local_api_url }}"
         credential_name: "Master — Grafana Admin"
         credential_username: "{{ grafana_admin_user | default('admin') }}"
         credential_password: "{{ grafana_admin_password }}"
@@ -146,7 +149,7 @@
         name: credentials
         tasks_from: store.yml
       vars:
-        vw_api_url: "https://{{ loco.urls.vaultwarden }}"
+        vw_api_url: "{{ vw_local_api_url }}"
         credential_name: "Master — Baserow Admin"
         credential_username: "{{ baserow_admin_email | default(loco.operator.email) }}"
         credential_password: "{{ baserow_admin_password }}"

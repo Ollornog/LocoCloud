@@ -81,7 +81,7 @@
     name: credentials
     tasks_from: store.yml
   vars:
-    vw_api_url: "{{ loco.vaultwarden.url }}"
+    vw_api_url: "{{ vw_local_api_url | default(loco.vaultwarden.url) }}"
     credential_name: "Master — Grafana Admin"
     credential_username: "{{ grafana_admin_user }}"
     credential_password: "{{ grafana_admin_password }}"

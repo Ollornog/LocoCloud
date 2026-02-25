@@ -80,7 +80,7 @@
     name: credentials
     tasks_from: store.yml
   vars:
-    vw_api_url: "https://{{ vaultwarden_domain }}"
+    vw_api_url: "http://127.0.0.1:{{ vaultwarden_port }}"
     credential_name: "Master — Vaultwarden OIDC Client"
     credential_username: "{{ vaultwarden_sso_client_id }}"
     credential_password: "{{ vaultwarden_sso_client_secret }}"
