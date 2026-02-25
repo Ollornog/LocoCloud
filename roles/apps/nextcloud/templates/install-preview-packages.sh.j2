@@ -1,0 +1,42 @@
+#!/bin/bash
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Nextcloud Preview-Pakete: ffmpeg, HEIC, PDF, Office
+# ============================================
+#
+# Runs as before-starting hook inside the Nextcloud container.
+# Checks if packages are already installed to keep restarts fast.
+
+set -e
+
+MARKER="/tmp/.nc-preview-packages-installed"
+
+# After Watchtower image update, /tmp is fresh → packages reinstall automatically
+if [ -f "$MARKER" ]; then
+  echo "[preview-packages] Already installed, skipping."
+  exit 0
+fi
+
+echo "[preview-packages] Installing ffmpeg, ghostscript, HEIC support, LibreOffice..."
+
+apt-get update -qq
+
+# Find the correct HEIC package name (varies by Debian version)
+HEIC_PKG=$(apt-cache search 'libmagickcore.*extra' 2>/dev/null | head -1 | awk '{print $1}')
+
+apt-get install -y --no-install-recommends \
+  ffmpeg \
+  ghostscript \
+  ${HEIC_PKG:-libmagickcore-6.q16-6-extra} \
+  libreoffice-nogui
+
+# ImageMagick blocks PDF by default (security policy). Enable read access for previews.
+POLICY_FILE=$(find /etc/ImageMagick* -name policy.xml 2>/dev/null | head -1)
+if [ -n "$POLICY_FILE" ] && grep -q 'rights="none" pattern="PDF"' "$POLICY_FILE"; then
+  sed -i 's/rights="none" pattern="PDF"/rights="read|write" pattern="PDF"/' "$POLICY_FILE"
+  echo "[preview-packages] ImageMagick PDF policy updated."
+fi
+
+rm -rf /var/lib/apt/lists/*
+touch "$MARKER"
+echo "[preview-packages] Done."

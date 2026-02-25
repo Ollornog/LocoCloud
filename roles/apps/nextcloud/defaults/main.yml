@@ -31,6 +31,27 @@ nextcloud_preview_jpeg_quality: 60
 nextcloud_preview_concurrency_all: 4
 nextcloud_preview_concurrency_new: 2
 
+# Preview providers — all formats that should generate thumbnails.
+# Packages installed via before-starting hook: ffmpeg, ghostscript,
+# libmagickcore-extra (HEIC/HEIF), libreoffice-nogui.
+nextcloud_preview_providers:
+  - "OC\\Preview\\Imaginary"      # Images via Imaginary sidecar
+  - "OC\\Preview\\Movie"          # Video thumbnails (ffmpeg)
+  - "OC\\Preview\\HEIC"           # iPhone photos (ImageMagick HEIC)
+  - "OC\\Preview\\PDF"            # PDF pages (ghostscript)
+  - "OC\\Preview\\MSOfficeDoc"    # Legacy Office .doc/.xls/.ppt
+  - "OC\\Preview\\MSOffice2003"   # Office 2003 XML
+  - "OC\\Preview\\MSOffice2007"   # Office .docx/.xlsx/.pptx
+  - "OC\\Preview\\OpenDocument"   # LibreOffice .odt/.ods/.odp
+  - "OC\\Preview\\BMP"
+  - "OC\\Preview\\GIF"
+  - "OC\\Preview\\JPEG"
+  - "OC\\Preview\\PNG"
+  - "OC\\Preview\\TXT"
+  - "OC\\Preview\\MarkDown"
+  - "OC\\Preview\\MP3"
+  - "OC\\Preview\\Krita"
+
 # Admin
 nextcloud_admin_user: "admin"
 nextcloud_admin_password: ""  # Generated if empty

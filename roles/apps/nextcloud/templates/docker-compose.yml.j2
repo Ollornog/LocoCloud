@@ -14,6 +14,7 @@ services:
     volumes:
       - {{ nextcloud_stack_path }}/html:/var/www/html
       - {{ nextcloud_data_path }}:/var/www/html/data
+      - {{ nextcloud_stack_path }}/install-preview-packages.sh:/docker-entrypoint-hooks.d/before-starting/install-preview-packages.sh:ro
 {% if nextcloud_security_conf is defined %}
       - {{ nextcloud_stack_path }}/security.conf:/etc/apache2/conf-enabled/security.conf:ro
 {% endif %}
