@@ -15,6 +15,7 @@
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../config/lococloudd.yml"
         name: loco
+      tags: [always]
 
   tasks:
     - name: Validate required variables
@@ -63,6 +64,7 @@
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../config/lococloudd.yml"
         name: loco
+      tags: [always]
 
   roles:
     - role: base

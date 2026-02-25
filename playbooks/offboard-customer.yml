@@ -19,6 +19,7 @@
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../config/lococloudd.yml"
         name: loco
+      tags: [always]
 
   tasks:
     - name: Run final backup
@@ -80,6 +81,7 @@
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../config/lococloudd.yml"
         name: loco
+      tags: [always]
 
   tasks:
     - name: Skip Netbird cleanup if not destroying or Netbird disabled
@@ -151,6 +153,7 @@
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../config/lococloudd.yml"
         name: loco
+      tags: [always]
 
   tasks:
     - name: Skip if not destroying
