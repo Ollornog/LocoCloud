@@ -19,11 +19,25 @@
     - baserow_oidc_client_id | length == 0
     - loco.pocketid.api_token | default('') | length > 0
 
-- name: Set OIDC credentials from API response
+- name: Set OIDC client ID from API response
   ansible.builtin.set_fact:
     baserow_oidc_client_id: "{{ baserow_oidc_client.json.id }}"
-    baserow_oidc_client_secret: "{{ baserow_oidc_client.json.secret }}"
   when: baserow_oidc_client is not skipped and baserow_oidc_client is changed
+
+- name: Generate OIDC client secret
+  ansible.builtin.uri:
+    url: "https://{{ baserow_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients/{{ baserow_oidc_client_id }}/secret"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    status_code: 200
+  register: baserow_secret_result
+  when: baserow_oidc_client_id | default('') | length > 0
+
+- name: Set OIDC client secret
+  ansible.builtin.set_fact:
+    baserow_oidc_client_secret: "{{ baserow_secret_result.json.secret }}"
+  when: baserow_secret_result is defined and baserow_secret_result is not skipped
 
 - name: Store Baserow OIDC credentials
   ansible.builtin.include_role:

@@ -34,17 +34,28 @@
   register: oidc_create_result
   when: vaultwarden_oidc_client is none
 
-- name: Set OIDC client facts from creation
+- name: Set Vaultwarden OIDC client ID from creation
   ansible.builtin.set_fact:
     vaultwarden_sso_client_id: "{{ oidc_create_result.json.id }}"
-    vaultwarden_sso_client_secret: "{{ oidc_create_result.json.secret }}"
   when: vaultwarden_oidc_client is none
 
-- name: Set OIDC client facts from existing client
+- name: Set Vaultwarden OIDC client ID from existing client
   ansible.builtin.set_fact:
     vaultwarden_sso_client_id: "{{ vaultwarden_oidc_client.id }}"
-    vaultwarden_sso_client_secret: "{{ vaultwarden_oidc_client.secret | default('') }}"
   when: vaultwarden_oidc_client is not none
+
+- name: Generate Vaultwarden OIDC client secret
+  ansible.builtin.uri:
+    url: "{{ pocketid_api_url }}/api/oidc/clients/{{ vaultwarden_sso_client_id }}/secret"
+    method: POST
+    headers:
+      X-API-Key: "{{ pocketid_api_token }}"
+    status_code: 200
+  register: vw_secret_result
+
+- name: Set Vaultwarden OIDC client secret
+  ansible.builtin.set_fact:
+    vaultwarden_sso_client_secret: "{{ vw_secret_result.json.secret }}"
 
 - name: Enable SSO in Vaultwarden
   ansible.builtin.set_fact:

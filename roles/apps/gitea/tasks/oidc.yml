@@ -19,11 +19,25 @@
     - gitea_oidc_client_id | length == 0
     - loco.pocketid.api_token | default('') | length > 0
 
-- name: Set OIDC credentials from API response
+- name: Set OIDC client ID from API response
   ansible.builtin.set_fact:
     gitea_oidc_client_id: "{{ gitea_oidc_client.json.id }}"
-    gitea_oidc_client_secret: "{{ gitea_oidc_client.json.secret }}"
   when: gitea_oidc_client is not skipped and gitea_oidc_client is changed
+
+- name: Generate OIDC client secret
+  ansible.builtin.uri:
+    url: "https://{{ gitea_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients/{{ gitea_oidc_client_id }}/secret"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    status_code: 200
+  register: gitea_secret_result
+  when: gitea_oidc_client_id | default('') | length > 0
+
+- name: Set OIDC client secret
+  ansible.builtin.set_fact:
+    gitea_oidc_client_secret: "{{ gitea_secret_result.json.secret }}"
+  when: gitea_secret_result is defined and gitea_secret_result is not skipped
 
 - name: Store Gitea OIDC credentials
   ansible.builtin.include_role:
