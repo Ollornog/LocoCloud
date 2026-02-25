@@ -14,9 +14,7 @@
       - wget
       - git
       - gnupg
-      - apt-transport-https
       - ca-certificates
-      - software-properties-common
       - htop
       - jq
       - unzip
