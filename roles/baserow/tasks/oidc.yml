@@ -44,7 +44,7 @@
     name: credentials
     tasks_from: store.yml
   vars:
-    vw_api_url: "{{ loco.vaultwarden.url }}"
+    vw_api_url: "{{ vw_local_api_url | default(loco.vaultwarden.url) }}"
     credential_name: "Baserow OIDC Client"
     credential_username: "{{ baserow_oidc_client_id }}"
     credential_password: "{{ baserow_oidc_client_secret }}"
