@@ -17,6 +17,7 @@
 | Watchtower darf KEINE Infra-Container updaten | Netbird, Caddy, PocketID, Tinyauth, Semaphore, Grafana, Alloy, Baserow: KEIN Watchtower-Label. Updates NUR über Ansible. Vorfall: Watchtower hat Netbird-Server aktualisiert → Relay-Endpoint geändert → Tunnel kaputt. |
 | Netbird 502 nach Watchtower-Update (v0.65.3) | Ab v0.65.0 hat Netbird den Relay-Endpoint von `/relay/*` auf `/relay*` geändert. Caddy-Pfad-Matcher greift nicht mehr + TLS-SNI-Mismatch. Fix: `handle /relay*` (ohne Slash) und `tls_server_name` pro Domain im `transport http` Block. |
 | Netbird P2P statt Relay (Server ↔ LXC) | Wenn Netbird-Server und Peer auf demselben Host laufen: Eingebetteter STUN-Server kann sich nicht selbst vermitteln → STUN bleibt auf "Checking..." hängen → Relay statt P2P. Fix: Externe STUN-Server (Cloudflare + Google) in `/opt/stacks/netbird/config.yaml` eintragen. |
+| Netbird v0.66.0 JSON-Format geändert | `netbird status --json` hat kein top-level `.status`/`.ip` mehr. Stattdessen: `.management.connected` (bool) und `.netbirdIp` (string mit CIDR). `netbird_client`-Rolle wurde angepasst. |
 | LXC-Template fehlt auf Proxmox | Ansible muss Template via `pveam download` herunterladen bevor LXC-Erstellung. |
 | gocryptfs nach Reboot nicht gemountet | Systemd-Service `gocryptfs-mount.service` prüfen. Muss VOR `docker.service` starten. Master erreichbar? SSH-Key gültig? |
 | gocryptfs Keyfile auf Server vergessen | SOFORT löschen! Keyfile darf nur auf Master + Key-Backup liegen. |
