@@ -342,7 +342,6 @@ if command -v ansible &>/dev/null; then
   ok "Ansible ist bereits installiert: $(ansible --version | head -1)"
 else
   pipx install ansible-core
-  pipx ensurepath
   export PATH="$PATH:/root/.local/bin"
 
   if command -v ansible &>/dev/null; then
