@@ -10,7 +10,7 @@
 
 - name: Parse Netbird status
   ansible.builtin.set_fact:
-    nb_connected: "{{ (nb_status_raw.stdout | from_json).status | default('') == 'Connected' }}"
+    nb_connected: "{{ (nb_status_raw.stdout | from_json).management.connected | default(false) }}"
   when: nb_status_raw.rc == 0 and nb_status_raw.stdout | length > 0
 
 - name: Join Netbird network
@@ -28,14 +28,14 @@
   register: nb_status_check
   until: >
     nb_status_check.rc == 0
-    and (nb_status_check.stdout | from_json).status | default('') == 'Connected'
+    and (nb_status_check.stdout | from_json).management.connected | default(false)
   retries: 30
   delay: 5
   changed_when: false
 
 - name: Register Netbird IP as fact
   ansible.builtin.set_fact:
-    netbird_ip: "{{ (nb_status_check.stdout | from_json).ip | default('') | regex_replace('/.*', '') }}"
+    netbird_ip: "{{ (nb_status_check.stdout | from_json).netbirdIp | default('') | regex_replace('/.*', '') }}"
 
 - name: Display Netbird IP
   ansible.builtin.debug:
