@@ -52,7 +52,7 @@
         url: "https://id.{{ kunde_domain }}/api/users"
         method: GET
         headers:
-          Authorization: "Bearer {{ loco.pocketid.api_token }}"
+          X-API-Key: "{{ loco.pocketid.api_token }}"
         status_code: 200
       register: pid_users
       when:
@@ -69,7 +69,7 @@
         url: "https://id.{{ kunde_domain }}/api/users/{{ pid_user_id }}"
         method: DELETE
         headers:
-          Authorization: "Bearer {{ loco.pocketid.api_token }}"
+          X-API-Key: "{{ loco.pocketid.api_token }}"
         status_code: [200, 204, 404]
       when: pid_user_id is defined and pid_user_id | length > 0
 

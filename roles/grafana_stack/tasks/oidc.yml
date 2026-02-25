@@ -8,7 +8,7 @@
     url: "https://{{ pocketid_domain }}/api/oidc/clients"
     method: GET
     headers:
-      Authorization: "Bearer {{ pocketid_api_token }}"
+      X-API-Key: "{{ pocketid_api_token }}"
     status_code: 200
   register: oidc_clients
 
@@ -22,7 +22,7 @@
     url: "https://{{ pocketid_domain }}/api/oidc/clients"
     method: POST
     headers:
-      Authorization: "Bearer {{ pocketid_api_token }}"
+      X-API-Key: "{{ pocketid_api_token }}"
       Content-Type: "application/json"
     body_format: json
     body:

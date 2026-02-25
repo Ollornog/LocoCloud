@@ -14,7 +14,7 @@ Wenn eine neue App als Ansible-Rolle implementiert wird:
 
 ## PocketID API-Integration (in `oidc.yml`)
 
-- [ ] OIDC-Client über PocketID REST-API erstellen (`uri`-Modul, Bearer-Token)
+- [ ] OIDC-Client über PocketID REST-API erstellen (`uri`-Modul, `X-API-Key`-Header)
 - [ ] Callback-URL korrekt setzen: `https://{{ app_subdomain }}.{{ kunde_domain }}{{ app_oidc_redirect_path }}`
 - [ ] Client-ID und Client-Secret aus API-Response extrahieren
 - [ ] Credentials über `credentials`-Rolle in Admin-Vaultwarden speichern

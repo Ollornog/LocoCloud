@@ -68,8 +68,10 @@
 
 ## PocketID API-Integration
 
-- **User anlegen:** `uri`-Modul gegen `https://id.firma.de/api/users` (POST, Bearer-Token)
+- **Auth-Header:** `X-API-Key: {{ pocketid_api_token }}` (NICHT `Authorization: Bearer`). PocketID v2 nutzt `X-API-Key`.
+- **User anlegen:** `uri`-Modul gegen `https://id.firma.de/api/users` (POST)
 - **Gruppen erstellen:** `uri`-Modul gegen `https://id.firma.de/api/user-groups`
 - **OIDC-Clients erstellen:** `uri`-Modul gegen `https://id.firma.de/api/oidc/clients` (Name, callbackURLs, Scopes)
 - API gibt Client-ID und Client-Secret zurück → in Vaultwarden speichern
 - PocketID API-Token wird als Variable `pocketid_api_token` aus Vault geladen
+- **Env-Variable im Container:** `STATIC_API_KEY` (mind. 16 Zeichen)
