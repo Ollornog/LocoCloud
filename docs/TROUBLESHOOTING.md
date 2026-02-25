@@ -324,6 +324,28 @@ Keyfile darf NUR auf dem Master-Server (`/opt/lococloudd/keys/`) und optional au
 
 ---
 
+## Credential Storage
+
+### Vaultwarden API: 401 bei /api/ciphers
+
+**Problem:** `credentials`-Rolle gibt 401 beim Speichern von Credentials.
+
+**Ursache:** Vaultwarden's `/api/ciphers` erfordert ein User-JWT-Token (OAuth2 Login), nicht den Admin-Token. Zusätzlich müssen alle Daten client-seitig verschlüsselt werden (Bitwarden-Protokoll). Der Admin-Token funktioniert nur für `/admin/`-Endpoints.
+
+**Lösung:** Die `credentials`-Rolle speichert während Bootstrap in eine lokale Datei (`/root/.loco-credentials-pending.json`). Nach dem manuellen Erstellen des Vaultwarden-User-Accounts:
+
+```bash
+# bw CLI installieren und konfigurieren
+npm install -g @bitwarden/cli
+bw config server https://vault.admin.example.com
+bw login user@example.com
+
+# Pending credentials importieren
+ansible-playbook playbooks/import-credentials.yml -i inventories/master/
+```
+
+---
+
 ## Backup
 
 ### Restic: Repository nicht initialisiert
