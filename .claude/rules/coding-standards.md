@@ -24,7 +24,7 @@
   # ============================================
   # GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
   # Kunde: {{ kunde_name }} ({{ kunde_domain }})
-  # Generiert: {{ ansible_date_time.iso8601 }}
+  # Generiert: {{ ansible_facts.date_time.iso8601 }}
   # ============================================
   ```
 - **Keine Logik in Templates** die in Rollen gehört. Templates rendern nur Variablen.

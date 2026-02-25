@@ -2,7 +2,7 @@
 # ============================================
 # GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
 # gocryptfs Mount Script
-# Generiert: {{ ansible_date_time.iso8601 }}
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
 # ============================================
 # Fetches keyfile from master, mounts gocryptfs, removes keyfile immediately.
 # Called by gocryptfs-mount.service on boot (before Docker starts).
