@@ -8,6 +8,17 @@
     state: directory
     mode: "0755"
 
+# Remove legacy repo/key from manual installs (different Signed-By path conflicts)
+- name: Remove legacy Netbird apt source list
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/netbird.list
+    state: absent
+
+- name: Remove legacy Netbird signing key
+  ansible.builtin.file:
+    path: /usr/share/keyrings/netbird-archive-keyring.gpg
+    state: absent
+
 - name: Download Netbird apt signing key
   ansible.builtin.get_url:
     url: https://pkgs.netbird.io/debian/public.key
