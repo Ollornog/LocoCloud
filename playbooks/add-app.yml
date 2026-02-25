@@ -20,6 +20,7 @@
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../config/lococloudd.yml"
         name: loco
+      tags: [always]
 
     - name: Validate app_name
       ansible.builtin.assert:
@@ -70,6 +71,7 @@
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../config/lococloudd.yml"
         name: loco
+      tags: [always]
 
     - name: Validate required variables
       ansible.builtin.assert:

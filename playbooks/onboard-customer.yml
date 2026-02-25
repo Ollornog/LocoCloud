@@ -20,6 +20,7 @@
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../config/lococloudd.yml"
         name: loco
+      tags: [always]
 
     - name: Load customer config
       ansible.builtin.include_vars:
@@ -104,6 +105,7 @@
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../config/lococloudd.yml"
         name: loco
+      tags: [always]
 
   roles:
     # 1. OS hardening + Docker
@@ -270,6 +272,7 @@
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../config/lococloudd.yml"
         name: loco
+      tags: [always]
 
     - name: Load customer config
       ansible.builtin.include_vars:
