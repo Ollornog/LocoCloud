@@ -19,11 +19,25 @@
     - paperless_oidc_client_id | length == 0
     - loco.pocketid.api_token | default('') | length > 0
 
-- name: Set OIDC credentials from API response
+- name: Set OIDC client ID from API response
   ansible.builtin.set_fact:
     paperless_oidc_client_id: "{{ pl_oidc_client.json.id }}"
-    paperless_oidc_client_secret: "{{ pl_oidc_client.json.secret }}"
   when: pl_oidc_client is not skipped and pl_oidc_client is changed
+
+- name: Generate OIDC client secret
+  ansible.builtin.uri:
+    url: "https://{{ paperless_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients/{{ paperless_oidc_client_id }}/secret"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    status_code: 200
+  register: pl_secret_result
+  when: paperless_oidc_client_id | default('') | length > 0
+
+- name: Set OIDC client secret
+  ansible.builtin.set_fact:
+    paperless_oidc_client_secret: "{{ pl_secret_result.json.secret }}"
+  when: pl_secret_result is defined and pl_secret_result is not skipped
 
 - name: Store Paperless OIDC credentials
   ansible.builtin.include_role:

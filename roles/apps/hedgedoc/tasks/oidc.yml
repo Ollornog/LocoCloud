@@ -19,11 +19,25 @@
     - hedgedoc_oidc_client_id | length == 0
     - loco.pocketid.api_token | default('') | length > 0
 
-- name: Set OIDC credentials from API response
+- name: Set OIDC client ID from API response
   ansible.builtin.set_fact:
     hedgedoc_oidc_client_id: "{{ hedgedoc_oidc_client.json.id }}"
-    hedgedoc_oidc_client_secret: "{{ hedgedoc_oidc_client.json.secret }}"
   when: hedgedoc_oidc_client is not skipped and hedgedoc_oidc_client is changed
+
+- name: Generate OIDC client secret
+  ansible.builtin.uri:
+    url: "https://{{ hedgedoc_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients/{{ hedgedoc_oidc_client_id }}/secret"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    status_code: 200
+  register: hedgedoc_secret_result
+  when: hedgedoc_oidc_client_id | default('') | length > 0
+
+- name: Set OIDC client secret
+  ansible.builtin.set_fact:
+    hedgedoc_oidc_client_secret: "{{ hedgedoc_secret_result.json.secret }}"
+  when: hedgedoc_secret_result is defined and hedgedoc_secret_result is not skipped
 
 - name: Store HedgeDoc OIDC credentials
   ansible.builtin.include_role:

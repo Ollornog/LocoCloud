@@ -19,11 +19,25 @@
     - outline_oidc_client_id | length == 0
     - loco.pocketid.api_token | default('') | length > 0
 
-- name: Set OIDC credentials from API response
+- name: Set OIDC client ID from API response
   ansible.builtin.set_fact:
     outline_oidc_client_id: "{{ outline_oidc_client.json.id }}"
-    outline_oidc_client_secret: "{{ outline_oidc_client.json.secret }}"
   when: outline_oidc_client is not skipped and outline_oidc_client is changed
+
+- name: Generate OIDC client secret
+  ansible.builtin.uri:
+    url: "https://{{ outline_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients/{{ outline_oidc_client_id }}/secret"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    status_code: 200
+  register: outline_secret_result
+  when: outline_oidc_client_id | default('') | length > 0
+
+- name: Set OIDC client secret
+  ansible.builtin.set_fact:
+    outline_oidc_client_secret: "{{ outline_secret_result.json.secret }}"
+  when: outline_secret_result is defined and outline_secret_result is not skipped
 
 - name: Store Outline OIDC credentials
   ansible.builtin.include_role:

@@ -33,17 +33,28 @@
   register: oidc_create_result
   when: grafana_oidc_client is none
 
-- name: Set OIDC client facts from creation
+- name: Set Grafana OIDC client ID from creation
   ansible.builtin.set_fact:
     grafana_oidc_client_id: "{{ oidc_create_result.json.id }}"
-    grafana_oidc_client_secret: "{{ oidc_create_result.json.secret }}"
   when: grafana_oidc_client is none
 
-- name: Set OIDC client facts from existing client
+- name: Set Grafana OIDC client ID from existing client
   ansible.builtin.set_fact:
     grafana_oidc_client_id: "{{ grafana_oidc_client.id }}"
-    grafana_oidc_client_secret: "{{ grafana_oidc_client.secret | default('') }}"
   when: grafana_oidc_client is not none
+
+- name: Generate Grafana OIDC client secret
+  ansible.builtin.uri:
+    url: "https://{{ pocketid_domain }}/api/oidc/clients/{{ grafana_oidc_client_id }}/secret"
+    method: POST
+    headers:
+      X-API-Key: "{{ pocketid_api_token }}"
+    status_code: 200
+  register: grafana_secret_result
+
+- name: Set Grafana OIDC client secret
+  ansible.builtin.set_fact:
+    grafana_oidc_client_secret: "{{ grafana_secret_result.json.secret }}"
 
 - name: Set OIDC URL facts
   ansible.builtin.set_fact:

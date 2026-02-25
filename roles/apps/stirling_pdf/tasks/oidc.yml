@@ -19,11 +19,25 @@
     - stirling_pdf_oidc_client_id | length == 0
     - loco.pocketid.api_token | default('') | length > 0
 
-- name: Set OIDC credentials from API response
+- name: Set OIDC client ID from API response
   ansible.builtin.set_fact:
     stirling_pdf_oidc_client_id: "{{ spdf_oidc_client.json.id }}"
-    stirling_pdf_oidc_client_secret: "{{ spdf_oidc_client.json.secret }}"
   when: spdf_oidc_client is not skipped and spdf_oidc_client is changed
+
+- name: Generate OIDC client secret
+  ansible.builtin.uri:
+    url: "https://{{ stirling_pdf_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients/{{ stirling_pdf_oidc_client_id }}/secret"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    status_code: 200
+  register: spdf_secret_result
+  when: stirling_pdf_oidc_client_id | default('') | length > 0
+
+- name: Set OIDC client secret
+  ansible.builtin.set_fact:
+    stirling_pdf_oidc_client_secret: "{{ spdf_secret_result.json.secret }}"
+  when: spdf_secret_result is defined and spdf_secret_result is not skipped
 
 - name: Store Stirling PDF OIDC credentials
   ansible.builtin.include_role:

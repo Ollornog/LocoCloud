@@ -1192,16 +1192,26 @@ roles/apps/nextcloud/
       name: "{{ app_name }}"
       callbackURLs:
         - "https://{{ app_subdomain }}.{{ kunde_domain }}{{ app_oidc_redirect_path }}"
-    status_code: 201
+    status_code: [200, 201]
   register: oidc_result
+
+# PocketID v2: Secret muss separat generiert werden
+- name: Generate OIDC client secret
+  uri:
+    url: "https://id.{{ kunde_domain }}/api/oidc/clients/{{ oidc_result.json.id }}/secret"
+    method: POST
+    headers:
+      X-API-Key: "{{ pocketid_api_token }}"
+    status_code: 200
+  register: secret_result
 
 - name: Store OIDC credentials in Vaultwarden
   include_role:
     name: credentials
   vars:
     credential_name: "{{ kunde_name }} — {{ app_name }} OIDC"
-    credential_username: "{{ oidc_result.json.client_id }}"
-    credential_password: "{{ oidc_result.json.client_secret }}"
+    credential_username: "{{ oidc_result.json.id }}"
+    credential_password: "{{ secret_result.json.secret }}"
 ```
 
 ### 9.3 Redis-Strategie (durch `isolation_mode` implizit gelöst)

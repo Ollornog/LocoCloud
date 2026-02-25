@@ -159,11 +159,26 @@ OIDC-Client über PocketID REST-API registrieren:
   register: oidc_client
   when: meineapp_oidc_client_id | default('') | length == 0
 
-- name: Set OIDC credentials
+- name: Set OIDC client ID
   ansible.builtin.set_fact:
-    meineapp_oidc_client_id: "{{ oidc_client.json.client_id }}"
-    meineapp_oidc_client_secret: "{{ oidc_client.json.client_secret }}"
+    meineapp_oidc_client_id: "{{ oidc_client.json.id }}"
   when: oidc_client is not skipped
+
+# PocketID v2: Secret muss separat generiert werden
+- name: Generate OIDC client secret
+  ansible.builtin.uri:
+    url: "https://{{ pocketid_domain | default('id.' + kunde_domain) }}/api/oidc/clients/{{ meineapp_oidc_client_id }}/secret"
+    method: POST
+    headers:
+      X-API-Key: "{{ pocketid_api_token }}"
+    status_code: 200
+  register: meineapp_secret_result
+  when: meineapp_oidc_client_id | default('') | length > 0
+
+- name: Set OIDC client secret
+  ansible.builtin.set_fact:
+    meineapp_oidc_client_secret: "{{ meineapp_secret_result.json.secret }}"
+  when: meineapp_secret_result is not skipped
 
 # Store in Vaultwarden
 - name: Store OIDC credentials in Vaultwarden
