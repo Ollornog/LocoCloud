@@ -60,7 +60,8 @@
 - **`config/lococloudd.yml`** ist in `.gitignore` — nur `.example` wird committed.
 - **Kunden-Secrets:** Ansible Vault (`group_vars/vault.yml`)
 - **Generierte Passwörter:** `lookup('password', '/dev/null chars=ascii_letters,digits length=32')`
-- **Alles in Vaultwarden speichern** über die `credentials`-Rolle.
+- **Credentials speichern:** `credentials`-Rolle nutzt `scripts/vw-credentials.py`. Das Script implementiert das Bitwarden-Protokoll (OAuth2 Login, AES-256-CBC Verschlüsselung, HMAC) und erstellt automatisch einen Service-User.
+- **Vaultwarden API ≠ Admin-Token:** `/api/ciphers` braucht User-JWT + client-seitige Verschlüsselung. `vw-credentials.py` handhabt beides automatisch.
 - **Laufzeit-Secrets lesen:** `community.general.bitwarden` Lookup-Plugin:
   ```yaml
   lookup('community.general.bitwarden', 'item-name', field='password')

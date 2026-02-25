@@ -59,6 +59,7 @@
 | PocketID v2 API-Header | `X-API-Key: <token>`, NICHT `Authorization: Bearer <token>`. PocketID v2 akzeptiert nur `X-API-Key` für STATIC_API_KEY-Auth. |
 | PocketID Token Precedence | `pocketid_api_token` NICHT als role-level `vars:` setzen (Precedence 21 überschreibt `set_fact`). Nur als play-level `vars:` (Precedence 14). |
 | PocketID v2 Client Secret | `POST /api/oidc/clients` gibt KEIN Secret zurück. Secret separat generieren: `POST /api/oidc/clients/{id}/secret` → `{"secret": "..."}`. |
+| Vaultwarden API ≠ Admin-Token | `/api/ciphers` braucht User-JWT (OAuth2 Login) + client-seitige Verschlüsselung. Admin-Token nur für `/admin/`. `credentials`-Rolle nutzt `scripts/vw-credentials.py` (Bitwarden-Protokoll vollautomatisch). |
 | Netbird Repo Signed-By Konflikt | Manueller Install legt `/usr/share/keyrings/netbird-archive-keyring.gpg` an, Ansible will `/etc/apt/keyrings/netbird.asc` → apt-Fehler. `netbird_client`-Rolle räumt Legacy-Key/Repo auf. |
 | `to_native` Deprecation Warning | Upstream-Bug in Ansible-Core `authorized_key`-Modul (Import aus `ansible.module_utils._text`). Wird in ansible-core 2.24 entfernt. Kein Fix unsererseits möglich — warten auf upstream Patch. |
 | Python Interpreter Warning | `ansible_python_interpreter: /usr/bin/python3` explizit im Inventar setzen. Sonst warnt Ansible bei jeder neuen Python-Version. |

@@ -324,6 +324,25 @@ Keyfile darf NUR auf dem Master-Server (`/opt/lococloudd/keys/`) und optional au
 
 ---
 
+## Credential Storage
+
+### Vaultwarden API: 401 bei /api/ciphers
+
+**Problem:** `credentials`-Rolle gibt 401 beim Speichern von Credentials.
+
+**Ursache:** Vaultwarden's `/api/ciphers` erfordert ein User-JWT-Token (OAuth2 Login), nicht den Admin-Token. Zusätzlich müssen alle Daten client-seitig verschlüsselt werden (Bitwarden-Protokoll). Der Admin-Token funktioniert nur für `/admin/`-Endpoints.
+
+**Lösung:** Das Script `scripts/vw-credentials.py` implementiert das vollständige Bitwarden-Verschlüsselungsprotokoll:
+
+1. Erstellt automatisch einen Service-User (`loco-automation@localhost`) via Admin-Invite + Register
+2. Loggt sich per OAuth2 ein und bekommt JWT-Token
+3. Verschlüsselt alle Daten client-seitig (AES-256-CBC + HMAC)
+4. Speichert/aktualisiert Vault-Items idempotent
+
+Keine manuelle Interaktion nötig. Voraussetzung: Python 3 + `cryptography` Library (Ansible-Dependency).
+
+---
+
 ## Backup
 
 ### Restic: Repository nicht initialisiert
