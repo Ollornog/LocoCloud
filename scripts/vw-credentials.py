@@ -340,8 +340,8 @@ class VaultwardenClient:
 
 def main():
     parser = argparse.ArgumentParser(description="Store credentials in Vaultwarden")
-    parser.add_argument("--url", required=True, help="Vaultwarden URL")
-    parser.add_argument("--admin-token", required=True, help="Admin token")
+    parser.add_argument("--url", help="Vaultwarden URL")
+    parser.add_argument("--admin-token", help="Admin token")
     parser.add_argument(
         "--action", choices=["store", "list", "setup"], default="store"
     )
@@ -350,7 +350,24 @@ def main():
     parser.add_argument("--password", default="", help="Password")
     parser.add_argument("--uri", default="", help="URI")
     parser.add_argument("--notes", default="", help="Notes")
+    parser.add_argument("--from-file", help="Read parameters from JSON file")
     args = parser.parse_args()
+
+    # Load parameters from JSON file if specified
+    if args.from_file:
+        with open(args.from_file) as f:
+            data = json.load(f)
+        args.url = data.get("url", args.url)
+        args.admin_token = data.get("admin_token", args.admin_token)
+        args.action = data.get("action", args.action)
+        args.name = data.get("name", args.name)
+        args.username = data.get("username", args.username or "")
+        args.password = data.get("password", args.password or "")
+        args.uri = data.get("uri", args.uri or "")
+        args.notes = data.get("notes", args.notes or "")
+
+    if not args.url or not args.admin_token:
+        parser.error("--url and --admin-token are required")
 
     client = VaultwardenClient(args.url, args.admin_token)
 
@@ -386,4 +403,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
