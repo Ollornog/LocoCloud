@@ -21,6 +21,9 @@
     # Local PocketID API URL for server-to-server calls during bootstrap.
     # Public URL is not resolvable until DNS/Caddy are configured.
     pocketid_api_url: "http://127.0.0.1:{{ pocketid_port | default(1411) }}"
+    # Initial token from config — PocketID role may auto-generate and override via set_fact.
+    # Do NOT re-assign this in downstream role vars, or it overwrites the generated value.
+    pocketid_api_token: "{{ loco.pocketid.api_token | default('') }}"
 
   pre_tasks:
     - name: Load global config
@@ -42,7 +45,6 @@
     - role: pocketid
       vars:
         pocketid_domain: "{{ loco.urls.pocketid }}"
-        pocketid_api_token: "{{ loco.pocketid.api_token | default('') }}"
       tags: [pocketid]
 
     - role: tinyauth
@@ -51,7 +53,6 @@
         tinyauth_oidc_issuer_url: "https://{{ loco.urls.pocketid }}"
         tinyauth_oauth_whitelist:
           - "{{ loco.operator.email }}"
-        pocketid_api_token: "{{ loco.pocketid.api_token | default('') }}"
       tags: [tinyauth]
 
     - role: apps/vaultwarden
@@ -62,7 +63,6 @@
         vaultwarden_smtp_username: "{{ loco.smtp.user | default('') }}"
         vaultwarden_smtp_from: "{{ loco.smtp.from | default('') }}"
         pocketid_domain: "{{ loco.urls.pocketid }}"
-        pocketid_api_token: "{{ loco.pocketid.api_token | default('') }}"
         caddy_mode: "master"
       tags: [vaultwarden]
 

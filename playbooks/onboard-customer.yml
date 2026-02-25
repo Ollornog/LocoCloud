@@ -95,6 +95,9 @@
 - name: "Onboarding — Entry-Point Setup"
   hosts: all:!localhost:!*proxmox*
   become: true
+  vars:
+    # Initial token from config — PocketID role may auto-generate and override via set_fact.
+    pocketid_api_token: "{{ loco.pocketid.api_token | default('') }}"
 
   pre_tasks:
     - name: Load global config
@@ -126,7 +129,6 @@
     - role: pocketid
       vars:
         pocketid_domain: "id.{{ kunde_domain }}"
-        pocketid_api_token: "{{ loco.pocketid.api_token | default('') }}"
       tags: [pocketid]
       when: "'customer_master' in server_roles"
 
@@ -136,7 +138,6 @@
         tinyauth_domain: "auth.{{ kunde_domain }}"
         tinyauth_oidc_issuer_url: "https://id.{{ kunde_domain }}"
         tinyauth_oauth_whitelist: "{{ [loco.operator.email] + (kunden_emails | default([])) }}"
-        pocketid_api_token: "{{ loco.pocketid.api_token | default('') }}"
       tags: [tinyauth]
       when: "'customer_master' in server_roles"
 
