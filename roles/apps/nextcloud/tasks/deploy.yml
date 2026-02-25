@@ -128,6 +128,15 @@
     job: "docker exec -u www-data nextcloud php -f /var/www/html/cron.php > /dev/null 2>&1"
     user: root
 
+# Generate previews for all existing files (runs once in background).
+# Subsequent runs are fast (skips already generated).
+- name: Trigger preview generation for existing files
+  ansible.builtin.command: >
+    docker exec -d -u www-data nextcloud
+    php occ preview:generate-all
+  changed_when: false
+  failed_when: false
+
 - name: Store Nextcloud credentials
   ansible.builtin.include_role:
     name: credentials
