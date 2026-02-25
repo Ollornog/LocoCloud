@@ -4,7 +4,7 @@
 
 - name: Check if Tinyauth OIDC client already exists
   ansible.builtin.uri:
-    url: "{{ tinyauth_oidc_issuer_url }}/api/oidc/clients"
+    url: "{{ pocketid_api_url }}/api/oidc/clients"
     method: GET
     headers:
       Authorization: "Bearer {{ pocketid_api_token }}"
@@ -19,7 +19,7 @@
 
 - name: Create Tinyauth OIDC client in PocketID
   ansible.builtin.uri:
-    url: "{{ tinyauth_oidc_issuer_url }}/api/oidc/clients"
+    url: "{{ pocketid_api_url }}/api/oidc/clients"
     method: POST
     headers:
       Authorization: "Bearer {{ pocketid_api_token }}"
