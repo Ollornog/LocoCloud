@@ -1,7 +1,7 @@
 # ============================================
 # GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
 # PocketID OIDC Provider
-# Generiert: {{ ansible_date_time.iso8601 }}
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
 # ============================================
 
 services:
@@ -10,12 +10,14 @@ services:
     container_name: pocketid
     restart: unless-stopped
     ports:
-      - "127.0.0.1:{{ pocketid_port }}:80"
+      - "127.0.0.1:{{ pocketid_port }}:{{ pocketid_port }}"
     volumes:
-      - {{ pocketid_data_path }}:/data
+      - {{ pocketid_data_path }}:/app/data
     environment:
       - TRUST_PROXY=true
-      - PUBLIC_APP_URL=https://{{ pocketid_domain }}
+      - APP_URL=https://{{ pocketid_domain }}
+      - PORT={{ pocketid_port }}
+      - ENCRYPTION_KEY={{ pocketid_encryption_key }}
       - EMAILS_VERIFIED=true
       - ALLOW_USER_SIGNUPS=disabled
       - UI_CONFIG_DISABLED=true

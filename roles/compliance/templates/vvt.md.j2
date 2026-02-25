@@ -5,7 +5,7 @@
 ============================================
 GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
 Kunde: {{ compliance_kunde_name }} ({{ compliance_kunde_domain }})
-Generiert: {{ ansible_date_time.iso8601 }}
+Generiert: {{ ansible_facts.date_time.iso8601 }}
 ============================================
 -->
 
@@ -16,7 +16,7 @@ Generiert: {{ ansible_date_time.iso8601 }}
 **Domain:** {{ compliance_kunde_domain }}
 **Kunden-ID:** {{ compliance_kunde_id }}
 
-**Stand:** {{ ansible_date_time.date }}
+**Stand:** {{ ansible_facts.date_time.date }}
 
 ---
 

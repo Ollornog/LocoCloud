@@ -14,3 +14,7 @@ pocketid_domain: ""  # e.g. "id.firma.de" or from loco.urls.pocketid
 # Set via STATIC_API_KEY env var — no manual UI step needed.
 # PocketID uses passkeys (WebAuthn), not passwords.
 pocketid_api_token: ""
+
+# Encryption key for sensitive data (mandatory in PocketID v2).
+# Auto-generated and persisted in pocketid_data_path/.encryption_key
+pocketid_encryption_key: ""
