@@ -186,6 +186,18 @@ handle /register* {
 
 ---
 
+### PocketID v2 API: 401 "You are not signed in"
+
+**Problem:** OIDC-Client-Registrierung schlägt fehl mit 401, obwohl `STATIC_API_KEY` gesetzt ist.
+
+**Ursache:** PocketID v2 erwartet den API-Key im `X-API-Key`-Header, nicht als `Authorization: Bearer`. Außerdem: Wenn `pocketid_api_token` als role-level `vars:` im Playbook gesetzt wird, überschreibt die Ansible-Precedence (21) den von `set_fact` generierten Token (Precedence 19).
+
+**Lösung:**
+1. Header: `X-API-Key: "{{ pocketid_api_token }}"` statt `Authorization: "Bearer ..."`
+2. Token nur als play-level `vars:` setzen, nicht in role-level `vars:`
+
+---
+
 ## Ansible-spezifisch
 
 ### Setup scheitert an vault-pass.sh (Erstes Setup)

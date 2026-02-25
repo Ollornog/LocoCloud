@@ -202,7 +202,7 @@
         url: "https://id.{{ kunde_domain }}/api/users"
         method: POST
         headers:
-          Authorization: "Bearer {{ loco.pocketid.api_token }}"
+          X-API-Key: "{{ loco.pocketid.api_token }}"
         body_format: json
         body:
           username: "admin"
@@ -221,7 +221,7 @@
         url: "https://id.{{ kunde_domain }}/api/users"
         method: POST
         headers:
-          Authorization: "Bearer {{ loco.pocketid.api_token }}"
+          X-API-Key: "{{ loco.pocketid.api_token }}"
         body_format: json
         body:
           username: "{{ item.username }}"

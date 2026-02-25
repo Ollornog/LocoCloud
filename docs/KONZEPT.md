@@ -1186,7 +1186,7 @@ roles/apps/nextcloud/
     url: "https://id.{{ kunde_domain }}/api/oidc/clients"
     method: POST
     headers:
-      Authorization: "Bearer {{ pocketid_api_token }}"
+      X-API-Key: "{{ pocketid_api_token }}"
     body_format: json
     body:
       name: "{{ app_name }}"

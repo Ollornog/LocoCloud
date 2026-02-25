@@ -8,7 +8,7 @@
     url: "https://{{ myapp_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients"
     method: POST
     headers:
-      Authorization: "Bearer {{ loco.pocketid.api_token }}"
+      X-API-Key: "{{ loco.pocketid.api_token }}"
     body_format: json
     body:
       name: "myapp ({{ kunde_name }})"

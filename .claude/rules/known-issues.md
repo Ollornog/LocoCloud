@@ -56,6 +56,8 @@
 | become in LXC | Ansible braucht `become: true` für Docker als non-root |
 | Globale Config laden | `include_vars` in pre_tasks, nicht `ansible.cfg` |
 | Health-Check hinter Auth | Backend-Ports (localhost) prüfen, nicht öffentliche URL (Tinyauth gibt sonst 401) |
+| PocketID v2 API-Header | `X-API-Key: <token>`, NICHT `Authorization: Bearer <token>`. PocketID v2 akzeptiert nur `X-API-Key` für STATIC_API_KEY-Auth. |
+| PocketID Token Precedence | `pocketid_api_token` NICHT als role-level `vars:` setzen (Precedence 21 überschreibt `set_fact`). Nur als play-level `vars:` (Precedence 14). |
 | Netbird Repo Signed-By Konflikt | Manueller Install legt `/usr/share/keyrings/netbird-archive-keyring.gpg` an, Ansible will `/etc/apt/keyrings/netbird.asc` → apt-Fehler. `netbird_client`-Rolle räumt Legacy-Key/Repo auf. |
 | `to_native` Deprecation Warning | Upstream-Bug in Ansible-Core `authorized_key`-Modul (Import aus `ansible.module_utils._text`). Wird in ansible-core 2.24 entfernt. Kein Fix unsererseits möglich — warten auf upstream Patch. |
 | Python Interpreter Warning | `ansible_python_interpreter: /usr/bin/python3` explizit im Inventar setzen. Sonst warnt Ansible bei jeder neuen Python-Version. |
