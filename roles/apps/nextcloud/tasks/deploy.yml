@@ -28,6 +28,12 @@
     nextcloud_admin_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
   when: nextcloud_admin_password | length == 0
 
+- name: Deploy preview packages hook script
+  ansible.builtin.template:
+    src: install-preview-packages.sh.j2
+    dest: "{{ nextcloud_stack_path }}/install-preview-packages.sh"
+    mode: "0755"
+
 - name: Deploy Nextcloud docker-compose.yml
   ansible.builtin.template:
     src: docker-compose.yml.j2
@@ -73,19 +79,31 @@
   changed_when: "'enabled' in nc_preview_enable.stdout"
   failed_when: false
 
-- name: Configure Imaginary as preview provider
+- name: Configure preview providers
+  ansible.builtin.command: >
+    docker exec -u www-data nextcloud
+    php occ config:system:set enabledPreviewProviders {{ index }} --value="{{ item }}"
+  loop: "{{ nextcloud_preview_providers }}"
+  loop_control:
+    index_var: index
+    label: "{{ item | regex_replace('OC\\\\Preview\\\\', '') }}"
+  changed_when: true
+
+- name: Configure preview settings
   ansible.builtin.command: >
     docker exec -u www-data nextcloud
     php occ config:system:set {{ item.key }} --value="{{ item.value }}" {{ item.type | default('') }}
   loop:
-    - { key: "enabledPreviewProviders 0", value: "OC\\Preview\\Imaginary", type: "" }
     - { key: "preview_imaginary_url", value: "http://nextcloud-imaginary:9000", type: "" }
     - { key: "preview_max_x", value: "{{ nextcloud_preview_max_x }}", type: "--type=integer" }
     - { key: "preview_max_y", value: "{{ nextcloud_preview_max_y }}", type: "--type=integer" }
     - { key: "jpeg_quality", value: "{{ nextcloud_preview_jpeg_quality }}", type: "--type=integer" }
     - { key: "preview_concurrency_all", value: "{{ nextcloud_preview_concurrency_all }}", type: "--type=integer" }
     - { key: "preview_concurrency_new", value: "{{ nextcloud_preview_concurrency_new }}", type: "--type=integer" }
-  register: nc_preview_config
+    - { key: "enable_previews", value: "true", type: "--type=boolean" }
+    - { key: "preview_ffmpeg_path", value: "/usr/bin/ffmpeg", type: "" }
+  loop_control:
+    label: "{{ item.key }}"
   changed_when: true
 
 - name: Set Nextcloud cron mode to cron
@@ -109,6 +127,15 @@
     minute: "*/5"
     job: "docker exec -u www-data nextcloud php -f /var/www/html/cron.php > /dev/null 2>&1"
     user: root
+
+# Generate previews for all existing files (runs once in background).
+# Subsequent runs are fast (skips already generated).
+- name: Trigger preview generation for existing files
+  ansible.builtin.command: >
+    docker exec -d -u www-data nextcloud
+    php occ preview:generate-all
+  changed_when: false
+  failed_when: false
 
 - name: Store Nextcloud credentials
   ansible.builtin.include_role:
