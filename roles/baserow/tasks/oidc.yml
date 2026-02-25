@@ -35,7 +35,7 @@
     credential_username: "{{ baserow_oidc_client_id }}"
     credential_password: "{{ baserow_oidc_client_secret }}"
     credential_uri: "https://{{ baserow_domain }}"
-    credential_notes: "PocketID OIDC client for Baserow. Deployed: {{ ansible_date_time.iso8601 }}"
+    credential_notes: "PocketID OIDC client for Baserow. Deployed: {{ ansible_facts.date_time.iso8601 }}"
   when:
     - loco is defined
     - baserow_oidc_client_id | length > 0

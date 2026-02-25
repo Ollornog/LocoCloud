@@ -36,7 +36,7 @@
     - name: Set restore variables
       ansible.builtin.set_fact:
         restore_snapshot: "{{ snapshot_id | default('latest') }}"
-        restore_target: "/opt/restore/{{ app_name }}-{{ ansible_date_time.date }}"
+        restore_target: "/opt/restore/{{ app_name }}-{{ ansible_facts.date_time.date }}"
         backup_target: "{{ backup.targets | first }}"
         restore_repo: "{{ backup.targets | first | dict2items | selectattr('key', 'in', ['type', 'user', 'host', 'port', 'path']) | items2dict }}"
 

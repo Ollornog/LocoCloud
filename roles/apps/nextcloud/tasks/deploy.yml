@@ -147,5 +147,5 @@
     credential_username: "{{ nextcloud_admin_user }}"
     credential_password: "{{ nextcloud_admin_password }}"
     credential_uri: "https://{{ nextcloud_domain }}"
-    credential_notes: "Nextcloud admin. Deployed: {{ ansible_date_time.iso8601 }}"
+    credential_notes: "Nextcloud admin. Deployed: {{ ansible_facts.date_time.iso8601 }}"
   when: loco is defined

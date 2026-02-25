@@ -35,7 +35,7 @@
     credential_username: "{{ gitea_oidc_client_id }}"
     credential_password: "{{ gitea_oidc_client_secret }}"
     credential_uri: "https://{{ gitea_domain }}"
-    credential_notes: "PocketID OIDC client for Gitea. Deployed: {{ ansible_date_time.iso8601 }}"
+    credential_notes: "PocketID OIDC client for Gitea. Deployed: {{ ansible_facts.date_time.iso8601 }}"
   when:
     - loco is defined
     - gitea_oidc_client_id | length > 0

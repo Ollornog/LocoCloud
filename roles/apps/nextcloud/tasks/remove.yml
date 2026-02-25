@@ -10,11 +10,11 @@
 
 - name: Archive Nextcloud data
   ansible.builtin.command: >
-    tar czf /opt/archives/nextcloud-{{ ansible_date_time.date }}.tar.gz
+    tar czf /opt/archives/nextcloud-{{ ansible_facts.date_time.date }}.tar.gz
     -C {{ nextcloud_data_path }} .
   args:
-    creates: "/opt/archives/nextcloud-{{ ansible_date_time.date }}.tar.gz"
+    creates: "/opt/archives/nextcloud-{{ ansible_facts.date_time.date }}.tar.gz"
 
 - name: Archive complete
   ansible.builtin.debug:
-    msg: "Nextcloud stopped. Data archived to /opt/archives/nextcloud-{{ ansible_date_time.date }}.tar.gz. Stack dir preserved at {{ nextcloud_stack_path }}."
+    msg: "Nextcloud stopped. Data archived to /opt/archives/nextcloud-{{ ansible_facts.date_time.date }}.tar.gz. Stack dir preserved at {{ nextcloud_stack_path }}."

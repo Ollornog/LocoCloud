@@ -5,7 +5,7 @@
 
 - name: Check if Vaultwarden OIDC client exists in PocketID
   ansible.builtin.uri:
-    url: "https://{{ pocketid_domain }}/api/oidc/clients"
+    url: "{{ pocketid_api_url }}/api/oidc/clients"
     method: GET
     headers:
       Authorization: "Bearer {{ pocketid_api_token }}"
@@ -19,7 +19,7 @@
 
 - name: Create Vaultwarden OIDC client in PocketID
   ansible.builtin.uri:
-    url: "https://{{ pocketid_domain }}/api/oidc/clients"
+    url: "{{ pocketid_api_url }}/api/oidc/clients"
     method: POST
     headers:
       Authorization: "Bearer {{ pocketid_api_token }}"

@@ -1019,7 +1019,7 @@ Pro öffentlich erreichbarem Server ein Caddy. Der Gateway-Caddy ist der Single-
 # ==========================================================
 # GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
 # Kunde: {{ kunde_name }} ({{ kunde_domain }})
-# Generiert: {{ ansible_date_time.iso8601 }}
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
 # ==========================================================
 
 (public) {
@@ -1396,7 +1396,7 @@ LocoCloud Organisation/
       notes: |
         OIDC Client ID: {{ app_oidc_client_id }}
         OIDC Secret: {{ app_oidc_secret }}
-        Deployed: {{ ansible_date_time.iso8601 }}
+        Deployed: {{ ansible_facts.date_time.iso8601 }}
       folderId: "{{ kunde_folder_id }}"
       organizationId: "{{ loco_org_id }}"
 ```

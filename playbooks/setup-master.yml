@@ -17,6 +17,10 @@
 - name: Setup Master Server
   hosts: all
   become: true
+  vars:
+    # Local PocketID API URL for server-to-server calls during bootstrap.
+    # Public URL is not resolvable until DNS/Caddy are configured.
+    pocketid_api_url: "http://127.0.0.1:{{ pocketid_port | default(1411) }}"
 
   pre_tasks:
     - name: Load global config
@@ -104,7 +108,7 @@
         credential_username: "STATIC_API_KEY"
         credential_password: "{{ pocketid_api_token }}"
         credential_uri: "https://{{ loco.urls.pocketid }}"
-        credential_notes: "PocketID static API key for automation. Deployed: {{ ansible_date_time.iso8601 }}"
+        credential_notes: "PocketID static API key for automation. Deployed: {{ ansible_facts.date_time.iso8601 }}"
       when: pocketid_api_token is defined and pocketid_api_token | length > 0
       tags: [credentials]
 
@@ -118,7 +122,7 @@
         credential_username: "{{ semaphore_admin_user | default('admin') }}"
         credential_password: "{{ semaphore_admin_password }}"
         credential_uri: "https://{{ loco.urls.semaphore }}"
-        credential_notes: "Semaphore admin account. Deployed: {{ ansible_date_time.iso8601 }}"
+        credential_notes: "Semaphore admin account. Deployed: {{ ansible_facts.date_time.iso8601 }}"
       when: semaphore_admin_password is defined
       tags: [credentials]
 
@@ -132,7 +136,7 @@
         credential_username: "{{ grafana_admin_user | default('admin') }}"
         credential_password: "{{ grafana_admin_password }}"
         credential_uri: "https://{{ loco.urls.grafana }}"
-        credential_notes: "Grafana admin account. Deployed: {{ ansible_date_time.iso8601 }}"
+        credential_notes: "Grafana admin account. Deployed: {{ ansible_facts.date_time.iso8601 }}"
       when: grafana_admin_password is defined
       tags: [credentials]
 
@@ -146,7 +150,7 @@
         credential_username: "{{ baserow_admin_email | default(loco.operator.email) }}"
         credential_password: "{{ baserow_admin_password }}"
         credential_uri: "https://{{ loco.urls.baserow }}"
-        credential_notes: "Baserow admin account. Deployed: {{ ansible_date_time.iso8601 }}"
+        credential_notes: "Baserow admin account. Deployed: {{ ansible_facts.date_time.iso8601 }}"
       when: baserow_admin_password is defined
       tags: [credentials]
 

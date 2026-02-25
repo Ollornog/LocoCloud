@@ -35,7 +35,7 @@
     credential_username: "{{ calcom_oidc_client_id }}"
     credential_password: "{{ calcom_oidc_client_secret }}"
     credential_uri: "https://{{ calcom_domain }}"
-    credential_notes: "PocketID OIDC client for Cal.com. Deployed: {{ ansible_date_time.iso8601 }}"
+    credential_notes: "PocketID OIDC client for Cal.com. Deployed: {{ ansible_facts.date_time.iso8601 }}"
   when:
     - loco is defined
     - calcom_oidc_client_id | length > 0

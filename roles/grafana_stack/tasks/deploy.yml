@@ -86,5 +86,5 @@
     credential_username: "{{ grafana_admin_user }}"
     credential_password: "{{ grafana_admin_password }}"
     credential_uri: "https://{{ grafana_domain }}"
-    credential_notes: "Grafana admin credentials. Deployed: {{ ansible_date_time.iso8601 }}"
+    credential_notes: "Grafana admin credentials. Deployed: {{ ansible_facts.date_time.iso8601 }}"
   when: loco is defined

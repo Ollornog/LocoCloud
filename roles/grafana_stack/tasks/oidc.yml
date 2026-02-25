@@ -71,7 +71,7 @@
     credential_username: "{{ grafana_oidc_client_id }}"
     credential_password: "{{ grafana_oidc_client_secret }}"
     credential_uri: "https://{{ pocketid_domain }}"
-    credential_notes: "PocketID OIDC client for Grafana. Deployed: {{ ansible_date_time.iso8601 }}"
+    credential_notes: "PocketID OIDC client for Grafana. Deployed: {{ ansible_facts.date_time.iso8601 }}"
   when:
     - loco is defined
     - grafana_oidc_client_secret | length > 0

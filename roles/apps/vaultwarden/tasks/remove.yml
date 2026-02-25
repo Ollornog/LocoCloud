@@ -10,11 +10,11 @@
 
 - name: Archive Vaultwarden data
   ansible.builtin.command: >
-    tar czf /opt/archives/vaultwarden-{{ ansible_date_time.date }}.tar.gz
+    tar czf /opt/archives/vaultwarden-{{ ansible_facts.date_time.date }}.tar.gz
     -C {{ vaultwarden_data_path }} .
   args:
-    creates: "/opt/archives/vaultwarden-{{ ansible_date_time.date }}.tar.gz"
+    creates: "/opt/archives/vaultwarden-{{ ansible_facts.date_time.date }}.tar.gz"
 
 - name: Archive complete
   ansible.builtin.debug:
-    msg: "Vaultwarden stopped. Data archived to /opt/archives/vaultwarden-{{ ansible_date_time.date }}.tar.gz. Stack dir preserved at {{ vaultwarden_stack_path }}."
+    msg: "Vaultwarden stopped. Data archived to /opt/archives/vaultwarden-{{ ansible_facts.date_time.date }}.tar.gz. Stack dir preserved at {{ vaultwarden_stack_path }}."

@@ -80,7 +80,7 @@
         credential_name: "{{ kunde_name }} — Netbird Setup Key"
         credential_username: "kunde-{{ kunde_id }}"
         credential_password: "{{ nb_generated_setup_key }}"
-        credential_notes: "Netbird setup key for onboarding. Expires in 24h. Generated: {{ ansible_date_time.iso8601 | default('N/A') }}"
+        credential_notes: "Netbird setup key for onboarding. Expires in 24h. Generated: {{ ansible_facts.date_time.iso8601 | default('N/A') }}"
       when: loco.netbird.enabled | default(false)
 
     # --- Generate compliance documents ---
@@ -177,7 +177,7 @@
         credential_username: "admin"
         credential_password: "{{ pocketid_admin_password }}"
         credential_uri: "https://id.{{ kunde_domain }}"
-        credential_notes: "PocketID admin for {{ kunde_name }}. Deployed: {{ ansible_date_time.iso8601 }}"
+        credential_notes: "PocketID admin for {{ kunde_name }}. Deployed: {{ ansible_facts.date_time.iso8601 }}"
       when: pocketid_admin_password is defined
       tags: [credentials]
 
@@ -191,7 +191,7 @@
         credential_username: "tinyauth"
         credential_password: "{{ tinyauth_secret }}"
         credential_uri: "https://auth.{{ kunde_domain }}"
-        credential_notes: "Tinyauth session secret. Deployed: {{ ansible_date_time.iso8601 }}"
+        credential_notes: "Tinyauth session secret. Deployed: {{ ansible_facts.date_time.iso8601 }}"
       when: tinyauth_secret is defined
       tags: [credentials]
 

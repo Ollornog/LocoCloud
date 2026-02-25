@@ -35,7 +35,7 @@
     credential_username: "{{ outline_oidc_client_id }}"
     credential_password: "{{ outline_oidc_client_secret }}"
     credential_uri: "https://{{ outline_domain }}"
-    credential_notes: "PocketID OIDC client for Outline. Deployed: {{ ansible_date_time.iso8601 }}"
+    credential_notes: "PocketID OIDC client for Outline. Deployed: {{ ansible_facts.date_time.iso8601 }}"
   when:
     - loco is defined
     - outline_oidc_client_id | length > 0
