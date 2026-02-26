@@ -127,7 +127,7 @@ Beim zweiten Lauf passiert automatisch:
 | Massnahme | Details |
 |-----------|---------|
 | PocketID Registration | Blockiert via Caddy (`/register` → 403) |
-| Vaultwarden Signups | Deaktiviert (`SIGNUPS_ALLOWED=false`) |
+| Vaultwarden Signups | Deaktiviert via Admin-Config-API (von `vw-credentials.py` gesteuert) |
 | Vaultwarden Login | Nur via SSO/PocketID (`SSO_ONLY=true`) |
 | Admin-Dienste | Hinter Tinyauth Forward-Auth (PocketID OIDC) |
 | SSH-Key | Automatisch generiert, in `/root/.ssh/id_ed25519` |
