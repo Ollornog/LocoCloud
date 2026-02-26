@@ -138,6 +138,11 @@ Beim zweiten Lauf passiert automatisch:
 | Tinyauth | `https://auth.admin.example.com` | Forward Auth |
 | Vaultwarden | `https://vault.admin.example.com` | Credential Store (SSO via PocketID) |
 | Semaphore | `https://deploy.admin.example.com` | Ansible Web-UI |
+| Grafana | `https://grafana.admin.example.com` | Monitoring (Grafana + Prometheus + Loki) |
+| Baserow | `https://baserow.admin.example.com` | Berechtigungsverwaltung |
+
+Alle Credentials (Admin-Passwoerter, API-Tokens, OIDC-Secrets) werden automatisch
+in der Admin-Vaultwarden-Instanz gespeichert.
 
 ---
 
@@ -177,6 +182,7 @@ ansible-playbook playbooks/setup-master.yml -i inventories/master/
 
 ## Weiter
 
+- **Semaphore einrichten:** Siehe [SEMAPHORE.md](SEMAPHORE.md)
 - **Kunden onboarden:** Siehe [ONBOARDING.md](ONBOARDING.md)
 - **App-Rolle entwickeln:** Siehe [APP-DEVELOPMENT.md](APP-DEVELOPMENT.md)
 - **Probleme:** Siehe [TROUBLESHOOTING.md](TROUBLESHOOTING.md)

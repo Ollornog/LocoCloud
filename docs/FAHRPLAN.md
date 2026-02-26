@@ -1,7 +1,7 @@
 # LocoCloud — Implementierungs-Fahrplan
 
 **Version:** 1.0 — Februar 2026
-**Grundlage:** `docs/KONZEPT.md` v3.3
+**Grundlage:** `docs/KONZEPT.md` v5.0
 
 ---
 

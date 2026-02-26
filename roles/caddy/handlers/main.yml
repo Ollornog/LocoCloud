@@ -4,4 +4,8 @@
 
 - name: restart caddy
   ansible.builtin.command: docker restart caddy
-  changed_when: true
+  register: caddy_restart_result
+  failed_when:
+    - caddy_restart_result.rc != 0
+    - "'No such container' not in caddy_restart_result.stderr"
+  changed_when: caddy_restart_result.rc == 0

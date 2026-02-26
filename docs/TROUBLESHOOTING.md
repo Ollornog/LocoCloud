@@ -341,6 +341,16 @@ Keyfile darf NUR auf dem Master-Server (`/opt/lococloudd/keys/`) und optional au
 
 Keine manuelle Interaktion nötig. Keine externen Dependencies (pure Python 3.8+).
 
+### Vaultwarden Admin-Login: Cookie wird nicht gesetzt
+
+**Problem:** `vw-credentials.py` loggt sich erfolgreich in das Admin-Panel ein, aber nachfolgende Admin-API-Requests (z.B. `GET /admin/users/overview`) geben HTML statt JSON zurück.
+
+**Ursache:** Python's `urllib.request.urlopen` folgt 302/303-Redirects automatisch. Der `Set-Cookie`-Header mit dem `VW_ADMIN`-Cookie steht auf der Redirect-Response (302), nicht auf der finalen Response (200). urllib verliert den Cookie beim Redirect-Follow.
+
+**Lösung:** `vw-credentials.py` verwendet `http.client` statt `urllib` für den Admin-Login. `http.client` folgt keinen Redirects und gibt die rohe Response zurück — der Cookie wird korrekt ausgelesen.
+
+---
+
 ### Vaultwarden: 404 bei /api/accounts/register
 
 **Problem:** Service-User-Registrierung schlägt mit 404 fehl.
@@ -351,6 +361,27 @@ Keine manuelle Interaktion nötig. Keine externen Dependencies (pure Python 3.8+
 1. `/identity/accounts/register` (Vaultwarden 1.27+, primär)
 2. `/api/accounts/register` (Legacy-Pfad, ältere Versionen)
 3. `send-verification-email` + `finish` (Vaultwarden 1.34+, neuer Flow)
+
+---
+
+## Bootstrap
+
+### Caddy-Handler schlägt fehl beim initialen Setup
+
+**Problem:** `setup-master.yml` bricht bei `RUNNING HANDLER [restart caddy]` ab mit `No such container: caddy`.
+
+**Ursache:** Die Vaultwarden-Rolle feuert `notify: restart caddy` (z.B. nach SSO-Config-Update), aber die Caddy-Rolle kommt erst später im Playbook dran. Der Handler läuft am Ende des Plays, wenn der Caddy-Container noch nicht existiert.
+
+**Lösung:** Die Handler in `roles/caddy/handlers/main.yml` und `roles/apps/vaultwarden/handlers/main.yml` tolerieren jetzt einen fehlenden Container:
+```yaml
+- name: restart caddy
+  ansible.builtin.command: docker restart caddy
+  register: caddy_restart_result
+  failed_when:
+    - caddy_restart_result.rc != 0
+    - "'No such container' not in caddy_restart_result.stderr"
+  changed_when: caddy_restart_result.rc == 0
+```
 
 ---
 
