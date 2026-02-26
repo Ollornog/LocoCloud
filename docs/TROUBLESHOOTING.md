@@ -419,13 +419,17 @@ Keine manuelle Interaktion nötig. Keine externen Dependencies (pure Python 3.8+
 2. Prelogin-Response: `kdf=0, iterations=600000` → KDF-Parameter korrekt, also nicht die Ursache
 3. Kern-Problem: Registration hat nie stattgefunden, User hatte kein Passwort
 
-**Lösung:** Drei Fixes in `scripts/vw-credentials.py`:
+**Lösung:** `SIGNUPS_ALLOWED` als Env-Var blockiert die Admin-Config-API — auch per Admin-Invite eingeladene User koennen nicht registrieren wenn die Env-Var gesetzt ist. Fix in zwei Teilen:
 
-1. **Alle Registration-Endpoints durchprobieren:** `_try_register()` bricht nicht mehr beim ersten "already exists"-Match ab, sondern probiert alle drei Pfade (inkl. `register/finish` für VW 1.34+). Nur wenn ALLE Endpoints "already exists" melden, wird es als Erfolg gewertet.
+1. **`SIGNUPS_ALLOWED=false` aus `env.j2` entfernt:** Die Env-Var ueberschreibt Admin-Config und kann zur Laufzeit nicht getoggelt werden. Stattdessen wird die Einstellung jetzt ueber die Admin-Config-API gesteuert.
 
-2. **Prelogin vor Login:** `login()` fragt jetzt erst `/api/accounts/prelogin` ab und nutzt die Server-seitigen KDF-Parameter (Typ, Iterationen, Memory, Parallelism). Unterstützt PBKDF2 und Argon2id.
+2. **`vw-credentials.py` toggelt Signups via Admin-Config-API:** Vor der Registration wird `signups_allowed=true` via `POST /admin/config` gesetzt. Nach der Registration (oder bei Fehler) wird `signups_allowed=false` wieder gesetzt. Da keine Env-Var mehr existiert, respektiert Vaultwarden die Admin-Config.
 
-3. **Login-Verifizierung nach Registration:** `ensure_service_user()` verifiziert sofort nach `_invite_and_register()` dass der Login funktioniert und gibt eine detaillierte Fehlermeldung mit Prelogin-Response wenn nicht.
+3. **Alle Registration-Endpoints werden weiterhin durchprobiert:** `_try_register()` versucht `/identity/accounts/register`, `/api/accounts/register`, und `send-verification-email` + `register/finish` (VW 1.34+).
+
+4. **Prelogin vor Login:** `login()` fragt `/api/accounts/prelogin` ab fuer korrekte KDF-Parameter.
+
+**Sicherheit:** Vaultwarden ist auf dem Master nur via `127.0.0.1` erreichbar. Caddy blockt `/register` zusaetzlich. Das kurze Fenster mit `signups_allowed=true` waehrend der Service-User-Erstellung ist nicht extern erreichbar.
 
 **Datum:** 26. Februar 2026
 
@@ -484,5 +488,5 @@ Gesammelte Erkenntnisse aus Debugging und Betrieb:
 - **Caddy TLS-SNI bei Netbird-IPs:** `reverse_proxy https://100.x.x.x` sendet die IP als SNI. Backend-Caddy hat kein Zertifikat für IPs → 502 oder TLS Alert. Immer `tls_server_name` und `header_up Host` explizit setzen.
 - **Tinyauth als Performance-Bottleneck:** Jeder Sub-Request (JS, CSS, Bilder) geht durch einen Tinyauth-Roundtrip über Netbird. Bei 184 Requests × 150ms = über 1 Minute Ladezeit. Apps mit eigener Auth (Nextcloud OIDC) brauchen kein `import auth` im Caddy-Block.
 - **Watchtower und Infrastruktur:** Watchtower darf NIE Infrastruktur-Container aktualisieren. Ein automatisches Netbird-Update hat den Relay-Endpoint geändert und das gesamte VPN lahmgelegt.
-- **Vaultwarden Registrierung bei SIGNUPS_ALLOWED=false:** Die Fehlermeldung "Registration not allowed or user already exists" ist bewusst mehrdeutig. Für eingeladene User muss der neuere `register/finish`-Endpoint (VW 1.34+) verwendet werden.
+- **Vaultwarden SIGNUPS_ALLOWED als Env-Var:** `SIGNUPS_ALLOWED` NICHT als Docker-Env-Var setzen — Env-Vars ueberschreiben die Admin-Config-API und koennen zur Laufzeit nicht getoggelt werden. `vw-credentials.py` steuert `signups_allowed` per Admin-Config-API (temporaer aktivieren → registrieren → deaktivieren).
 - **Caddy Inode-Problem:** Nach Template-Writes immer `docker restart caddy`, nie `caddy reload`. Docker Bind-Mounts referenzieren den Inode, nicht den Dateinamen.

@@ -556,6 +556,28 @@ class VaultwardenClient:
             print(f"DEBUG: delete_user exception: {e}", file=sys.stderr)
         return False
 
+    def _toggle_signups(self, allowed):
+        """Toggle signups_allowed via Vaultwarden admin config API.
+
+        Only works when SIGNUPS_ALLOWED is NOT set as an environment
+        variable (env vars override admin config in Vaultwarden).
+        """
+        try:
+            config = self.admin_request("GET", "config")
+            if not isinstance(config, dict):
+                print(f"DEBUG: admin GET /config returned {type(config).__name__}, "
+                      f"cannot toggle signups", file=sys.stderr)
+                return False
+            config["signups_allowed"] = allowed
+            self.admin_request("POST", "config", config)
+            print(f"DEBUG: set signups_allowed={allowed} via admin config",
+                  file=sys.stderr)
+            return True
+        except Exception as e:
+            print(f"DEBUG: _toggle_signups({allowed}) failed: {e}",
+                  file=sys.stderr)
+            return False
+
     def _try_register(self, reg_data):
         """Try registration endpoints in order of preference.
 
@@ -639,25 +661,35 @@ class VaultwardenClient:
             if "409" not in str(e):
                 raise
 
-        master_key = make_master_key(self.service_password, SERVICE_EMAIL)
-        master_hash = make_master_password_hash(self.service_password, master_key)
-        sym_key_raw, sym_key_encrypted = make_sym_key(master_key)
-        pub_key, priv_key_encrypted = make_rsa_keys(sym_key_raw)
-        reg_data = {
-            "email": SERVICE_EMAIL,
-            "name": "LocoCloud Automation",
-            "masterPasswordHash": master_hash,
-            "masterPasswordHint": "",
-            "key": sym_key_encrypted,
-            "kdf": 0,
-            "kdfIterations": KDF_ITERATIONS,
-            "kdfMemory": None,
-            "kdfParallelism": None,
-            "keys": {"publicKey": pub_key, "encryptedPrivateKey": priv_key_encrypted},
-        }
-        print(f"DEBUG: registering with kdf=0 iterations={KDF_ITERATIONS}",
-              file=sys.stderr)
-        self._try_register(reg_data)
+        # Temporarily enable signups via admin config API.
+        # Vaultwarden blocks registration even for invited users when
+        # signups are disabled. SIGNUPS_ALLOWED must NOT be set as env var
+        # (env vars override admin config and can't be toggled at runtime).
+        self._toggle_signups(True)
+
+        try:
+            master_key = make_master_key(self.service_password, SERVICE_EMAIL)
+            master_hash = make_master_password_hash(self.service_password, master_key)
+            sym_key_raw, sym_key_encrypted = make_sym_key(master_key)
+            pub_key, priv_key_encrypted = make_rsa_keys(sym_key_raw)
+            reg_data = {
+                "email": SERVICE_EMAIL,
+                "name": "LocoCloud Automation",
+                "masterPasswordHash": master_hash,
+                "masterPasswordHint": "",
+                "key": sym_key_encrypted,
+                "kdf": 0,
+                "kdfIterations": KDF_ITERATIONS,
+                "kdfMemory": None,
+                "kdfParallelism": None,
+                "keys": {"publicKey": pub_key, "encryptedPrivateKey": priv_key_encrypted},
+            }
+            print(f"DEBUG: registering with kdf=0 iterations={KDF_ITERATIONS}",
+                  file=sys.stderr)
+            self._try_register(reg_data)
+        finally:
+            # Always disable signups after registration attempt
+            self._toggle_signups(False)
 
     def ensure_service_user(self):
         self.admin_login()
