@@ -509,9 +509,13 @@ class VaultwardenClient:
             raise RuntimeError(f"HTTP {e.code} admin {method} {path}: {content}") from e
 
     def check_user_exists(self, email):
-        """Check if a user already exists via admin users overview."""
+        """Check if a user already exists via admin JSON API.
+
+        Uses GET /admin/users (returns JSON), NOT /admin/users/overview
+        (which returns HTML and cannot be parsed as JSON).
+        """
         try:
-            users = self.admin_request("GET", "users/overview")
+            users = self.admin_request("GET", "users")
             if isinstance(users, list):
                 for user in users:
                     user_email = user.get("Email", user.get("email", ""))
@@ -522,10 +526,13 @@ class VaultwardenClient:
         return False
 
     def delete_user(self, email):
-        """Delete a user via admin API (by email)."""
+        """Delete a user via admin API (by email).
+
+        Uses GET /admin/users (JSON), NOT /admin/users/overview (HTML).
+        """
         try:
-            users = self.admin_request("GET", "users/overview")
-            print(f"DEBUG: users/overview type={type(users).__name__}, "
+            users = self.admin_request("GET", "users")
+            print(f"DEBUG: users type={type(users).__name__}, "
                   f"is_list={isinstance(users, list)}", file=sys.stderr)
             if isinstance(users, list):
                 for user in users:
@@ -534,23 +541,15 @@ class VaultwardenClient:
                     if user_email.lower() == email.lower() and user_id:
                         print(f"DEBUG: Deleting user {user_email} id={user_id}",
                               file=sys.stderr)
-                        # Try DELETE first, fall back to POST /delete
-                        try:
-                            self.admin_request("DELETE", f"users/{user_id}")
-                            print("DEBUG: DELETE succeeded", file=sys.stderr)
-                            return True
-                        except RuntimeError:
-                            pass
                         try:
                             self.admin_request("POST", f"users/{user_id}/delete")
                             print("DEBUG: POST /delete succeeded", file=sys.stderr)
                             return True
                         except RuntimeError as e:
-                            print(f"DEBUG: Both delete methods failed: {e}",
-                                  file=sys.stderr)
+                            print(f"DEBUG: delete failed: {e}", file=sys.stderr)
                             return False
             else:
-                print(f"DEBUG: users/overview returned non-list: {str(users)[:200]}",
+                print(f"DEBUG: /admin/users returned non-list: {str(users)[:200]}",
                       file=sys.stderr)
         except Exception as e:
             print(f"DEBUG: delete_user exception: {e}", file=sys.stderr)
@@ -627,21 +626,22 @@ class VaultwardenClient:
         # The caller (ensure_service_user) verifies user existence separately.
         raise last_error or RuntimeError("All registration endpoints failed")
 
-    def _invite_and_register(self):
-        """Invite and register the service user.
+    def _register_service_user(self):
+        """Register the service user directly (no invite).
 
-        Requires SIGNUPS_ALLOWED=true in the Vaultwarden environment.
+        The invite step is intentionally omitted because in newer
+        Vaultwarden versions (1.32+), POST /admin/invite creates a User
+        record in the DB. The subsequent registration then fails with
+        'Registration not allowed or user already exists' because the
+        user record already exists from the invite.
+
+        Instead, we register directly. This requires SIGNUPS_ALLOWED=true.
         The Ansible credentials role handles toggling this setting and
         restarting the container when needed (see store.yml).
-        """
-        try:
-            self.admin_request("POST", "invite", {"email": SERVICE_EMAIL})
-            print("DEBUG: invite OK", file=sys.stderr)
-        except RuntimeError as e:
-            print(f"DEBUG: invite result: {e}", file=sys.stderr)
-            if "409" not in str(e):
-                raise
 
+        If a stale user exists from a previous failed invite/register
+        attempt, we detect it via the admin API and delete it first.
+        """
         master_key = make_master_key(self.service_password, SERVICE_EMAIL)
         master_hash = make_master_password_hash(self.service_password, master_key)
         sym_key_raw, sym_key_encrypted = make_sym_key(master_key)
@@ -660,7 +660,26 @@ class VaultwardenClient:
         }
         print(f"DEBUG: registering with kdf=0 iterations={KDF_ITERATIONS}",
               file=sys.stderr)
-        self._try_register(reg_data)
+
+        try:
+            self._try_register(reg_data)
+            return
+        except RuntimeError as e:
+            error_msg = str(e).lower()
+            if "already exists" not in error_msg:
+                raise
+            # User exists from a previous failed attempt — delete and retry
+            print("DEBUG: user may exist from previous attempt, deleting",
+                  file=sys.stderr)
+            deleted = self.delete_user(SERVICE_EMAIL)
+            if not deleted:
+                raise RuntimeError(
+                    f"Registration failed (user exists) and could not "
+                    f"delete stale user. Original error: {e}"
+                )
+            print("DEBUG: stale user deleted, retrying registration",
+                  file=sys.stderr)
+            self._try_register(reg_data)
 
     def ensure_service_user(self):
         self.admin_login()
@@ -689,8 +708,8 @@ class VaultwardenClient:
                         f"Login error: {e}"
                     )
 
-        print("DEBUG: calling _invite_and_register", file=sys.stderr)
-        self._invite_and_register()
+        print("DEBUG: calling _register_service_user", file=sys.stderr)
+        self._register_service_user()
 
         # Verify the freshly created user can log in
         print("DEBUG: verifying login after registration", file=sys.stderr)
