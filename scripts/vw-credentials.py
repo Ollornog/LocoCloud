@@ -26,6 +26,7 @@ import argparse
 import base64
 import hashlib
 import hmac
+import http.client
 import json
 import os
 import struct
@@ -417,35 +418,45 @@ class VaultwardenClient:
         try:
             resp = urllib.request.urlopen(req)
             content = resp.read().decode()
-            if content:
+            if not content or not content.strip():
+                return None
+            try:
                 return json.loads(content)
-            return None
+            except (json.JSONDecodeError, ValueError):
+                return None
         except urllib.error.HTTPError as e:
             content = e.read().decode() if e.fp else ""
             raise RuntimeError(f"HTTP {e.code} {method} {url}: {content}") from e
 
     def admin_login(self):
-        url = f"{self.url}/admin"
-        data = urllib.parse.urlencode({"token": self.admin_token}).encode()
-        req = urllib.request.Request(
-            url,
-            data=data,
+        """Login to admin panel. Uses http.client to capture Set-Cookie
+        from 302/303 redirects (urllib follows redirects and loses cookies)."""
+        parsed = urllib.parse.urlparse(self.url)
+        if parsed.scheme == "https":
+            import ssl
+            conn = http.client.HTTPSConnection(
+                parsed.hostname, parsed.port,
+                context=ssl._create_unverified_context(),
+            )
+        else:
+            conn = http.client.HTTPConnection(parsed.hostname, parsed.port)
+        body = urllib.parse.urlencode({"token": self.admin_token})
+        conn.request(
+            "POST", "/admin", body=body,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
-            method="POST",
         )
-        try:
-            resp = urllib.request.urlopen(req)
-            for header in resp.headers.get_all("Set-Cookie") or []:
-                if "VW_ADMIN" in header:
-                    self.admin_cookie = header.split(";")[0]
-            return True
-        except urllib.error.HTTPError as e:
-            if e.code in (303, 302, 200):
-                for header in e.headers.get_all("Set-Cookie") or []:
-                    if "VW_ADMIN" in header:
-                        self.admin_cookie = header.split(";")[0]
-                return True
-            raise
+        resp = conn.getresponse()
+        resp.read()  # consume body
+        for val in resp.getheader("Set-Cookie", "").split(","):
+            if "VW_ADMIN" in val:
+                self.admin_cookie = val.split(";")[0].strip()
+                break
+        conn.close()
+        if not self.admin_cookie:
+            raise RuntimeError(
+                f"Admin login failed (HTTP {resp.status}): no VW_ADMIN cookie. "
+                "Check admin token."
+            )
 
     def admin_request(self, method, path, data=None):
         if not self.admin_cookie:
@@ -460,7 +471,12 @@ class VaultwardenClient:
         try:
             resp = urllib.request.urlopen(req)
             content = resp.read().decode()
-            return json.loads(content) if content else None
+            if not content or not content.strip():
+                return None
+            try:
+                return json.loads(content)
+            except (json.JSONDecodeError, ValueError):
+                return None
         except urllib.error.HTTPError as e:
             content = e.read().decode() if e.fp else ""
             if e.code == 409:
@@ -471,12 +487,12 @@ class VaultwardenClient:
         """Check if a user already exists via admin users overview."""
         try:
             users = self.admin_request("GET", "users/overview")
-            if users:
+            if isinstance(users, list):
                 for user in users:
                     user_email = user.get("Email", user.get("email", ""))
                     if user_email.lower() == email.lower():
                         return True
-        except RuntimeError:
+        except Exception:
             pass
         return False
 
