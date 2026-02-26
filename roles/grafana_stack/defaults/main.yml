@@ -4,10 +4,10 @@
 
 grafana_stack_path: "/opt/stacks/grafana"
 
-# Images (pinned to major version — no watchtower!)
-grafana_image: "grafana/grafana:11"
-prometheus_image: "prom/prometheus:v2"
-loki_image: "grafana/loki:3"
+# Images (pinned to minor version — no watchtower!)
+grafana_image: "grafana/grafana:12.4"
+prometheus_image: "prom/prometheus:v3"
+loki_image: "grafana/loki:3.6"
 
 # Ports
 grafana_port: 3000
