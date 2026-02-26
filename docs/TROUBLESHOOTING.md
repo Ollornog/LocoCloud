@@ -209,6 +209,33 @@ Ist in der Paperless-Rolle als Default konfiguriert.
 
 ---
 
+### Semaphore: Connection refused auf Port 3000
+
+**Problem:** Health-Check `http://127.0.0.1:3000/api/ping` scheitert dauerhaft mit "Connection refused". Semaphore startet nicht.
+
+**Ursache:** Falscher Environment-Variable-Name für die Datenbank. Semaphore erwartet `SEMAPHORE_DB` (ohne `_NAME`), nicht `SEMAPHORE_DB_NAME`. Ohne den korrekten Datenbanknamen kann Semaphore keine DB-Verbindung herstellen und crasht beim Start.
+
+**Lösung:** In `roles/apps/semaphore/templates/env.j2`:
+```
+# Richtig:
+SEMAPHORE_DB={{ semaphore_db_name }}
+
+# Falsch:
+SEMAPHORE_DB_NAME={{ semaphore_db_name }}
+```
+
+**Diagnose:** `docker logs semaphore` zeigt DB-Verbindungsfehler. Die korrekten Env-Vars laut [Semaphore-Doku](https://semaphoreui.com/docs/administration-guide/installation/docker):
+- `SEMAPHORE_DB` (Datenbankname)
+- `SEMAPHORE_DB_USER`
+- `SEMAPHORE_DB_PASS`
+- `SEMAPHORE_DB_HOST`
+- `SEMAPHORE_DB_PORT`
+- `SEMAPHORE_DB_DIALECT`
+
+**Datum:** 26. Februar 2026
+
+---
+
 ### PocketID: Registrierungsseite öffentlich
 
 **Problem:** `/register`-Endpoint ist öffentlich erreichbar.
@@ -372,7 +399,7 @@ Keyfile darf NUR auf dem Master-Server (`/opt/lococloudd/keys/`) und optional au
 
 **Lösung:** Das Script `scripts/vw-credentials.py` implementiert das vollständige Bitwarden-Verschlüsselungsprotokoll:
 
-1. Erstellt automatisch einen Service-User (`loco-automation@localhost`) via Admin-Invite + Register
+1. Erstellt automatisch einen Service-User (`loco-automation@localhost`) via Direkt-Registration
 2. Loggt sich per OAuth2 ein und bekommt JWT-Token
 3. Verschlüsselt alle Daten client-seitig (AES-256-CBC + HMAC)
 4. Speichert/aktualisiert Vault-Items idempotent
@@ -381,11 +408,49 @@ Keine manuelle Interaktion nötig. Keine externen Dependencies (pure Python 3.8+
 
 ### Vaultwarden Admin-Login: Cookie wird nicht gesetzt
 
-**Problem:** `vw-credentials.py` loggt sich erfolgreich in das Admin-Panel ein, aber nachfolgende Admin-API-Requests (z.B. `GET /admin/users/overview`) geben HTML statt JSON zurück.
+**Problem:** `vw-credentials.py` loggt sich erfolgreich in das Admin-Panel ein, aber nachfolgende Admin-API-Requests (z.B. `GET /admin/users`) geben HTML statt JSON zurück.
 
 **Ursache:** Python's `urllib.request.urlopen` folgt 302/303-Redirects automatisch. Der `Set-Cookie`-Header mit dem `VW_ADMIN`-Cookie steht auf der Redirect-Response (302), nicht auf der finalen Response (200). urllib verliert den Cookie beim Redirect-Follow.
 
 **Lösung:** `vw-credentials.py` verwendet `http.client` statt `urllib` für den Admin-Login. `http.client` folgt keinen Redirects und gibt die rohe Response zurück — der Cookie wird korrekt ausgelesen.
+
+---
+
+### Vaultwarden Admin-API: /admin/users/overview gibt HTML, nicht JSON
+
+**Problem:** `check_user_exists()` in `vw-credentials.py` erkennt existierende User nicht. `user_exists` ist immer `False`.
+
+**Ursache:** `GET /admin/users/overview` gibt eine HTML-Seite zurück (Admin-Panel-UI), kein JSON. Der JSON-Parse schlägt fehl → Rückgabe ist `None` → User wird nie gefunden.
+
+**Lösung:** `GET /admin/users` verwenden (gibt JSON-Liste zurück). **NICHT** `/admin/users/overview` (HTML).
+
+```python
+# Richtig:
+users = self.admin_request("GET", "users")
+
+# Falsch (gibt HTML zurück):
+users = self.admin_request("GET", "users/overview")
+```
+
+**Datum:** 26. Februar 2026
+
+---
+
+### Vaultwarden: Admin-Invite blockiert Registration
+
+**Problem:** Service-User-Registration schlägt fehl mit "Registration not allowed or user already exists", obwohl `SIGNUPS_ALLOWED=true` bestätigt im Container aktiv ist und `user_exists=False`.
+
+**Ursache:** `POST /admin/invite` erstellt einen User-Record in der Datenbank (mit leerem Passwort-Hash). Der anschließende Registration-Endpoint prüft, ob der User existiert, findet den Invite-Record und gibt "user already exists" zurück. Der Invite-Schritt erzeugt genau den Konflikt, der die Registration blockiert.
+
+**Diagnose:**
+1. `SIGNUPS_ALLOWED=true` im Container bestätigt via `docker exec vaultwarden sh -c 'echo $SIGNUPS_ALLOWED'`
+2. `user_exists=False` (Admin-API konnte User nicht finden — wegen `/users/overview` HTML-Bug)
+3. `invite OK` (erstellt User-Record)
+4. Registration: 400 "Registration not allowed or user already exists" auf allen Endpoints
+
+**Lösung:** Direkt-Registration OHNE Invite. Bei `SIGNUPS_ALLOWED=true` (via Ansible-Toggle in `store.yml`) funktioniert direkte Registration. Falls ein Stale-User von einem früheren Invite existiert, wird er über die Admin-API gelöscht und die Registration wiederholt.
+
+**Datum:** 26. Februar 2026
 
 ---
 
@@ -421,7 +486,7 @@ Keine manuelle Interaktion nötig. Keine externen Dependencies (pure Python 3.8+
 
 **Lösung:** Drei Fixes:
 
-1. **Ansible `store.yml` toggelt `SIGNUPS_ALLOWED` via `.env`-Datei:** Die Admin-Config-API (`/admin/config`) existiert nicht in aktueller VW-Version. Stattdessen erkennt `store.yml` den Fehler "Registration not allowed" im stderr, setzt `SIGNUPS_ALLOWED=true` via `lineinfile`, macht `docker restart vaultwarden`, retried das Script, und stellt `SIGNUPS_ALLOWED=false` im `always`-Block wieder her. Zwei Container-Restarts nur beim allerersten Run.
+1. **Ansible `store.yml` toggelt `SIGNUPS_ALLOWED` via `.env`-Datei:** Die Admin-Config-API (`/admin/config`) existiert nicht in aktueller VW-Version. Stattdessen erkennt `store.yml` den Fehler "Registration not allowed" im stderr, setzt `SIGNUPS_ALLOWED=true` via `lineinfile`, macht `docker compose down` + `docker compose up -d` (NICHT `docker restart` — restart liest env_file nicht neu ein!), retried das Script, und stellt `SIGNUPS_ALLOWED=false` im `always`-Block wieder her. Zwei Container-Recreates nur beim allerersten Run.
 
 2. **False-Positive "already exists" entfernt:** `_try_register()` hat "Registration not allowed **or** user already exists" faelschlicherweise als "User existiert" gewertet. Die Fehlermeldung ist absichtlich mehrdeutig — in 99% der Faelle ist "Registration not allowed" die Ursache. Das Script wirft jetzt korrekt einen Fehler statt stillschweigend weiterzumachen.
 
@@ -486,5 +551,7 @@ Gesammelte Erkenntnisse aus Debugging und Betrieb:
 - **Caddy TLS-SNI bei Netbird-IPs:** `reverse_proxy https://100.x.x.x` sendet die IP als SNI. Backend-Caddy hat kein Zertifikat für IPs → 502 oder TLS Alert. Immer `tls_server_name` und `header_up Host` explizit setzen.
 - **Tinyauth als Performance-Bottleneck:** Jeder Sub-Request (JS, CSS, Bilder) geht durch einen Tinyauth-Roundtrip über Netbird. Bei 184 Requests × 150ms = über 1 Minute Ladezeit. Apps mit eigener Auth (Nextcloud OIDC) brauchen kein `import auth` im Caddy-Block.
 - **Watchtower und Infrastruktur:** Watchtower darf NIE Infrastruktur-Container aktualisieren. Ein automatisches Netbird-Update hat den Relay-Endpoint geändert und das gesamte VPN lahmgelegt.
-- **Vaultwarden SIGNUPS_ALLOWED:** `SIGNUPS_ALLOWED=false` blockiert Registration auch fuer eingeladene User. Admin-Config-API (`/admin/config`) existiert nicht. Loesung: Ansible `store.yml` toggelt die `.env`-Datei + `docker restart` (block/always). Nicht im Python-Script loesen — kein zuverlaessiger Runtime-Toggle moeglich.
+- **Vaultwarden Admin-Invite blockiert Registration:** `POST /admin/invite` erstellt einen User-Record in der DB. Anschließende Registration schlägt fehl mit "user already exists". Lösung: Direkt-Registration OHNE Invite bei `SIGNUPS_ALLOWED=true` (via Ansible Toggle).
+- **Vaultwarden Admin-API gibt HTML:** `GET /admin/users/overview` gibt HTML zurück, NICHT JSON. Für JSON-User-Liste: `GET /admin/users` verwenden.
+- **Vaultwarden SIGNUPS_ALLOWED:** `SIGNUPS_ALLOWED=false` blockiert Registration. Loesung: Ansible `store.yml` toggelt `.env` + `docker compose down/up` (NICHT restart — restart liest env_file nicht neu ein).
 - **Caddy Inode-Problem:** Nach Template-Writes immer `docker restart caddy`, nie `caddy reload`. Docker Bind-Mounts referenzieren den Inode, nicht den Dateinamen.

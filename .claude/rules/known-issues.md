@@ -34,6 +34,7 @@
 | Nextcloud extrem langsam (1+ Min Ladezeit) | Tinyauth Forward-Auth als Bottleneck: Jeder Sub-Request (JS, CSS, Fonts, Bilder — 184 Stück) geht durch Tinyauth-Roundtrip über Netbird. 184 × 150ms + Queuing = über 1 Minute. Fix: `import auth` aus dem Nextcloud Caddy-Block entfernen — NC hat eigene OIDC-Auth über PocketID. |
 | Paperless ESC-Registrierung | `PAPERLESS_ACCOUNT_ALLOW_SIGNUPS: false` explizit setzen! |
 | PocketID /register | Per Caddy auf 403 blocken. PocketID kann Registrierung nicht nativ deaktivieren. |
+| Semaphore DB env var | `SEMAPHORE_DB` (NICHT `SEMAPHORE_DB_NAME`). Falscher Name → Semaphore kann keine DB-Verbindung herstellen → Crash beim Start → Connection refused auf Port 3000. |
 
 ## Caddy
 
