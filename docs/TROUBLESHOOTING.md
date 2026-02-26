@@ -419,17 +419,15 @@ Keine manuelle Interaktion nötig. Keine externen Dependencies (pure Python 3.8+
 2. Prelogin-Response: `kdf=0, iterations=600000` → KDF-Parameter korrekt, also nicht die Ursache
 3. Kern-Problem: Registration hat nie stattgefunden, User hatte kein Passwort
 
-**Lösung:** `SIGNUPS_ALLOWED` als Env-Var blockiert die Admin-Config-API — auch per Admin-Invite eingeladene User koennen nicht registrieren wenn die Env-Var gesetzt ist. Fix in zwei Teilen:
+**Lösung:** Drei Fixes:
 
-1. **`SIGNUPS_ALLOWED=false` aus `env.j2` entfernt:** Die Env-Var ueberschreibt Admin-Config und kann zur Laufzeit nicht getoggelt werden. Stattdessen wird die Einstellung jetzt ueber die Admin-Config-API gesteuert.
+1. **Ansible `store.yml` toggelt `SIGNUPS_ALLOWED` via `.env`-Datei:** Die Admin-Config-API (`/admin/config`) existiert nicht in aktueller VW-Version. Stattdessen erkennt `store.yml` den Fehler "Registration not allowed" im stderr, setzt `SIGNUPS_ALLOWED=true` via `lineinfile`, macht `docker restart vaultwarden`, retried das Script, und stellt `SIGNUPS_ALLOWED=false` im `always`-Block wieder her. Zwei Container-Restarts nur beim allerersten Run.
 
-2. **`vw-credentials.py` toggelt Signups via Admin-Config-API:** Vor der Registration wird `signups_allowed=true` via `POST /admin/config` gesetzt. Nach der Registration (oder bei Fehler) wird `signups_allowed=false` wieder gesetzt. Da keine Env-Var mehr existiert, respektiert Vaultwarden die Admin-Config.
+2. **False-Positive "already exists" entfernt:** `_try_register()` hat "Registration not allowed **or** user already exists" faelschlicherweise als "User existiert" gewertet. Die Fehlermeldung ist absichtlich mehrdeutig — in 99% der Faelle ist "Registration not allowed" die Ursache. Das Script wirft jetzt korrekt einen Fehler statt stillschweigend weiterzumachen.
 
-3. **Alle Registration-Endpoints werden weiterhin durchprobiert:** `_try_register()` versucht `/identity/accounts/register`, `/api/accounts/register`, und `send-verification-email` + `register/finish` (VW 1.34+).
+3. **Prelogin vor Login:** `login()` fragt `/api/accounts/prelogin` ab fuer korrekte KDF-Parameter.
 
-4. **Prelogin vor Login:** `login()` fragt `/api/accounts/prelogin` ab fuer korrekte KDF-Parameter.
-
-**Sicherheit:** Vaultwarden ist auf dem Master nur via `127.0.0.1` erreichbar. Caddy blockt `/register` zusaetzlich. Das kurze Fenster mit `signups_allowed=true` waehrend der Service-User-Erstellung ist nicht extern erreichbar.
+**Sicherheit:** Vaultwarden ist auf dem Master nur via `127.0.0.1` erreichbar. Caddy blockt `/register` zusaetzlich. Das kurze Fenster mit `SIGNUPS_ALLOWED=true` waehrend der Service-User-Erstellung ist nicht extern erreichbar.
 
 **Datum:** 26. Februar 2026
 
@@ -488,5 +486,5 @@ Gesammelte Erkenntnisse aus Debugging und Betrieb:
 - **Caddy TLS-SNI bei Netbird-IPs:** `reverse_proxy https://100.x.x.x` sendet die IP als SNI. Backend-Caddy hat kein Zertifikat für IPs → 502 oder TLS Alert. Immer `tls_server_name` und `header_up Host` explizit setzen.
 - **Tinyauth als Performance-Bottleneck:** Jeder Sub-Request (JS, CSS, Bilder) geht durch einen Tinyauth-Roundtrip über Netbird. Bei 184 Requests × 150ms = über 1 Minute Ladezeit. Apps mit eigener Auth (Nextcloud OIDC) brauchen kein `import auth` im Caddy-Block.
 - **Watchtower und Infrastruktur:** Watchtower darf NIE Infrastruktur-Container aktualisieren. Ein automatisches Netbird-Update hat den Relay-Endpoint geändert und das gesamte VPN lahmgelegt.
-- **Vaultwarden SIGNUPS_ALLOWED als Env-Var:** `SIGNUPS_ALLOWED` NICHT als Docker-Env-Var setzen — Env-Vars ueberschreiben die Admin-Config-API und koennen zur Laufzeit nicht getoggelt werden. `vw-credentials.py` steuert `signups_allowed` per Admin-Config-API (temporaer aktivieren → registrieren → deaktivieren).
+- **Vaultwarden SIGNUPS_ALLOWED:** `SIGNUPS_ALLOWED=false` blockiert Registration auch fuer eingeladene User. Admin-Config-API (`/admin/config`) existiert nicht. Loesung: Ansible `store.yml` toggelt die `.env`-Datei + `docker restart` (block/always). Nicht im Python-Script loesen — kein zuverlaessiger Runtime-Toggle moeglich.
 - **Caddy Inode-Problem:** Nach Template-Writes immer `docker restart caddy`, nie `caddy reload`. Docker Bind-Mounts referenzieren den Inode, nicht den Dateinamen.
