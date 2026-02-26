@@ -21,6 +21,7 @@
 | LXC-Template fehlt auf Proxmox | Ansible muss Template via `pveam download` herunterladen bevor LXC-Erstellung. |
 | gocryptfs nach Reboot nicht gemountet | Systemd-Service `gocryptfs-mount.service` prüfen. Muss VOR `docker.service` starten. Master erreichbar? SSH-Key gültig? |
 | gocryptfs Keyfile auf Server vergessen | SOFORT löschen! Keyfile darf nur auf Master + Key-Backup liegen. |
+| Caddy HTTP/2 leere Responses über Netbird VPN | HTTP/2 Binary Framing + WireGuard MTU ~1420 → Frame-Fragmentierung, Stream-Desync. Fix: `versions 1.1` im `transport http` Block + `tls_server_name` + `header_up Host`. Gilt für alle `reverse_proxy https://` über Netbird. |
 | Grafana Alloy hoher RAM | `--server.http.memory-limit-mb=256` auf kleinen LXCs. WAL-Größe begrenzen. |
 | Loki Retention greift nicht | `compactor` muss in Loki-Config aktiviert sein. Ohne Compactor werden alte Chunks nicht gelöscht. |
 
@@ -44,6 +45,7 @@
 | Caddy `handle` Pfad-Matching | `handle /path*` matcht `/path` UND `/path/foo`. `handle /path/*` matcht NUR `/path/foo`, NICHT `/path` allein. Für Endpoints die beides brauchen (z.B. Netbird `/relay`): immer `handle /path*` ohne Slash. |
 | TLS SNI bei Reverse Proxy über Netbird | `reverse_proxy https://100.x.x.x` sendet die IP als SNI → Backend-Caddy hat kein Zert dafür → 502. Lösung: `tls_server_name domain.de` pro Route setzen, kein generisches Snippet. |
 | Caddy-Änderung nach nano wirkungslos | nano erstellt neue Datei (neuer Inode), Docker Bind-Mount referenziert den alten Inode. `docker restart caddy` löst es — ggf. auch Browser-Cache leeren. Besser: Ansible-Templates statt manueller Edits. |
+| Caddy HTTP/2 über VPN → leerer Body | `reverse_proxy https://` über Netbird: H2 Binary Framing fragmentiert bei WireGuard MTU ~1420 → 200 OK aber leerer Body, Backend bekommt nichts. Fix: `versions 1.1` im `transport http` Block erzwingen. Immer zusammen mit `tls_server_name` und `header_up Host` verwenden. |
 
 ## Bootstrap
 

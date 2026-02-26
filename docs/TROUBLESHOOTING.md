@@ -37,6 +37,44 @@ reverse_proxy https://100.x.x.x {
 
 ---
 
+### Caddy: HTTP/2 Reverse Proxy über Netbird VPN — Leere Responses
+
+**Problem:** Wenn Caddy per `reverse_proxy https://` über das Netbird WireGuard-VPN an ein HTTPS-Backend proxied, liefert HTTP/2 leere 200-Responses (Content-Length: 0, kein Body, keine Upstream-Headers). Der Request erreicht das Backend nicht — tcpdump auf dem Backend zeigt keine eingehenden Pakete. Caddy loggt keinen Fehler, gibt aber nur die eigenen Header zurück (public-Snippet).
+
+**Ursache:** HTTP/2 Binary Framing über den WireGuard-Tunnel (MTU ~1420) führt zu Frame-Fragmentierung und Stream-State-Desynchronisation. Die TLS-in-WireGuard-Encapsulation reduziert die effektive Payload, HTTP/2 HPACK-State und Flow-Control-Windows geraten durch Paket-Reordering aus dem Takt. Caddy parsed die H2-Response-Header (daher 200), aber DATA-Frames kommen nicht sauber durch.
+
+**Diagnose-Schritte die zum Fix führten:**
+1. `curl -skv` durch Hetzner Caddy: 200 mit leerem Body
+2. Direkt zur Cloud-LXC (`--resolve` auf Netbird-IP): 302 mit allen Headers → Backend OK
+3. `curl -skv https://100.114.17.50`: TLS Alert "internal error" (SNI = IP statt Domain)
+4. `curl --resolve cloud.ollornog.de:443:100.114.17.50`: Funktioniert → TLS/SNI OK
+5. tcpdump auf Cloud-LXC wt0: Kein Traffic von Hetzner-IP → H2 Connection steckt fest
+6. `versions 1.1` erzwingen: Sofort funktionsfähig
+
+**Lösung:** Im Caddyfile `versions 1.1` im transport-Block setzen, plus expliziten `header_up Host` und `tls_server_name`:
+
+```caddyfile
+cloud.ollornog.de {
+    import public
+    handle {
+        reverse_proxy https://100.114.17.50 {
+            header_up Host cloud.ollornog.de
+            transport http {
+                tls_insecure_skip_verify
+                tls_server_name cloud.ollornog.de
+                versions 1.1
+            }
+        }
+    }
+}
+```
+
+**Gilt für:** Alle `reverse_proxy`-Blöcke die über Netbird VPN an ein HTTPS-Backend proxien.
+
+**Datum:** 26. Februar 2026
+
+---
+
 ### Caddy: Auth blockiert öffentliche Pfade
 
 **Problem:** Public Paths (z.B. Nextcloud-Sharing `/s/*`) werden trotzdem von Tinyauth blockiert.
@@ -406,3 +444,16 @@ restic -r sftp:user@host:/path init --password-file /opt/scripts/backup/.restic-
 1. Netbird-Verbindung prüfen: `netbird status`
 2. SSH-Key-Auth zum Backup-Ziel testen
 3. Policy in Netbird prüfen (backup→kunde muss erlaubt sein)
+
+---
+
+## Key Learnings
+
+Gesammelte Erkenntnisse aus Debugging und Betrieb:
+
+- **HTTP/2 vs HTTP/1.1 bei VPN-Tunnel-Backends:** HTTP/2 Binary Framing verträgt sich nicht mit der reduzierten MTU (~1420) von WireGuard-Tunneln. Die TLS-in-WireGuard-Encapsulation führt zu Frame-Fragmentierung und Stream-State-Desynchronisation — Caddy liefert leere 200-Responses ohne Body. **Regel:** Bei `reverse_proxy https://` über Netbird VPN immer `versions 1.1` im `transport http` Block erzwingen.
+- **Caddy TLS-SNI bei Netbird-IPs:** `reverse_proxy https://100.x.x.x` sendet die IP als SNI. Backend-Caddy hat kein Zertifikat für IPs → 502 oder TLS Alert. Immer `tls_server_name` und `header_up Host` explizit setzen.
+- **Tinyauth als Performance-Bottleneck:** Jeder Sub-Request (JS, CSS, Bilder) geht durch einen Tinyauth-Roundtrip über Netbird. Bei 184 Requests × 150ms = über 1 Minute Ladezeit. Apps mit eigener Auth (Nextcloud OIDC) brauchen kein `import auth` im Caddy-Block.
+- **Watchtower und Infrastruktur:** Watchtower darf NIE Infrastruktur-Container aktualisieren. Ein automatisches Netbird-Update hat den Relay-Endpoint geändert und das gesamte VPN lahmgelegt.
+- **Vaultwarden Registrierung bei SIGNUPS_ALLOWED=false:** Die Fehlermeldung "Registration not allowed or user already exists" ist bewusst mehrdeutig. Für eingeladene User muss der neuere `register/finish`-Endpoint (VW 1.34+) verwendet werden.
+- **Caddy Inode-Problem:** Nach Template-Writes immer `docker restart caddy`, nie `caddy reload`. Docker Bind-Mounts referenzieren den Inode, nicht den Dateinamen.
