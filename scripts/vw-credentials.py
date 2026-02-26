@@ -8,23 +8,18 @@ client-side encryption, and cipher creation.
 Uses a deterministic service user derived from the admin token.
 No manual interaction required.
 
-Dependencies: Python 3.8+, cryptography (installed with Ansible)
+Dependencies: Python 3.8+ (stdlib only — no external packages)
 
 Usage:
+    python3 vw-credentials.py --from-file /tmp/request.json
+
     python3 vw-credentials.py \
         --url http://127.0.0.1:8222 \
         --admin-token <token> \
         --action store \
         --name "My Credential" \
         --username "user" \
-        --password "pass" \
-        [--uri "https://..."] \
-        [--notes "..."]
-
-    python3 vw-credentials.py \
-        --url http://127.0.0.1:8222 \
-        --admin-token <token> \
-        --action list
+        --password "pass"
 """
 
 import argparse
@@ -33,23 +28,289 @@ import hashlib
 import hmac
 import json
 import os
+import struct
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 
-try:
-    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-    from cryptography.hazmat.primitives import padding as sym_padding
-    from cryptography.hazmat.primitives.asymmetric import rsa, padding as asym_padding
-    from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.backends import default_backend
-except ImportError:
-    print("ERROR: 'cryptography' library required. Install: pip3 install cryptography", file=sys.stderr)
-    sys.exit(1)
+
+# --- Pure-Python AES-256-CBC (no external dependencies) ---
+# Implements AES per FIPS 197. Only CBC mode with PKCS7 padding.
+
+# fmt: off
+_SBOX = [
+    0x63,0x7c,0x77,0x7b,0xf2,0x6b,0x6f,0xc5,0x30,0x01,0x67,0x2b,0xfe,0xd7,0xab,0x76,
+    0xca,0x82,0xc9,0x7d,0xfa,0x59,0x47,0xf0,0xad,0xd4,0xa2,0xaf,0x9c,0xa4,0x72,0xc0,
+    0xb7,0xfd,0x93,0x26,0x36,0x3f,0xf7,0xcc,0x34,0xa5,0xe5,0xf1,0x71,0xd8,0x31,0x15,
+    0x04,0xc7,0x23,0xc3,0x18,0x96,0x05,0x9a,0x07,0x12,0x80,0xe2,0xeb,0x27,0xb2,0x75,
+    0x09,0x83,0x2c,0x1a,0x1b,0x6e,0x5a,0xa0,0x52,0x3b,0xd6,0xb3,0x29,0xe3,0x2f,0x84,
+    0x53,0xd1,0x00,0xed,0x20,0xfc,0xb1,0x5b,0x6a,0xcb,0xbe,0x39,0x4a,0x4c,0x58,0xcf,
+    0xd0,0xef,0xaa,0xfb,0x43,0x4d,0x33,0x85,0x45,0xf9,0x02,0x7f,0x50,0x3c,0x9f,0xa8,
+    0x51,0xa3,0x40,0x8f,0x92,0x9d,0x38,0xf5,0xbc,0xb6,0xda,0x21,0x10,0xff,0xf3,0xd2,
+    0xcd,0x0c,0x13,0xec,0x5f,0x97,0x44,0x17,0xc4,0xa7,0x7e,0x3d,0x64,0x5d,0x19,0x73,
+    0x60,0x81,0x4f,0xdc,0x22,0x2a,0x90,0x88,0x46,0xee,0xb8,0x14,0xde,0x5e,0x0b,0xdb,
+    0xe0,0x32,0x3a,0x0a,0x49,0x06,0x24,0x5c,0xc2,0xd3,0xac,0x62,0x91,0x95,0xe4,0x79,
+    0xe7,0xc8,0x37,0x6d,0x8d,0xd5,0x4e,0xa9,0x6c,0x56,0xf4,0xea,0x65,0x7a,0xae,0x08,
+    0xba,0x78,0x25,0x2e,0x1c,0xa6,0xb4,0xc6,0xe8,0xdd,0x74,0x1f,0x4b,0xbd,0x8b,0x8a,
+    0x70,0x3e,0xb5,0x66,0x48,0x03,0xf6,0x0e,0x61,0x35,0x57,0xb9,0x86,0xc1,0x1d,0x9e,
+    0xe1,0xf8,0x98,0x11,0x69,0xd9,0x8e,0x94,0x9b,0x1e,0x87,0xe9,0xce,0x55,0x28,0xdf,
+    0x8c,0xa1,0x89,0x0d,0xbf,0xe6,0x42,0x68,0x41,0x99,0x2d,0x0f,0xb0,0x54,0xbb,0x16,
+]
+_INV_SBOX = [0] * 256
+for _i, _v in enumerate(_SBOX):
+    _INV_SBOX[_v] = _i
+
+_RCON = [0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,0x1b,0x36]
+# fmt: on
 
 
-# Service user credentials derived from admin token
+def _xtime(a):
+    return ((a << 1) ^ 0x11B) & 0xFF if a & 0x80 else (a << 1) & 0xFF
+
+
+def _mix_single(a):
+    t = a[0] ^ a[1] ^ a[2] ^ a[3]
+    u = a[0]
+    a[0] ^= _xtime(a[0] ^ a[1]) ^ t
+    a[1] ^= _xtime(a[1] ^ a[2]) ^ t
+    a[2] ^= _xtime(a[2] ^ a[3]) ^ t
+    a[3] ^= _xtime(a[3] ^ u) ^ t
+
+
+def _inv_mix_single(a):
+    u = _xtime(_xtime(a[0] ^ a[2]))
+    v = _xtime(_xtime(a[1] ^ a[3]))
+    a[0] ^= u; a[1] ^= v; a[2] ^= u; a[3] ^= v
+    _mix_single(a)
+
+
+def _key_expansion(key: bytes):
+    nk = len(key) // 4
+    nr = nk + 6
+    w = list(struct.unpack(f">{nk}I", key))
+    for i in range(nk, 4 * (nr + 1)):
+        t = w[i - 1]
+        if i % nk == 0:
+            t = ((_SBOX[(t >> 16) & 0xFF] << 24) | (_SBOX[(t >> 8) & 0xFF] << 16) |
+                 (_SBOX[t & 0xFF] << 8) | _SBOX[(t >> 24) & 0xFF])
+            t ^= _RCON[i // nk - 1] << 24
+        elif nk > 6 and i % nk == 4:
+            t = ((_SBOX[(t >> 24)] << 24) | (_SBOX[(t >> 16) & 0xFF] << 16) |
+                 (_SBOX[(t >> 8) & 0xFF] << 8) | _SBOX[t & 0xFF])
+        w.append(w[i - nk] ^ t)
+    rk = []
+    for r in range(nr + 1):
+        rk.append(struct.pack(">4I", *w[4*r:4*r+4]))
+    return rk
+
+
+def _aes_encrypt_block(block: bytes, round_keys) -> bytes:
+    s = bytearray(a ^ b for a, b in zip(block, round_keys[0]))
+    nr = len(round_keys) - 1
+    for r in range(1, nr + 1):
+        # SubBytes
+        for i in range(16):
+            s[i] = _SBOX[s[i]]
+        # ShiftRows
+        s[1], s[5], s[9], s[13] = s[5], s[9], s[13], s[1]
+        s[2], s[6], s[10], s[14] = s[10], s[14], s[2], s[6]
+        s[3], s[7], s[11], s[15] = s[15], s[3], s[7], s[11]
+        # MixColumns (skip on last round)
+        if r < nr:
+            for c in range(4):
+                col = [s[c*1+c2*4] for c2 in range(4)]  # column-major
+                # Actually AES state is column-major: s[row + 4*col]
+                pass
+            # Correct column-major indexing
+            for c in range(4):
+                col = [s[4*c], s[4*c+1], s[4*c+2], s[4*c+3]]
+                _mix_single(col)
+                s[4*c], s[4*c+1], s[4*c+2], s[4*c+3] = col
+        # AddRoundKey
+        rk = round_keys[r]
+        for i in range(16):
+            s[i] ^= rk[i]
+    return bytes(s)
+
+
+def _aes_decrypt_block(block: bytes, round_keys) -> bytes:
+    s = bytearray(a ^ b for a, b in zip(block, round_keys[-1]))
+    nr = len(round_keys) - 1
+    for r in range(nr - 1, -1, -1):
+        # InvShiftRows
+        s[1], s[5], s[9], s[13] = s[13], s[1], s[5], s[9]
+        s[2], s[6], s[10], s[14] = s[10], s[14], s[2], s[6]
+        s[3], s[7], s[11], s[15] = s[7], s[11], s[15], s[3]
+        # InvSubBytes
+        for i in range(16):
+            s[i] = _INV_SBOX[s[i]]
+        # AddRoundKey
+        rk = round_keys[r]
+        for i in range(16):
+            s[i] ^= rk[i]
+        # InvMixColumns (skip on round 0)
+        if r > 0:
+            for c in range(4):
+                col = [s[4*c], s[4*c+1], s[4*c+2], s[4*c+3]]
+                _inv_mix_single(col)
+                s[4*c], s[4*c+1], s[4*c+2], s[4*c+3] = col
+    return bytes(s)
+
+
+def _pkcs7_pad(data: bytes, block_size: int = 16) -> bytes:
+    pad_len = block_size - (len(data) % block_size)
+    return data + bytes([pad_len]) * pad_len
+
+
+def _pkcs7_unpad(data: bytes) -> bytes:
+    pad_len = data[-1]
+    if pad_len < 1 or pad_len > 16:
+        raise ValueError("Invalid PKCS7 padding")
+    if data[-pad_len:] != bytes([pad_len]) * pad_len:
+        raise ValueError("Invalid PKCS7 padding")
+    return data[:-pad_len]
+
+
+def aes_cbc_encrypt(data: bytes, key: bytes, iv: bytes) -> bytes:
+    rk = _key_expansion(key)
+    data = _pkcs7_pad(data)
+    out = bytearray()
+    prev = iv
+    for i in range(0, len(data), 16):
+        block = bytes(a ^ b for a, b in zip(data[i:i+16], prev))
+        prev = _aes_encrypt_block(block, rk)
+        out.extend(prev)
+    return bytes(out)
+
+
+def aes_cbc_decrypt(data: bytes, key: bytes, iv: bytes) -> bytes:
+    rk = _key_expansion(key)
+    out = bytearray()
+    prev = iv
+    for i in range(0, len(data), 16):
+        block = data[i:i+16]
+        dec = _aes_decrypt_block(block, rk)
+        out.extend(bytes(a ^ b for a, b in zip(dec, prev)))
+        prev = block
+    return _pkcs7_unpad(bytes(out))
+
+
+# --- Pure-Python RSA-2048 Key Generation ---
+
+def _is_probable_prime(n, k=20):
+    if n < 2: return False
+    if n == 2 or n == 3: return True
+    if n % 2 == 0: return False
+    r, d = 0, n - 1
+    while d % 2 == 0:
+        r += 1; d //= 2
+    for _ in range(k):
+        a = 2 + int.from_bytes(os.urandom(8), "big") % (n - 3)
+        x = pow(a, d, n)
+        if x == 1 or x == n - 1: continue
+        for _ in range(r - 1):
+            x = pow(x, 2, n)
+            if x == n - 1: break
+        else:
+            return False
+    return True
+
+
+def _gen_prime(bits):
+    while True:
+        p = int.from_bytes(os.urandom(bits // 8), "big")
+        p |= (1 << (bits - 1)) | 1
+        if _is_probable_prime(p):
+            return p
+
+
+def _modinv(a, m):
+    g, x, _ = _extended_gcd(a, m)
+    if g != 1:
+        raise ValueError("No modular inverse")
+    return x % m
+
+
+def _extended_gcd(a, b):
+    if a == 0:
+        return b, 0, 1
+    g, x, y = _extended_gcd(b % a, a)
+    return g, y - (b // a) * x, x
+
+
+def _int_to_bytes(n, length):
+    return n.to_bytes(length, "big")
+
+
+def generate_rsa_2048():
+    """Generate RSA-2048 keypair, return (pub_der, priv_der) in DER format."""
+    e = 65537
+    p = _gen_prime(1024)
+    q = _gen_prime(1024)
+    n = p * q
+    phi = (p - 1) * (q - 1)
+    d = _modinv(e, phi)
+
+    # Encode public key as DER (SubjectPublicKeyInfo)
+    def _encode_der_int(val):
+        b = _int_to_bytes(val, (val.bit_length() + 8) // 8)
+        if b[0] & 0x80:
+            b = b'\x00' + b
+        return b'\x02' + _der_length(len(b)) + b
+
+    def _der_length(l):
+        if l < 0x80:
+            return bytes([l])
+        bs = _int_to_bytes(l, (l.bit_length() + 7) // 8)
+        return bytes([0x80 | len(bs)]) + bs
+
+    def _der_sequence(*items):
+        content = b''.join(items)
+        return b'\x30' + _der_length(len(content)) + content
+
+    def _der_bitstring(data):
+        content = b'\x00' + data
+        return b'\x03' + _der_length(len(content)) + content
+
+    # RSAPublicKey
+    rsa_pub = _der_sequence(_encode_der_int(n), _encode_der_int(e))
+
+    # AlgorithmIdentifier for RSA
+    rsa_oid = b'\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x01\x05\x00'
+    algo_id = _der_sequence(rsa_oid)
+
+    # SubjectPublicKeyInfo
+    pub_der = _der_sequence(algo_id, _der_bitstring(rsa_pub))
+
+    # RSAPrivateKey (PKCS#1)
+    dp = d % (p - 1)
+    dq = d % (q - 1)
+    qi = _modinv(q, p)
+    rsa_priv_key = _der_sequence(
+        _encode_der_int(0),  # version
+        _encode_der_int(n),
+        _encode_der_int(e),
+        _encode_der_int(d),
+        _encode_der_int(p),
+        _encode_der_int(q),
+        _encode_der_int(dp),
+        _encode_der_int(dq),
+        _encode_der_int(qi),
+    )
+
+    # PKCS#8 PrivateKeyInfo
+    priv_der = _der_sequence(
+        _encode_der_int(0),  # version
+        algo_id,
+        b'\x04' + _der_length(len(rsa_priv_key)) + rsa_priv_key,
+    )
+
+    return pub_der, priv_der
+
+
+# --- Bitwarden Crypto Protocol ---
+
 SERVICE_EMAIL = "loco-automation@localhost"
 KDF_ITERATIONS = 600000
 
@@ -88,16 +349,12 @@ def stretch_key(master_key: bytes):
 
 def encrypt_aes_cbc(data: bytes, enc_key: bytes, mac_key: bytes) -> str:
     iv = os.urandom(16)
-    padder = sym_padding.PKCS7(128).padder()
-    padded = padder.update(data) + padder.finalize()
-    cipher = Cipher(algorithms.AES(enc_key), modes.CBC(iv), backend=default_backend())
-    enc = cipher.encryptor()
-    ct = enc.update(padded) + enc.finalize()
-    mac = hmac.new(mac_key, iv + ct, hashlib.sha256).digest()
+    ct = aes_cbc_encrypt(data, enc_key, iv)
+    mac_val = hmac.new(mac_key, iv + ct, hashlib.sha256).digest()
     return "2.{}|{}|{}".format(
         base64.b64encode(iv).decode(),
         base64.b64encode(ct).decode(),
-        base64.b64encode(mac).decode(),
+        base64.b64encode(mac_val).decode(),
     )
 
 
@@ -112,11 +369,7 @@ def decrypt_aes_cbc(cipher_string: str, enc_key: bytes, mac_key: bytes) -> bytes
     mac_actual = hmac.new(mac_key, iv + ct, hashlib.sha256).digest()
     if not hmac.compare_digest(mac_actual, mac_expected):
         raise ValueError("MAC verification failed")
-    cipher = Cipher(algorithms.AES(enc_key), modes.CBC(iv), backend=default_backend())
-    dec = cipher.decryptor()
-    padded = dec.update(ct) + dec.finalize()
-    unpadder = sym_padding.PKCS7(128).unpadder()
-    return unpadder.update(padded) + unpadder.finalize()
+    return aes_cbc_decrypt(ct, enc_key, iv)
 
 
 def make_sym_key(master_key: bytes):
@@ -129,18 +382,7 @@ def make_sym_key(master_key: bytes):
 def make_rsa_keys(sym_key: bytes):
     enc_key = sym_key[:32]
     mac_key = sym_key[32:]
-    private_key = rsa.generate_private_key(
-        public_exponent=65537, key_size=2048, backend=default_backend()
-    )
-    public_key = private_key.public_key()
-    pub_der = public_key.public_bytes(
-        serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
-    )
-    priv_der = private_key.private_bytes(
-        serialization.Encoding.DER,
-        serialization.PrivateFormat.PKCS8,
-        serialization.NoEncryption(),
-    )
+    pub_der, priv_der = generate_rsa_2048()
     pub_b64 = base64.b64encode(pub_der).decode()
     priv_encrypted = encrypt_aes_cbc(priv_der, enc_key, mac_key)
     return pub_b64, priv_encrypted
@@ -151,6 +393,8 @@ def encrypt_string(text: str, sym_key: bytes) -> str:
     mac_key = sym_key[32:]
     return encrypt_aes_cbc(text.encode(), enc_key, mac_key)
 
+
+# --- Vaultwarden Client ---
 
 class VaultwardenClient:
     def __init__(self, url: str, admin_token: str):
@@ -353,7 +597,6 @@ def main():
     parser.add_argument("--from-file", help="Read parameters from JSON file")
     args = parser.parse_args()
 
-    # Load parameters from JSON file if specified
     if args.from_file:
         with open(args.from_file) as f:
             data = json.load(f)
