@@ -45,6 +45,14 @@
 | TLS SNI bei Reverse Proxy über Netbird | `reverse_proxy https://100.x.x.x` sendet die IP als SNI → Backend-Caddy hat kein Zert dafür → 502. Lösung: `tls_server_name domain.de` pro Route setzen, kein generisches Snippet. |
 | Caddy-Änderung nach nano wirkungslos | nano erstellt neue Datei (neuer Inode), Docker Bind-Mount referenziert den alten Inode. `docker restart caddy` löst es — ggf. auch Browser-Cache leeren. Besser: Ansible-Templates statt manueller Edits. |
 
+## Bootstrap
+
+| Problem | Lösung |
+|---------|--------|
+| Caddy-Handler vor Caddy-Rolle | Vaultwarden notifiziert `restart caddy`, aber Caddy-Rolle kommt später im Playbook. Handler toleriert `No such container` via `failed_when`. |
+| urllib verliert Cookies bei Redirect | `vw-credentials.py` Admin-Login: `urllib` folgt 302/303 und verliert `Set-Cookie`. Fix: `http.client` statt `urllib` für Admin-Login. |
+| JSON-Template mit Sonderzeichen | Ansible `copy: content:` mit `"{{ variable }}"` erzeugt kaputtes JSON wenn Werte Anführungszeichen enthalten. Fix: `{{ dict | to_json }}`. |
+
 ## Ansible-spezifisch
 
 | Problem | Lösung |

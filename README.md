@@ -4,6 +4,15 @@
 
 LocoCloud is a single Git repository that deploys, manages, and monitors complete self-hosted environments for small companies (5-50 employees). Clone the repo on a master server, configure your customers, run a playbook — done.
 
+```bash
+# Quick start on a fresh Debian 12/13 server:
+apt update && apt install -y curl
+curl -fsSL https://raw.githubusercontent.com/Ollornog/LocoCloud/main/scripts/setup.sh -o setup.sh
+bash setup.sh
+```
+
+The setup script interactively asks for configuration (domain, email, SMTP, optional Netbird) and runs the master playbook.
+
 ---
 
 ## What It Does
@@ -61,13 +70,7 @@ LocoCloud is a single Git repository that deploys, manages, and monitors complet
 
 ### Option A: Automated Setup (Recommended)
 
-```bash
-# On a fresh Debian 13 server/LXC:
-curl -fsSL https://raw.githubusercontent.com/Ollornog/LocoCloud/main/scripts/setup.sh -o setup.sh
-bash setup.sh
-```
-
-The setup script interactively asks for configuration (domain, email, SMTP, optional Netbird) and runs the master playbook.
+See the quick start command at the top of this README. The script handles everything interactively.
 
 ### Option B: Manual Setup
 
@@ -100,8 +103,9 @@ ansible-playbook playbooks/onboard-customer.yml -i inventories/kunde-abc001/
 
 ### Prerequisites
 
-- Debian 13 (Trixie) server/LXC for the master
-- Ansible >= 2.15
+- Debian 12 (Bookworm) or 13 (Trixie) server/LXC for the master
+- Min. 2 CPU cores, 2 GB RAM, 20 GB disk
+- Ansible >= 2.15 (auto-installed by setup script)
 - DNS wildcard for admin services (`*.admin.example.com`)
 - Netbird is **optional** — servers can also be reached via direct IP
 
@@ -126,6 +130,7 @@ LocoCloud/
 │   ├── pocketid/                  # OIDC provider
 │   ├── tinyauth/                  # Forward auth
 │   ├── netbird_client/            # VPN client + API automation (optional)
+│   ├── netbird_server/            # Self-hosted Netbird management server
 │   ├── gocryptfs/                 # Encryption for /mnt/data + auto-mount
 │   ├── grafana_stack/             # Grafana + Prometheus + Loki (master)
 │   ├── alloy/                     # Grafana Alloy agent (customer servers)
@@ -173,6 +178,7 @@ LocoCloud/
 │   ├── setup.sh                   # Automated master setup (interactive)
 │   ├── new-customer.sh            # Generate customer inventory
 │   ├── vault-pass.sh              # Ansible Vault password from Vaultwarden
+│   ├── vw-credentials.py          # Vaultwarden API (Bitwarden protocol, pure Python)
 │   ├── pre-backup.sh              # DB dumps before Restic backup
 │   └── gocryptfs-mount.sh         # Auto-mount after reboot
 └── docs/
@@ -292,6 +298,7 @@ See [docs/APP-DEVELOPMENT.md](docs/APP-DEVELOPMENT.md) for a step-by-step guide 
 | [SETUP.md](docs/SETUP.md) | German | Master server setup guide |
 | [ONBOARDING.md](docs/ONBOARDING.md) | German | Customer onboarding process |
 | [APP-DEVELOPMENT.md](docs/APP-DEVELOPMENT.md) | German | How to create new app roles |
+| [SEMAPHORE.md](docs/SEMAPHORE.md) | German | Semaphore Web-UI configuration |
 | [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | German | Known issues and solutions |
 
 ---
