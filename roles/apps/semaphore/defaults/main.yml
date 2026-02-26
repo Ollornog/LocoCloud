@@ -5,7 +5,7 @@
 semaphore_stack_path: "/opt/stacks/semaphore"
 semaphore_data_path: "/opt/stacks/semaphore/data"
 semaphore_image: "semaphoreui/semaphore:latest"
-semaphore_port: 3000
+semaphore_port: 3010
 
 # Domain for Semaphore
 semaphore_domain: ""  # e.g. "deploy.admin.example.com"
