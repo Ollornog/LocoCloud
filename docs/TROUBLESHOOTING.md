@@ -266,6 +266,31 @@ SEMAPHORE_DB_NAME={{ semaphore_db_name }}
 
 ---
 
+### Semaphore: "password authentication failed" nach erneutem Playbook-Run
+
+**Problem:** Semaphore startet nicht, Container ist im `Restarting`-Status. `docker logs semaphore` zeigt:
+```
+level=warning msg="pq: password authentication failed for user \"semaphore\" (28P01)"
+panic: pq: password authentication failed for user "semaphore" (28P01)
+```
+
+**Ursache:** PostgreSQL liest `POSTGRES_PASSWORD` NUR bei der ersten Initialisierung des Datenverzeichnisses. Wenn das Playbook ein neues zufälliges Passwort generiert (z.B. nach einem Env-Var-Fix), wird das neue Passwort in `.env` und `docker-compose.yml` geschrieben, aber PostgreSQL ignoriert es — das Datenverzeichnis existiert bereits mit dem alten Passwort. Semaphore versucht sich mit dem neuen Passwort zu verbinden → Auth-Fehler → Crash-Loop.
+
+**Zweistufiger Schutz in `deploy.yml`:**
+
+1. **Passwort-Persistenz:** Vor dem Generieren neuer Passwörter wird die bestehende `.env` gelesen und vorhandene Passwörter (`SEMAPHORE_DB_PASS`, `SEMAPHORE_ADMIN_PASSWORD`, `SEMAPHORE_ACCESS_KEY_ENCRYPTION`) wiederverwendet. Ein neues Passwort wird nur generiert wenn noch keines existiert.
+
+2. **Auto-Recovery bei Mismatch:** Nach dem Container-Start prüft `deploy.yml` ob der Semaphore-Container im `restarting`/`exited`-Status ist. Falls ja, werden die Logs auf `password authentication failed` geprüft. Bei Treffer wird automatisch:
+   - Container gestoppt
+   - PostgreSQL-Datenverzeichnis gelöscht
+   - Neues Passwort generiert
+   - Templates neu deployt
+   - Container mit frischer DB gestartet
+
+**Datum:** 26. Februar 2026
+
+---
+
 ### PocketID: Registrierungsseite öffentlich
 
 **Problem:** `/register`-Endpoint ist öffentlich erreichbar.

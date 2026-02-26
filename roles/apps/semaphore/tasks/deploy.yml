@@ -108,6 +108,73 @@
     project_src: "{{ semaphore_stack_path }}"
     state: present
 
+# Auto-recovery: detect password mismatch after start. PostgreSQL ignores
+# POSTGRES_PASSWORD changes when data directory already exists, so a previous
+# run with a different password leaves the DB in an unrecoverable state.
+- name: Wait for Semaphore container to stabilize
+  ansible.builtin.command:
+    cmd: "docker inspect -f '{% raw %}{{ .State.Status }}{% endraw %}' semaphore"
+  register: _semaphore_state
+  changed_when: false
+  retries: 3
+  delay: 5
+  until: _semaphore_state.stdout | default('') in ['running', 'restarting', 'exited']
+  failed_when: false
+
+- name: Check Semaphore logs for password mismatch
+  ansible.builtin.command:
+    cmd: docker logs semaphore --tail 50
+  register: _semaphore_logs
+  changed_when: false
+  when: _semaphore_state.stdout | default('') != 'running'
+
+- name: Detect PostgreSQL password mismatch
+  ansible.builtin.set_fact:
+    _semaphore_pw_mismatch: >-
+      {{ _semaphore_state.stdout | default('') != 'running'
+         and ('password authentication failed' in (_semaphore_logs.stdout | default(''))
+              or 'password authentication failed' in (_semaphore_logs.stderr | default(''))) }}
+
+- name: Reset PostgreSQL data on password mismatch
+  when: _semaphore_pw_mismatch | bool
+  block:
+    - name: Stop Semaphore containers (password mismatch recovery)
+      community.docker.docker_compose_v2:
+        project_src: "{{ semaphore_stack_path }}"
+        state: absent
+
+    - name: Remove PostgreSQL data directory (password mismatch)
+      ansible.builtin.file:
+        path: "{{ semaphore_data_path }}/db"
+        state: absent
+
+    - name: Recreate DB directory after password reset
+      ansible.builtin.file:
+        path: "{{ semaphore_data_path }}/db"
+        state: directory
+        mode: "0755"
+
+    - name: Generate fresh DB password after mismatch
+      ansible.builtin.set_fact:
+        semaphore_db_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+
+    - name: Redeploy docker-compose.yml with fresh password
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ semaphore_stack_path }}/docker-compose.yml"
+        mode: "0644"
+
+    - name: Redeploy .env with fresh password
+      ansible.builtin.template:
+        src: env.j2
+        dest: "{{ semaphore_stack_path }}/.env"
+        mode: "0600"
+
+    - name: Start Semaphore with fresh database
+      community.docker.docker_compose_v2:
+        project_src: "{{ semaphore_stack_path }}"
+        state: present
+
 - name: Wait for Semaphore to be ready
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ semaphore_port }}/api/ping"
