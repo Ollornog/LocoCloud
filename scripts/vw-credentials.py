@@ -557,19 +557,28 @@ class VaultwardenClient:
         return False
 
     def _try_register(self, reg_data):
-        """Try registration endpoints in order of preference."""
-        # 1) /identity/accounts/register (Vaultwarden 1.27+, primary path)
+        """Try registration endpoints in order of preference.
+
+        Vaultwarden changed registration endpoints across versions:
+        - < 1.27: /api/accounts/register
+        - 1.27-1.33: /identity/accounts/register
+        - 1.34+: /identity/accounts/register/finish (two-step flow)
+
+        With SIGNUPS_ALLOWED=false, older endpoints may return
+        'Registration not allowed or user already exists' even for
+        invited users. We must NOT treat this as success — instead
+        we always try ALL endpoints.
+        """
+        last_error = None
+
+        # 1) /identity/accounts/register (Vaultwarden 1.27-1.33)
         try:
             self._http("POST", "/identity/accounts/register", reg_data)
             print("DEBUG: register via /identity/accounts/register OK", file=sys.stderr)
             return True
         except RuntimeError as e:
             print(f"DEBUG: /identity/accounts/register: {e}", file=sys.stderr)
-            if "User already exists" in str(e) or "already exists" in str(e).lower():
-                print("DEBUG: user already exists (treated as OK)", file=sys.stderr)
-                return True
-            if "404" not in str(e):
-                raise
+            last_error = e
 
         # 2) /api/accounts/register (legacy path, older Vaultwarden)
         try:
@@ -578,35 +587,47 @@ class VaultwardenClient:
             return True
         except RuntimeError as e:
             print(f"DEBUG: /api/accounts/register: {e}", file=sys.stderr)
-            if "User already exists" in str(e) or "already exists" in str(e).lower():
-                print("DEBUG: user already exists (treated as OK)", file=sys.stderr)
-                return True
-            if "404" not in str(e):
-                raise
+            last_error = e
 
         # 3) New flow: send-verification-email + finish (Vaultwarden 1.34+)
+        # When mail is disabled, send-verification-email returns the token
+        # directly in the response body instead of sending email.
+        email_token = ""
         try:
-            self._http("POST", "/identity/accounts/register/send-verification-email", {
+            resp = self._http("POST", "/identity/accounts/register/send-verification-email", {
                 "email": reg_data["email"],
                 "name": reg_data.get("name", ""),
                 "receiveMarketingEmails": False,
             })
-            print("DEBUG: send-verification-email OK", file=sys.stderr)
+            # When mail is disabled, token is returned directly
+            if isinstance(resp, dict):
+                email_token = resp.get("token", resp.get("Token", ""))
+            elif isinstance(resp, str) and resp:
+                email_token = resp
+            print(f"DEBUG: send-verification-email OK, token={'set' if email_token else 'empty'}",
+                  file=sys.stderr)
         except RuntimeError as e:
             print(f"DEBUG: send-verification-email: {e}", file=sys.stderr)
+            # Continue — try finish anyway
 
         reg_data_finish = dict(reg_data)
-        reg_data_finish["emailVerificationToken"] = ""
+        reg_data_finish["emailVerificationToken"] = email_token
         try:
             self._http("POST", "/identity/accounts/register/finish", reg_data_finish)
             print("DEBUG: register/finish OK", file=sys.stderr)
             return True
         except RuntimeError as e:
             print(f"DEBUG: register/finish: {e}", file=sys.stderr)
-            if "User already exists" in str(e) or "already exists" in str(e).lower():
-                print("DEBUG: user already exists (treated as OK)", file=sys.stderr)
-                return True
-            raise
+            last_error = e
+
+        # All endpoints failed. If the last error mentions "already exists",
+        # the user may be fully registered from a previous run.
+        if last_error and "already exists" in str(last_error).lower():
+            print("DEBUG: all endpoints failed, but user seems to exist already",
+                  file=sys.stderr)
+            return True
+
+        raise last_error or RuntimeError("All registration endpoints failed")
 
     def _invite_and_register(self):
         """Invite and register the service user."""

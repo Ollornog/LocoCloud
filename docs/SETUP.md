@@ -81,10 +81,14 @@ Auf dem Gateway-Server muss Caddy den Admin-Wildcard an den Master weiterleiten:
         header_up Host {host}
         transport http {
             tls_server_name admin.example.com
+            versions 1.1
         }
     }
 }
 ```
+
+> **Wichtig:** `versions 1.1` ist bei `reverse_proxy https://` ueber Netbird VPN Pflicht.
+> HTTP/2 Binary Framing fragmentiert bei WireGuard MTU ~1420 und fuehrt zu leeren Responses.
 
 ### 3. PocketID: Passkey registrieren + API-Key erstellen
 
