@@ -496,6 +496,21 @@ class VaultwardenClient:
             pass
         return False
 
+    def delete_user(self, email):
+        """Delete a user via admin API (by email)."""
+        try:
+            users = self.admin_request("GET", "users/overview")
+            if isinstance(users, list):
+                for user in users:
+                    user_email = user.get("Email", user.get("email", ""))
+                    user_id = user.get("Id", user.get("id", ""))
+                    if user_email.lower() == email.lower() and user_id:
+                        self.admin_request("DELETE", f"users/{user_id}")
+                        return True
+        except Exception:
+            pass
+        return False
+
     def _try_register(self, reg_data):
         """Try registration endpoints in order of preference."""
         # 1) /identity/accounts/register (Vaultwarden 1.27+, primary path)
@@ -538,21 +553,14 @@ class VaultwardenClient:
                 return True
             raise
 
-    def ensure_service_user(self):
-        self.admin_login()
-
-        # Skip registration if user already exists
-        if self.check_user_exists(SERVICE_EMAIL):
-            return
-
-        # Invite the user (creates Invitation record for signup-disabled instances)
+    def _invite_and_register(self):
+        """Invite and register the service user."""
         try:
             self.admin_request("POST", "invite", {"email": SERVICE_EMAIL})
         except RuntimeError as e:
             if "409" not in str(e):
                 raise
 
-        # Prepare registration data
         master_key = make_master_key(self.service_password, SERVICE_EMAIL)
         master_hash = make_master_password_hash(self.service_password, master_key)
         sym_key_raw, sym_key_encrypted = make_sym_key(master_key)
@@ -569,8 +577,23 @@ class VaultwardenClient:
             "kdfParallelism": None,
             "keys": {"publicKey": pub_key, "encryptedPrivateKey": priv_key_encrypted},
         }
-
         self._try_register(reg_data)
+
+    def ensure_service_user(self):
+        self.admin_login()
+
+        if self.check_user_exists(SERVICE_EMAIL):
+            # User exists — verify we can log in. If password doesn't match
+            # (e.g. admin token changed since last run), delete and recreate.
+            try:
+                self.login()
+                return  # login works, nothing to do
+            except RuntimeError:
+                self.delete_user(SERVICE_EMAIL)
+                self.access_token = None
+                self.sym_key = None
+
+        self._invite_and_register()
 
     def login(self):
         master_key = make_master_key(self.service_password, SERVICE_EMAIL)
