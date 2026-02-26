@@ -11,29 +11,80 @@
     - "{{ semaphore_data_path }}"
     - "{{ semaphore_data_path }}/db"
 
+- name: Read existing Semaphore .env
+  ansible.builtin.slurp:
+    src: "{{ semaphore_stack_path }}/.env"
+  register: semaphore_existing_env
+  failed_when: false
+
+# Detect stale DB from previous deployment with wrong env var name
+# (SEMAPHORE_DB_NAME instead of SEMAPHORE_DB). PostgreSQL data must be
+# reset because the password was regenerated and no longer matches.
+- name: Check for stale DB from broken env config
+  ansible.builtin.set_fact:
+    _semaphore_db_stale: "{{ semaphore_existing_env is not failed and semaphore_existing_env.content is defined and (semaphore_existing_env.content | b64decode is search('SEMAPHORE_DB_NAME=')) }}"
+
+- name: Stop stale Semaphore containers
+  community.docker.docker_compose_v2:
+    project_src: "{{ semaphore_stack_path }}"
+    state: absent
+  when: _semaphore_db_stale | bool
+
+- name: Remove stale PostgreSQL data (password mismatch from previous run)
+  ansible.builtin.file:
+    path: "{{ semaphore_data_path }}/db"
+    state: absent
+  when: _semaphore_db_stale | bool
+
+- name: Recreate DB directory after cleanup
+  ansible.builtin.file:
+    path: "{{ semaphore_data_path }}/db"
+    state: directory
+    mode: "0755"
+  when: _semaphore_db_stale | bool
+
+# Preserve existing passwords across runs. PostgreSQL ignores
+# POSTGRES_PASSWORD when the data directory already exists, so we must
+# reuse the password from the initial deployment.
+- name: Extract existing DB password
+  ansible.builtin.set_fact:
+    semaphore_db_password: "{{ semaphore_existing_env.content | b64decode | regex_search('SEMAPHORE_DB_PASS=(.+)', '\\1') | first }}"
+  when:
+    - semaphore_db_password | length == 0
+    - not (_semaphore_db_stale | bool)
+    - semaphore_existing_env is not failed
+    - semaphore_existing_env.content is defined
+    - semaphore_existing_env.content | b64decode is search('SEMAPHORE_DB_PASS=')
+
 - name: Generate Semaphore DB password
   ansible.builtin.set_fact:
     semaphore_db_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
   when: semaphore_db_password | length == 0
+
+- name: Extract existing admin password
+  ansible.builtin.set_fact:
+    semaphore_admin_password: "{{ semaphore_existing_env.content | b64decode | regex_search('SEMAPHORE_ADMIN_PASSWORD=(.+)', '\\1') | first }}"
+  when:
+    - semaphore_admin_password | length == 0
+    - not (_semaphore_db_stale | bool)
+    - semaphore_existing_env is not failed
+    - semaphore_existing_env.content is defined
+    - semaphore_existing_env.content | b64decode is search('SEMAPHORE_ADMIN_PASSWORD=')
 
 - name: Generate Semaphore admin password
   ansible.builtin.set_fact:
     semaphore_admin_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
   when: semaphore_admin_password | length == 0
 
-- name: Read existing Semaphore .env for access key
-  ansible.builtin.slurp:
-    src: "{{ semaphore_stack_path }}/.env"
-  register: semaphore_existing_env
-  failed_when: false
-
 - name: Extract existing access key encryption
   ansible.builtin.set_fact:
     semaphore_access_key_encryption: "{{ semaphore_existing_env.content | b64decode | regex_search('SEMAPHORE_ACCESS_KEY_ENCRYPTION=(.+)', '\\1') | first }}"
   when:
     - semaphore_access_key_encryption | length == 0
+    - not (_semaphore_db_stale | bool)
     - semaphore_existing_env is not failed
     - semaphore_existing_env.content is defined
+    - semaphore_existing_env.content | b64decode is search('SEMAPHORE_ACCESS_KEY_ENCRYPTION=')
 
 - name: Generate Semaphore access key encryption
   ansible.builtin.set_fact:
