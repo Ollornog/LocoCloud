@@ -525,15 +525,35 @@ class VaultwardenClient:
         """Delete a user via admin API (by email)."""
         try:
             users = self.admin_request("GET", "users/overview")
+            print(f"DEBUG: users/overview type={type(users).__name__}, "
+                  f"is_list={isinstance(users, list)}", file=sys.stderr)
             if isinstance(users, list):
                 for user in users:
                     user_email = user.get("Email", user.get("email", ""))
                     user_id = user.get("Id", user.get("id", ""))
                     if user_email.lower() == email.lower() and user_id:
-                        self.admin_request("DELETE", f"users/{user_id}")
-                        return True
-        except Exception:
-            pass
+                        print(f"DEBUG: Deleting user {user_email} id={user_id}",
+                              file=sys.stderr)
+                        # Try DELETE first, fall back to POST /delete
+                        try:
+                            self.admin_request("DELETE", f"users/{user_id}")
+                            print("DEBUG: DELETE succeeded", file=sys.stderr)
+                            return True
+                        except RuntimeError:
+                            pass
+                        try:
+                            self.admin_request("POST", f"users/{user_id}/delete")
+                            print("DEBUG: POST /delete succeeded", file=sys.stderr)
+                            return True
+                        except RuntimeError as e:
+                            print(f"DEBUG: Both delete methods failed: {e}",
+                                  file=sys.stderr)
+                            return False
+            else:
+                print(f"DEBUG: users/overview returned non-list: {str(users)[:200]}",
+                      file=sys.stderr)
+        except Exception as e:
+            print(f"DEBUG: delete_user exception: {e}", file=sys.stderr)
         return False
 
     def _try_register(self, reg_data):
@@ -541,9 +561,12 @@ class VaultwardenClient:
         # 1) /identity/accounts/register (Vaultwarden 1.27+, primary path)
         try:
             self._http("POST", "/identity/accounts/register", reg_data)
+            print("DEBUG: register via /identity/accounts/register OK", file=sys.stderr)
             return True
         except RuntimeError as e:
+            print(f"DEBUG: /identity/accounts/register: {e}", file=sys.stderr)
             if "User already exists" in str(e) or "already exists" in str(e).lower():
+                print("DEBUG: user already exists (treated as OK)", file=sys.stderr)
                 return True
             if "404" not in str(e):
                 raise
@@ -551,9 +574,12 @@ class VaultwardenClient:
         # 2) /api/accounts/register (legacy path, older Vaultwarden)
         try:
             self._http("POST", "/api/accounts/register", reg_data)
+            print("DEBUG: register via /api/accounts/register OK", file=sys.stderr)
             return True
         except RuntimeError as e:
+            print(f"DEBUG: /api/accounts/register: {e}", file=sys.stderr)
             if "User already exists" in str(e) or "already exists" in str(e).lower():
+                print("DEBUG: user already exists (treated as OK)", file=sys.stderr)
                 return True
             if "404" not in str(e):
                 raise
@@ -565,16 +591,20 @@ class VaultwardenClient:
                 "name": reg_data.get("name", ""),
                 "receiveMarketingEmails": False,
             })
-        except RuntimeError:
-            pass  # May fail without SMTP, but token might still be created
+            print("DEBUG: send-verification-email OK", file=sys.stderr)
+        except RuntimeError as e:
+            print(f"DEBUG: send-verification-email: {e}", file=sys.stderr)
 
         reg_data_finish = dict(reg_data)
         reg_data_finish["emailVerificationToken"] = ""
         try:
             self._http("POST", "/identity/accounts/register/finish", reg_data_finish)
+            print("DEBUG: register/finish OK", file=sys.stderr)
             return True
         except RuntimeError as e:
+            print(f"DEBUG: register/finish: {e}", file=sys.stderr)
             if "User already exists" in str(e) or "already exists" in str(e).lower():
+                print("DEBUG: user already exists (treated as OK)", file=sys.stderr)
                 return True
             raise
 
@@ -582,7 +612,9 @@ class VaultwardenClient:
         """Invite and register the service user."""
         try:
             self.admin_request("POST", "invite", {"email": SERVICE_EMAIL})
+            print("DEBUG: invite OK", file=sys.stderr)
         except RuntimeError as e:
+            print(f"DEBUG: invite result: {e}", file=sys.stderr)
             if "409" not in str(e):
                 raise
 
@@ -602,38 +634,74 @@ class VaultwardenClient:
             "kdfParallelism": None,
             "keys": {"publicKey": pub_key, "encryptedPrivateKey": priv_key_encrypted},
         }
+        print(f"DEBUG: registering with kdf=0 iterations={KDF_ITERATIONS}",
+              file=sys.stderr)
         self._try_register(reg_data)
 
     def ensure_service_user(self):
         self.admin_login()
+        print(f"DEBUG: admin_login OK, cookie={'set' if self.admin_cookie else 'MISSING'}",
+              file=sys.stderr)
 
-        if self.check_user_exists(SERVICE_EMAIL):
+        user_exists = self.check_user_exists(SERVICE_EMAIL)
+        print(f"DEBUG: user_exists={user_exists}", file=sys.stderr)
+
+        if user_exists:
             # User exists — verify we can log in. If password doesn't match
             # (e.g. admin token changed since last run), delete and recreate.
             try:
                 self.login()
+                print("DEBUG: existing user login OK", file=sys.stderr)
                 return  # login works, nothing to do
-            except RuntimeError:
-                self.delete_user(SERVICE_EMAIL)
+            except RuntimeError as e:
+                print(f"DEBUG: existing user login FAILED: {e}", file=sys.stderr)
+                deleted = self.delete_user(SERVICE_EMAIL)
+                print(f"DEBUG: delete_user result={deleted}", file=sys.stderr)
                 self.access_token = None
                 self.sym_key = None
+                if not deleted:
+                    raise RuntimeError(
+                        f"Cannot log in as service user and cannot delete it either. "
+                        f"Login error: {e}"
+                    )
 
+        print("DEBUG: calling _invite_and_register", file=sys.stderr)
         self._invite_and_register()
+
+        # Verify the freshly created user can log in
+        print("DEBUG: verifying login after registration", file=sys.stderr)
+        try:
+            self.login()
+            print("DEBUG: post-registration login OK", file=sys.stderr)
+        except RuntimeError as e:
+            # Get prelogin info for diagnostics
+            try:
+                kdf_info = self.prelogin(SERVICE_EMAIL)
+            except Exception:
+                kdf_info = "prelogin failed"
+            raise RuntimeError(
+                f"Freshly registered user cannot log in. "
+                f"prelogin={kdf_info}, error={e}"
+            )
 
     def prelogin(self, email):
         """Query server for KDF parameters before login."""
         try:
             resp = self._http("POST", "/api/accounts/prelogin", {"email": email})
             if resp:
+                print(f"DEBUG: prelogin /api response: {resp}", file=sys.stderr)
                 return resp
-        except RuntimeError:
-            pass
+        except RuntimeError as e:
+            print(f"DEBUG: prelogin /api failed: {e}", file=sys.stderr)
         try:
             resp = self._http("POST", "/identity/accounts/prelogin", {"email": email})
             if resp:
+                print(f"DEBUG: prelogin /identity response: {resp}", file=sys.stderr)
                 return resp
-        except RuntimeError:
-            pass
+        except RuntimeError as e:
+            print(f"DEBUG: prelogin /identity failed: {e}", file=sys.stderr)
+        print(f"DEBUG: prelogin fallback to defaults kdf=0 iter={KDF_ITERATIONS}",
+              file=sys.stderr)
         return {"kdf": 0, "kdfIterations": KDF_ITERATIONS}
 
     def login(self):
@@ -642,6 +710,8 @@ class VaultwardenClient:
         kdf_iter = kdf_info.get("kdfIterations", kdf_info.get("KdfIterations", KDF_ITERATIONS))
         kdf_mem = kdf_info.get("kdfMemory", kdf_info.get("KdfMemory"))
         kdf_par = kdf_info.get("kdfParallelism", kdf_info.get("KdfParallelism"))
+        print(f"DEBUG: login with kdf={kdf_type} iter={kdf_iter} mem={kdf_mem} par={kdf_par}",
+              file=sys.stderr)
         master_key = make_master_key(
             self.service_password, SERVICE_EMAIL,
             kdf=kdf_type, iterations=kdf_iter,
@@ -757,13 +827,11 @@ def main():
     client = VaultwardenClient(args.url, args.admin_token)
 
     if args.action == "setup":
-        client.ensure_service_user()
-        client.login()
+        client.ensure_service_user()  # includes login verification
         print(json.dumps({"status": "ok", "message": "Service user ready"}))
 
     elif args.action == "list":
-        client.ensure_service_user()
-        client.login()
+        client.ensure_service_user()  # includes login verification
         ciphers = client.list_ciphers()
         items = []
         for c in ciphers:
@@ -779,8 +847,7 @@ def main():
     elif args.action == "store":
         if not args.name:
             parser.error("--name required for store action")
-        client.ensure_service_user()
-        client.login()
+        client.ensure_service_user()  # includes login verification
         result = client.store_credential(
             args.name, args.username, args.password, args.uri, args.notes
         )
