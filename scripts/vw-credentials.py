@@ -119,11 +119,6 @@ def _aes_encrypt_block(block: bytes, round_keys) -> bytes:
         # MixColumns (skip on last round)
         if r < nr:
             for c in range(4):
-                col = [s[c*1+c2*4] for c2 in range(4)]  # column-major
-                # Actually AES state is column-major: s[row + 4*col]
-                pass
-            # Correct column-major indexing
-            for c in range(4):
                 col = [s[4*c], s[4*c+1], s[4*c+2], s[4*c+3]]
                 _mix_single(col)
                 s[4*c], s[4*c+1], s[4*c+2], s[4*c+3] = col
@@ -472,13 +467,76 @@ class VaultwardenClient:
                 return None
             raise RuntimeError(f"HTTP {e.code} admin {method} {path}: {content}") from e
 
+    def check_user_exists(self, email):
+        """Check if a user already exists via admin users overview."""
+        try:
+            users = self.admin_request("GET", "users/overview")
+            if users:
+                for user in users:
+                    user_email = user.get("Email", user.get("email", ""))
+                    if user_email.lower() == email.lower():
+                        return True
+        except RuntimeError:
+            pass
+        return False
+
+    def _try_register(self, reg_data):
+        """Try registration endpoints in order of preference."""
+        # 1) /identity/accounts/register (Vaultwarden 1.27+, primary path)
+        try:
+            self._http("POST", "/identity/accounts/register", reg_data)
+            return True
+        except RuntimeError as e:
+            if "User already exists" in str(e) or "already exists" in str(e).lower():
+                return True
+            if "404" not in str(e):
+                raise
+
+        # 2) /api/accounts/register (legacy path, older Vaultwarden)
+        try:
+            self._http("POST", "/api/accounts/register", reg_data)
+            return True
+        except RuntimeError as e:
+            if "User already exists" in str(e) or "already exists" in str(e).lower():
+                return True
+            if "404" not in str(e):
+                raise
+
+        # 3) New flow: send-verification-email + finish (Vaultwarden 1.34+)
+        try:
+            self._http("POST", "/identity/accounts/register/send-verification-email", {
+                "email": reg_data["email"],
+                "name": reg_data.get("name", ""),
+                "receiveMarketingEmails": False,
+            })
+        except RuntimeError:
+            pass  # May fail without SMTP, but token might still be created
+
+        reg_data_finish = dict(reg_data)
+        reg_data_finish["emailVerificationToken"] = ""
+        try:
+            self._http("POST", "/identity/accounts/register/finish", reg_data_finish)
+            return True
+        except RuntimeError as e:
+            if "User already exists" in str(e) or "already exists" in str(e).lower():
+                return True
+            raise
+
     def ensure_service_user(self):
         self.admin_login()
+
+        # Skip registration if user already exists
+        if self.check_user_exists(SERVICE_EMAIL):
+            return
+
+        # Invite the user (creates Invitation record for signup-disabled instances)
         try:
             self.admin_request("POST", "invite", {"email": SERVICE_EMAIL})
         except RuntimeError as e:
             if "409" not in str(e):
                 raise
+
+        # Prepare registration data
         master_key = make_master_key(self.service_password, SERVICE_EMAIL)
         master_hash = make_master_password_hash(self.service_password, master_key)
         sym_key_raw, sym_key_encrypted = make_sym_key(master_key)
@@ -495,13 +553,8 @@ class VaultwardenClient:
             "kdfParallelism": None,
             "keys": {"publicKey": pub_key, "encryptedPrivateKey": priv_key_encrypted},
         }
-        try:
-            self._http("POST", "/api/accounts/register", reg_data)
-        except RuntimeError as e:
-            if "User already exists" in str(e) or "400" in str(e):
-                pass
-            else:
-                raise
+
+        self._try_register(reg_data)
 
     def login(self):
         master_key = make_master_key(self.service_password, SERVICE_EMAIL)

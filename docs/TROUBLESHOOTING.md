@@ -339,7 +339,18 @@ Keyfile darf NUR auf dem Master-Server (`/opt/lococloudd/keys/`) und optional au
 3. Verschlüsselt alle Daten client-seitig (AES-256-CBC + HMAC)
 4. Speichert/aktualisiert Vault-Items idempotent
 
-Keine manuelle Interaktion nötig. Voraussetzung: Python 3 + `cryptography` Library (Ansible-Dependency).
+Keine manuelle Interaktion nötig. Keine externen Dependencies (pure Python 3.8+).
+
+### Vaultwarden: 404 bei /api/accounts/register
+
+**Problem:** Service-User-Registrierung schlägt mit 404 fehl.
+
+**Ursache:** In Vaultwarden 1.33+ wurde der Registrierungs-Endpoint von `/api/accounts/register` nach `/identity/accounts/register` verschoben. Ab 1.34+ gibt es zusätzlich den neuen Flow über `send-verification-email` + `finish`.
+
+**Lösung:** `vw-credentials.py` versucht automatisch alle drei Registrierungspfade:
+1. `/identity/accounts/register` (Vaultwarden 1.27+, primär)
+2. `/api/accounts/register` (Legacy-Pfad, ältere Versionen)
+3. `send-verification-email` + `finish` (Vaultwarden 1.34+, neuer Flow)
 
 ---
 
