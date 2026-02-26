@@ -402,6 +402,35 @@ Keine manuelle Interaktion nötig. Keine externen Dependencies (pure Python 3.8+
 
 ---
 
+### Vaultwarden: "Username or password is incorrect" bei Credential-Speicherung
+
+**Problem:** `credentials`-Rolle schlägt bei `POST /identity/connect/token` fehl mit "Username or password is incorrect", obwohl der Service-User frisch angelegt wurde.
+
+**Ursache:** Mehrstufiges Problem mit drei unabhängigen Faktoren:
+
+1. **SIGNUPS_ALLOWED=false blockiert Registration:** `/identity/accounts/register` gibt "Registration not allowed or user already exists" zurück — auch für per Admin-Invite eingeladene User. Die Fehlermeldung ist bewusst mehrdeutig (Sicherheitsgründe). Das Script hat fälschlicherweise `"already exists"` im String gematcht und die Registration als erfolgreich behandelt, obwohl das Passwort nie gesetzt wurde.
+
+2. **Falscher Registration-Endpoint für VW 1.34+:** Die älteren Endpoints (`/identity/accounts/register`, `/api/accounts/register`) sind in VW 1.34+ für eingeladene User mit `SIGNUPS_ALLOWED=false` nicht nutzbar. Der korrekte Pfad ist der Zwei-Schritt-Flow über `send-verification-email` + `register/finish`.
+
+3. **Fehlender Prelogin-Schritt:** Das Script hat hardcodierte KDF-Parameter (PBKDF2, 600000 Iterationen) für die Passwort-Ableitung verwendet, statt den Server via `/api/accounts/prelogin` nach den tatsächlichen Parametern zu fragen. Bei Vaultwarden-Versionen die Argon2id als Default nutzen, stimmt der Hash nicht.
+
+**Diagnose-Schritte die zum Fix führten:**
+1. DEBUG-Ausgaben im Script zeigten: `user_exists=False` → `invite OK` → Registration "not allowed" → fälschlicherweise als OK behandelt → Login scheitert
+2. Prelogin-Response: `kdf=0, iterations=600000` → KDF-Parameter korrekt, also nicht die Ursache
+3. Kern-Problem: Registration hat nie stattgefunden, User hatte kein Passwort
+
+**Lösung:** Drei Fixes in `scripts/vw-credentials.py`:
+
+1. **Alle Registration-Endpoints durchprobieren:** `_try_register()` bricht nicht mehr beim ersten "already exists"-Match ab, sondern probiert alle drei Pfade (inkl. `register/finish` für VW 1.34+). Nur wenn ALLE Endpoints "already exists" melden, wird es als Erfolg gewertet.
+
+2. **Prelogin vor Login:** `login()` fragt jetzt erst `/api/accounts/prelogin` ab und nutzt die Server-seitigen KDF-Parameter (Typ, Iterationen, Memory, Parallelism). Unterstützt PBKDF2 und Argon2id.
+
+3. **Login-Verifizierung nach Registration:** `ensure_service_user()` verifiziert sofort nach `_invite_and_register()` dass der Login funktioniert und gibt eine detaillierte Fehlermeldung mit Prelogin-Response wenn nicht.
+
+**Datum:** 26. Februar 2026
+
+---
+
 ## Bootstrap
 
 ### Caddy-Handler schlägt fehl beim initialen Setup
