@@ -326,8 +326,33 @@ def hkdf_expand(key: bytes, info: bytes, length: int) -> bytes:
     return okm[:length]
 
 
-def make_master_key(password: str, email: str) -> bytes:
-    return pbkdf2(password.encode(), email.lower().encode(), KDF_ITERATIONS)
+def make_master_key(password: str, email: str, kdf=0, iterations=KDF_ITERATIONS,
+                    memory=None, parallelism=None) -> bytes:
+    if kdf == 1 and memory and parallelism:
+        # Argon2id KDF — try to use hashlib (Python 3.13+) or argon2-cffi
+        salt = hashlib.sha256(email.lower().encode()).digest()
+        try:
+            return hashlib.argon2(
+                password.encode(), salt=salt, time_cost=iterations,
+                memory_cost=memory * 1024, parallelism=parallelism,
+                hash_len=32, type_="id",
+            )
+        except (AttributeError, TypeError):
+            pass
+        try:
+            from argon2.low_level import hash_secret_raw, Type
+            return hash_secret_raw(
+                secret=password.encode(), salt=salt,
+                time_cost=iterations, memory_cost=memory * 1024,
+                parallelism=parallelism, hash_len=32, type=Type.ID,
+            )
+        except ImportError:
+            raise RuntimeError(
+                "Argon2id KDF required but neither Python 3.13+ hashlib.argon2 "
+                "nor argon2-cffi is available. Install: pip install argon2-cffi"
+            )
+    # PBKDF2-SHA256 (kdf=0, default)
+    return pbkdf2(password.encode(), email.lower().encode(), iterations)
 
 
 def make_master_password_hash(password: str, master_key: bytes) -> str:
@@ -595,8 +620,33 @@ class VaultwardenClient:
 
         self._invite_and_register()
 
+    def prelogin(self, email):
+        """Query server for KDF parameters before login."""
+        try:
+            resp = self._http("POST", "/api/accounts/prelogin", {"email": email})
+            if resp:
+                return resp
+        except RuntimeError:
+            pass
+        try:
+            resp = self._http("POST", "/identity/accounts/prelogin", {"email": email})
+            if resp:
+                return resp
+        except RuntimeError:
+            pass
+        return {"kdf": 0, "kdfIterations": KDF_ITERATIONS}
+
     def login(self):
-        master_key = make_master_key(self.service_password, SERVICE_EMAIL)
+        kdf_info = self.prelogin(SERVICE_EMAIL)
+        kdf_type = kdf_info.get("kdf", kdf_info.get("Kdf", 0))
+        kdf_iter = kdf_info.get("kdfIterations", kdf_info.get("KdfIterations", KDF_ITERATIONS))
+        kdf_mem = kdf_info.get("kdfMemory", kdf_info.get("KdfMemory"))
+        kdf_par = kdf_info.get("kdfParallelism", kdf_info.get("KdfParallelism"))
+        master_key = make_master_key(
+            self.service_password, SERVICE_EMAIL,
+            kdf=kdf_type, iterations=kdf_iter,
+            memory=kdf_mem, parallelism=kdf_par,
+        )
         master_hash = make_master_password_hash(self.service_password, master_key)
         token_data = {
             "grant_type": "password",
