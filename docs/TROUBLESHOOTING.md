@@ -196,6 +196,36 @@ Wird automatisch von der `oidc.yml`-Task der Nextcloud-Rolle gesetzt.
 
 ---
 
+### Nextcloud: HEVC-Videos (GoPro .MOV/.MTS) spielen nicht ab in Files-App
+
+**Problem:** HEVC/H.265-kodierte Videos (typisch: GoPro, moderne Smartphones) zeigen in der Nextcloud Files-App keinen Video-Player oder nur Audio ohne Bild. Betrifft bestimmte Client-Kombinationen.
+
+**Ursache:** Nextcloud's Viewer-App (Core-App) nutzt Plyr (HTML5 `<video>`) und macht **kein Transcoding**. Die Rohdatei wird direkt an den Browser geschickt. Ob das Video abspielt, hängt ausschließlich vom HEVC-Codec-Support des Browsers/OS ab.
+
+**Hinweis:** Die Memories-App (go-vod/HLS Transcoding) transkodiert HEVC on-the-fly zu H.264 und funktioniert. Aber Memories registriert sich nicht als Video-Handler in der Files-App — das sind getrennte Code-Pfade.
+
+**Lösungen pro Client:**
+
+| Client | Status | Lösung |
+|--------|--------|--------|
+| Linux + Chrome | Nicht lösbar | Chrome auf Linux hat keinen Software-HEVC-Decoder (Patentlizenzkosten). NVIDIA-GPUs (NVDEC) sind nicht kompatibel (Chrome nutzt VA-API). **Firefox 137+ verwenden** — dekodiert HEVC per Software über System-FFmpeg. |
+| Windows + Chrome | Lösbar | "HEVC Video Extensions from Device Manufacturer" (kostenlos) oder "HEVC Video Extensions" (~0,99€) aus dem Microsoft Store installieren, Chrome neu starten. Chrome delegiert HEVC an Windows Media Foundation API. |
+| macOS + Chrome/Safari | Funktioniert | VideoToolbox dekodiert nativ. |
+| Android/iOS | Funktioniert | Native HEVC-Unterstützung. |
+
+**Diagnose:** `chrome://gpu` prüfen — wenn kein "HEVC DECODE" Eintrag, fehlt der Decoder.
+
+**Alternative Ansätze (nicht umgesetzt):**
+- GoPro auf H.264-Aufnahme umstellen (limitiert manche 4K60-Modi)
+- Batch-Konvertierung: `ffmpeg -i input.MOV -c:v libx264 -crf 18 -preset slower -c:a copy -map_metadata 0 -movflags +faststart output.mp4` (visuell verlustfrei, aber ~30-50% größere Dateien)
+- Nextcloud Workflow Media Converter App (automatische Konvertierung bei Upload)
+
+**Bekannter Memories-Bug:** [GitHub Issue #1587](https://github.com/pulsejet/memories/issues/1587) — Desktop-Browser: Video startet nicht beim ersten Play-Klick (Ladekreisel, kein Bild/Ton). Workaround: Pause → Play. Mobile Browser nicht betroffen.
+
+**Datum:** 26. Februar 2026
+
+---
+
 ### Paperless: Selbstregistrierung möglich
 
 **Problem:** Benutzer können sich selbst bei Paperless registrieren.
@@ -555,3 +585,4 @@ Gesammelte Erkenntnisse aus Debugging und Betrieb:
 - **Vaultwarden Admin-API gibt HTML:** `GET /admin/users/overview` gibt HTML zurück, NICHT JSON. Für JSON-User-Liste: `GET /admin/users` verwenden.
 - **Vaultwarden SIGNUPS_ALLOWED:** `SIGNUPS_ALLOWED=false` blockiert Registration. Loesung: Ansible `store.yml` toggelt `.env` + `docker compose down/up` (NICHT restart — restart liest env_file nicht neu ein).
 - **Caddy Inode-Problem:** Nach Template-Writes immer `docker restart caddy`, nie `caddy reload`. Docker Bind-Mounts referenzieren den Inode, nicht den Dateinamen.
+- **HEVC-Video in Nextcloud Files-App:** Nextcloud Viewer macht kein Transcoding — Codec-Support hängt 100% vom Browser/OS ab. Linux+Chrome hat keinen HEVC-Decoder (Firefox 137+ nutzen). Windows+Chrome braucht HEVC Video Extensions aus dem Microsoft Store. Memories-App transkodiert zwar HEVC→H.264, registriert sich aber nicht als Video-Handler in der Files-App.
