@@ -3,7 +3,7 @@
 # Baserow — Permission management (Berechtigungskonzept)
 
 baserow_stack_path: "/opt/stacks/baserow"
-baserow_image: "baserow/baserow:1"
+baserow_image: "baserow/baserow:1.35.3"
 baserow_port: 8085
 
 # Domain
