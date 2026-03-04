@@ -15,6 +15,20 @@
     vaultwarden_admin_token: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=48') }}"
   when: vaultwarden_admin_token | length == 0
 
+# For internal TLS: create preliminary CA bundle so Docker doesn't create
+# a directory when mounting the file. Updated later by Caddy role with
+# the internal CA appended.
+- name: Create preliminary CA bundle for internal TLS
+  ansible.builtin.copy:
+    src: /etc/ssl/certs/ca-certificates.crt
+    dest: /opt/stacks/caddy/ca-bundle.crt
+    remote_src: true
+    force: false
+    mode: "0644"
+  when:
+    - loco.admin.tls_mode | default('acme') == 'internal'
+    - caddy_mode | default('') == 'master'
+
 - name: Deploy Vaultwarden docker-compose.yml
   ansible.builtin.template:
     src: docker-compose.yml.j2

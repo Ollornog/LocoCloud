@@ -64,6 +64,12 @@ SMTP_PORT="587"
 SMTP_USER=""
 SMTP_FROM=""
 GATEWAY_IP=""
+TLS_MODE="acme"
+TLS_MODE_NUM=""
+CHALLENGE_PROXY_HOST=""
+CHALLENGE_PROXY_PUBLIC_IP=""
+DNS_PROVIDER=""
+DNS_API_TOKEN=""
 POCKETID_API_TOKEN=""
 WRITE_CONFIG=""
 
@@ -106,6 +112,36 @@ echo "  Vaultwarden: https://vault.${ADMIN_DOMAIN}"
 echo "  Semaphore:   https://deploy.${ADMIN_DOMAIN}"
 echo "  Grafana:     https://grafana.${ADMIN_DOMAIN}"
 echo "  Baserow:     https://baserow.${ADMIN_DOMAIN}"
+echo ""
+
+# TLS Mode
+echo -e "${BOLD}--- TLS-Zertifikate ---${NC}"
+echo ""
+echo "Wie sollen TLS-Zertifikate fuer die Admin-Dienste bezogen werden?"
+echo ""
+echo "  1) Automatisch (Let's Encrypt) — Server ist oeffentlich erreichbar"
+echo "  2) ACME via Challenge-Proxy — Nur ueber Netbird erreichbar, ein"
+echo "     oeffentlicher Server leitet ACME-Challenges weiter"
+echo "  3) DNS-Challenge — Server nicht oeffentlich, DNS-API vorhanden"
+echo "  4) Interne Zertifikate — Komplett offline, Caddy eigene CA"
+echo ""
+ask_default "TLS-Modus (1-4)" TLS_MODE_NUM "1"
+case $TLS_MODE_NUM in
+  1) TLS_MODE="acme" ;;
+  2) TLS_MODE="acme_proxy"
+     echo ""
+     ask "Netbird-IP des oeffentlichen Servers (Challenge-Proxy):" CHALLENGE_PROXY_HOST
+     ask "Oeffentliche IP dieses Servers (fuer DNS):" CHALLENGE_PROXY_PUBLIC_IP
+     ;;
+  3) TLS_MODE="dns"
+     echo ""
+     ask_default "DNS-Provider" DNS_PROVIDER "cloudflare"
+     ask "DNS API-Token:" DNS_API_TOKEN
+     ;;
+  4) TLS_MODE="internal" ;;
+  *) TLS_MODE="acme" ;;
+esac
+ok "TLS-Modus: ${TLS_MODE}"
 echo ""
 
 # SMTP
@@ -397,10 +433,15 @@ operator:
   email: "${OPERATOR_EMAIL}"
   domain: "${BASE_DOMAIN}"
 
-# --- Admin-Subdomain ---
+# --- Admin-Subdomain & TLS ---
 admin:
   subdomain: "${ADMIN_SUB}"
   full_domain: "${ADMIN_DOMAIN}"
+  tls_mode: "${TLS_MODE}"
+  challenge_proxy_host: "${CHALLENGE_PROXY_HOST}"
+  challenge_proxy_public_ip: "${CHALLENGE_PROXY_PUBLIC_IP}"
+  dns_provider: "${DNS_PROVIDER}"
+  dns_api_token: "${DNS_API_TOKEN}"
 
 # --- Admin-Dienste URLs ---
 urls:
@@ -629,29 +670,6 @@ if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]] && [[ "$NETBIRD_SELF_HOSTED" =~ ^[jJyY]$
   STEP=$((STEP + 1))
 fi
 
-echo -e "${BOLD}  ${STEP}. DNS fuer Admin-Dienste einrichten${NC}"
-echo ""
-echo "     Wildcard-DNS auf die Gateway Public IP zeigen lassen:"
-echo "     *.${ADMIN_DOMAIN} -> A ${GATEWAY_IP:-<GATEWAY-IP>}"
-echo ""
-MASTER_PROXY_IP="${NETBIRD_IP:-${PUBLIC_IP}}"
-echo "     Auf dem Gateway-Server die Caddyfile ergaenzen:"
-echo ""
-echo "     *.${ADMIN_DOMAIN} {"
-echo "         tls {"
-echo "             dns cloudflare {env.CF_API_TOKEN}"
-echo "         }"
-echo "         reverse_proxy https://${MASTER_PROXY_IP:-<MASTER-IP>} {"
-echo "             header_up Host {host}"
-echo "             transport http {"
-echo "                 tls_server_name ${ADMIN_DOMAIN}"
-echo "                 versions 1.1"
-echo "             }"
-echo "         }"
-echo "     }"
-echo ""
-STEP=$((STEP + 1))
-
 if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]] && [ -z "$NETBIRD_IP" ]; then
   echo -e "${BOLD}  ${STEP}. Netbird-Client verbinden${NC}"
   echo ""
@@ -661,6 +679,123 @@ if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]] && [ -z "$NETBIRD_IP" ]; then
   echo ""
   STEP=$((STEP + 1))
 fi
+
+# --- TLS-Mode-spezifische Anweisungen ---
+MASTER_PROXY_IP="${NETBIRD_IP:-${PUBLIC_IP}}"
+
+case "$TLS_MODE" in
+  acme)
+    echo -e "${BOLD}  ${STEP}. DNS + Gateway fuer Admin-Dienste einrichten (TLS: acme)${NC}"
+    echo ""
+    echo "     Wildcard-DNS auf die Gateway Public IP zeigen lassen:"
+    echo "     *.${ADMIN_DOMAIN} -> A ${GATEWAY_IP:-<GATEWAY-IP>}"
+    echo ""
+    echo "     Auf dem Gateway-Server die Caddyfile ergaenzen:"
+    echo ""
+    echo "     *.${ADMIN_DOMAIN} {"
+    echo "         tls {"
+    echo "             dns cloudflare {env.CF_API_TOKEN}"
+    echo "         }"
+    echo "         reverse_proxy https://${MASTER_PROXY_IP:-<MASTER-IP>} {"
+    echo "             header_up Host {host}"
+    echo "             transport http {"
+    echo "                 tls_server_name ${ADMIN_DOMAIN}"
+    echo "                 versions 1.1"
+    echo "             }"
+    echo "         }"
+    echo "     }"
+    echo ""
+    STEP=$((STEP + 1))
+    ;;
+
+  acme_proxy)
+    echo -e "${BOLD}  ${STEP}. Challenge-Proxy einrichten (TLS: acme_proxy)${NC}"
+    echo ""
+    echo "     a) Oeffentliches DNS: *.${ADMIN_DOMAIN} -> A ${CHALLENGE_PROXY_PUBLIC_IP:-<PROXY-PUBLIC-IP>}"
+    echo ""
+    echo "     b) Netbird DNS-Zone (im Netbird-Dashboard):"
+    echo "        *.${ADMIN_DOMAIN} -> ${NETBIRD_IP:-<MASTER-NETBIRD-IP>}"
+    echo "        (Netbird DNS hat Vorrang bei VPN-verbundenen Geraeten)"
+    echo ""
+    echo "     c) Challenge-Proxy deployen — auf dem oeffentlichen Server:"
+    echo ""
+    echo "        mkdir -p /opt/stacks/challenge-proxy"
+    echo "        cat > /opt/stacks/challenge-proxy/Caddyfile <<'CADDYEOF'"
+    echo "        :80 {"
+    echo "            handle /.well-known/acme-challenge/* {"
+    echo "                reverse_proxy http://${CHALLENGE_PROXY_HOST:-<MASTER-NETBIRD-IP>}:80 {"
+    echo "                    header_up Host {host}"
+    echo "                }"
+    echo "            }"
+    echo "            handle {"
+    echo "                respond 404"
+    echo "            }"
+    echo "        }"
+    echo "        CADDYEOF"
+    echo ""
+    echo "        cat > /opt/stacks/challenge-proxy/docker-compose.yml <<'COMPEOF'"
+    echo "        services:"
+    echo "          caddy:"
+    echo "            image: caddy:2"
+    echo "            container_name: challenge-proxy"
+    echo "            restart: unless-stopped"
+    echo "            ports:"
+    echo "              - \"80:80\""
+    echo "            volumes:"
+    echo "              - ./Caddyfile:/etc/caddy/Caddyfile:ro"
+    echo "        COMPEOF"
+    echo ""
+    echo "        docker compose -f /opt/stacks/challenge-proxy/docker-compose.yml up -d"
+    echo ""
+    echo "     Alternativ: Ansible-Playbook verwenden:"
+    echo "        ansible-playbook playbooks/deploy-challenge-proxy.yml -i <PROXY-HOST>,"
+    echo ""
+    STEP=$((STEP + 1))
+    ;;
+
+  dns)
+    echo -e "${BOLD}  ${STEP}. DNS-Eintraege einrichten (TLS: dns)${NC}"
+    echo ""
+    echo "     Netbird DNS-Zone (im Netbird-Dashboard):"
+    echo "     *.${ADMIN_DOMAIN} -> ${NETBIRD_IP:-<MASTER-NETBIRD-IP>}"
+    echo ""
+    echo "     Der DNS-API-Token fuer ${DNS_PROVIDER} wurde in der Config gespeichert."
+    echo "     Caddy holt Zertifikate automatisch via DNS-01 Challenge."
+    echo ""
+    echo "     HINWEIS: Caddy nutzt ein Custom-Image mit DNS-Plugin."
+    echo "     Falls das Image noch nicht gebaut wurde:"
+    echo "        cd /opt/stacks/caddy && docker compose build && docker compose up -d"
+    echo ""
+    STEP=$((STEP + 1))
+    ;;
+
+  internal)
+    echo -e "${BOLD}  ${STEP}. Interne TLS-Zertifikate einrichten (TLS: internal)${NC}"
+    echo ""
+    echo "     Caddy generiert eine eigene Root-CA. Fuer vertrauenswuerdige"
+    echo "     HTTPS-Verbindungen muss die Root-CA auf Admin-Geraeten"
+    echo "     importiert werden."
+    echo ""
+    echo "     Root-CA herunterladen (vom Master):"
+    echo "        scp root@${NETBIRD_IP:-<MASTER-IP>}:/opt/stacks/caddy/data/caddy/pki/authorities/local/root.crt ./loco-ca.crt"
+    echo ""
+    echo "     Root-CA importieren:"
+    echo "        macOS:   sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain loco-ca.crt"
+    echo "        Linux:   sudo cp loco-ca.crt /usr/local/share/ca-certificates/ && sudo update-ca-certificates"
+    echo "        Windows: certutil -addstore \"Root\" loco-ca.crt"
+    echo ""
+    if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]]; then
+      echo "     Netbird DNS-Zone (im Netbird-Dashboard):"
+      echo "     *.${ADMIN_DOMAIN} -> ${NETBIRD_IP:-<MASTER-NETBIRD-IP>}"
+      echo ""
+    else
+      echo "     DNS oder /etc/hosts auf Admin-Geraeten:"
+      echo "     *.${ADMIN_DOMAIN} -> ${NETBIRD_IP:-<MASTER-IP>}"
+      echo ""
+    fi
+    STEP=$((STEP + 1))
+    ;;
+esac
 
 echo -e "${BOLD}  ${STEP}. PocketID: Admin-Passkey registrieren${NC}"
 echo ""

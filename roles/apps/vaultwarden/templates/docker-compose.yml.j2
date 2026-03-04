@@ -13,6 +13,11 @@ services:
       - "{{ '127.0.0.1' if 'gateway' in server_roles or 'master' in server_roles else '0.0.0.0' }}:{{ vaultwarden_port }}:80"
     volumes:
       - {{ vaultwarden_data_path }}:/data
+{% if loco.admin.tls_mode | default('acme') == 'internal' and caddy_mode | default('') == 'master' %}
+      - /opt/stacks/caddy/ca-bundle.crt:/etc/ssl/certs/ca-certificates.crt:ro
+    extra_hosts:
+      - "{{ loco.urls.pocketid }}:host-gateway"
+{% endif %}
     env_file:
       - .env
 {% if caddy_mode | default('') != 'master' %}

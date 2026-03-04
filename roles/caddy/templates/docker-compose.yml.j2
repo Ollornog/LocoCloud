@@ -4,9 +4,16 @@
 # Generiert: {{ ansible_facts.date_time.iso8601 }}
 # ============================================
 
+{% set tls_mode = loco.admin.tls_mode | default('acme') %}
 services:
   caddy:
+{% if tls_mode == 'dns' %}
+    build:
+      context: .
+      dockerfile: Dockerfile
+{% else %}
     image: {{ caddy_image }}
+{% endif %}
     container_name: caddy
     restart: unless-stopped
     network_mode: host
@@ -14,3 +21,7 @@ services:
       - {{ caddy_stack_path }}/Caddyfile:/etc/caddy/Caddyfile:ro
       - {{ caddy_data_path }}:/data
       - {{ caddy_config_path }}:/config
+{% if tls_mode == 'dns' %}
+    env_file:
+      - .env
+{% endif %}
