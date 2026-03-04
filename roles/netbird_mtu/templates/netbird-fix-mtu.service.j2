@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+# Sets MTU on Netbird wt0 interface to {{ netbird_mtu }}
+# Netbird default MTU is 1280 — WireGuard standard is 1420
+
+[Unit]
+Description=Set MTU on Netbird {{ netbird_interface }} interface
+BindsTo=sys-subsystem-net-devices-{{ netbird_interface }}.device
+After=sys-subsystem-net-devices-{{ netbird_interface }}.device
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/ip link set dev {{ netbird_interface }} mtu {{ netbird_mtu }}
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sys-subsystem-net-devices-{{ netbird_interface }}.device

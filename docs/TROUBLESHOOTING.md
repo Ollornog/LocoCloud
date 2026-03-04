@@ -75,6 +75,32 @@ cloud.ollornog.de {
 
 ---
 
+### Netbird: MTU 1280 verursacht Performance-Einbußen und Verbindungsabbrüche
+
+**Problem:** Netbird setzt die wt0 MTU auf 1280 Bytes (statt WireGuard-Standard 1420). Das verursacht ~10% Throughput-Verlust und kann bei bestimmten Protokollen (SMTP, große HTTPS-Responses) zu Verbindungsabbrüchen führen.
+
+**Ursache:** Netbird hat kein CLI-Flag für MTU. Die GUI-Einstellung funktioniert auf Windows/macOS, aber auf Linux Headless-Servern gibt es keinen GUI-Zugang. Auf Linux Desktop (Mint/Cinnamon) ist die Netbird-GUI wegen eines Fyne-UI-Toolkit-Bugs verbuggt.
+
+**Lösung:** Die Rolle `netbird_mtu` wird automatisch auf allen Linux-Peers deployed (nach `netbird_client`). Drei Säulen:
+
+1. **MTU-Fix:** systemd Service (`netbird-fix-mtu.service`) + udev Rule setzt wt0 MTU auf 1420
+2. **MSS Clamping:** nftables INPUT/OUTPUT-Regeln setzen MSS auf 1240 (schützt mobile Clients mit MTU 1280)
+3. **TCP MTU Probing:** sysctl `net.ipv4.tcp_mtu_probing=1`
+
+**Verifizierung:**
+```bash
+ip link show wt0 | grep mtu                    # Erwartung: mtu 1420
+ping -c 3 -M do -s 1392 <peer-ip>              # Muss funktionieren
+ping -c 3 -M do -s 1393 <peer-ip>              # Muss "message too long" zeigen
+tcpdump -i wt0 'tcp[tcpflags] & tcp-syn != 0' -v -c 4  # Erwartung: mss 1240
+```
+
+**LXC-Hinweis:** udev läuft nicht in LXC (Host verwaltet Geräte). Der systemd-Service mit `BindsTo=` funktioniert trotzdem. Nach LXC-Reboot prüfen ob MTU gesetzt wurde.
+
+**Datum:** März 2026
+
+---
+
 ### Caddy: Auth blockiert öffentliche Pfade
 
 **Problem:** Public Paths (z.B. Nextcloud-Sharing `/s/*`) werden trotzdem von Tinyauth blockiert.
@@ -602,6 +628,7 @@ restic -r sftp:user@host:/path init --password-file /opt/scripts/backup/.restic-
 
 Gesammelte Erkenntnisse aus Debugging und Betrieb:
 
+- **Netbird MTU 1280 Performance-Problem:** Netbird setzt wt0 standardmäßig auf MTU 1280 statt WireGuard-Standard 1420 — ~10% Throughput-Verlust + Protokoll-Probleme (SMTP, große HTTPS-Responses). Lösung: `netbird_mtu`-Rolle setzt MTU 1420 (systemd Service), MSS Clamping 1240 (nftables, schützt mobile Clients), TCP MTU Probing (sysctl). Wird automatisch nach `netbird_client` auf allen Linux-Peers deployed.
 - **HTTP/2 vs HTTP/1.1 bei VPN-Tunnel-Backends:** HTTP/2 Binary Framing verträgt sich nicht mit der reduzierten MTU (~1420) von WireGuard-Tunneln. Die TLS-in-WireGuard-Encapsulation führt zu Frame-Fragmentierung und Stream-State-Desynchronisation — Caddy liefert leere 200-Responses ohne Body. **Regel:** Bei `reverse_proxy https://` über Netbird VPN immer `versions 1.1` im `transport http` Block erzwingen.
 - **Caddy TLS-SNI bei Netbird-IPs:** `reverse_proxy https://100.x.x.x` sendet die IP als SNI. Backend-Caddy hat kein Zertifikat für IPs → 502 oder TLS Alert. Immer `tls_server_name` und `header_up Host` explizit setzen.
 - **Tinyauth als Performance-Bottleneck:** Jeder Sub-Request (JS, CSS, Bilder) geht durch einen Tinyauth-Roundtrip über Netbird. Bei 184 Requests × 150ms = über 1 Minute Ladezeit. Apps mit eigener Auth (Nextcloud OIDC) brauchen kein `import auth` im Caddy-Block.

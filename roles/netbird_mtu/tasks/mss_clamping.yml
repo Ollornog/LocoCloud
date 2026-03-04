@@ -1,0 +1,42 @@
+---
+# roles/netbird_mtu/tasks/mss_clamping.yml
+# Pillar 2: nftables MSS clamping for local server traffic
+#
+# Netbird v0.65+ sets MSS clamping in the FORWARD chain for transit traffic.
+# This adds INPUT/OUTPUT rules for traffic originating from/destined to the
+# server itself — protects mobile clients (Android/iOS) stuck at MTU 1280.
+#
+# Uses a separate nftables config + systemd service to avoid conflicts with
+# UFW/Docker iptables rules (nftables.service does "flush ruleset" on start).
+
+- name: Ensure nftables is installed
+  ansible.builtin.apt:
+    name: nftables
+    state: present
+
+- name: Create nftables config directory
+  ansible.builtin.file:
+    path: /etc/nftables.d
+    state: directory
+    mode: "0755"
+
+- name: Deploy MSS clamping nftables rules
+  ansible.builtin.template:
+    src: netbird-mss-local.conf.j2
+    dest: /etc/nftables.d/netbird-mss-local.conf
+    mode: "0644"
+  notify: reload mss clamping
+
+- name: Deploy MSS clamping systemd service
+  ansible.builtin.template:
+    src: netbird-mss-clamping.service.j2
+    dest: /etc/systemd/system/netbird-mss-clamping.service
+    mode: "0644"
+  notify: reload systemd
+
+- name: Enable MSS clamping service
+  ansible.builtin.systemd:
+    name: netbird-mss-clamping.service
+    enabled: true
+    daemon_reload: true
+    state: started

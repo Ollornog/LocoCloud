@@ -114,36 +114,6 @@ echo "  Grafana:     https://grafana.${ADMIN_DOMAIN}"
 echo "  Baserow:     https://baserow.${ADMIN_DOMAIN}"
 echo ""
 
-# TLS Mode
-echo -e "${BOLD}--- TLS-Zertifikate ---${NC}"
-echo ""
-echo "Wie sollen TLS-Zertifikate fuer die Admin-Dienste bezogen werden?"
-echo ""
-echo "  1) Automatisch (Let's Encrypt) — Server ist oeffentlich erreichbar"
-echo "  2) ACME via Challenge-Proxy — Nur ueber Netbird erreichbar, ein"
-echo "     oeffentlicher Server leitet ACME-Challenges weiter"
-echo "  3) DNS-Challenge — Server nicht oeffentlich, DNS-API vorhanden"
-echo "  4) Interne Zertifikate — Komplett offline, Caddy eigene CA"
-echo ""
-ask_default "TLS-Modus (1-4)" TLS_MODE_NUM "1"
-case $TLS_MODE_NUM in
-  1) TLS_MODE="acme" ;;
-  2) TLS_MODE="acme_proxy"
-     echo ""
-     ask "Netbird-IP des oeffentlichen Servers (Challenge-Proxy):" CHALLENGE_PROXY_HOST
-     ask "Oeffentliche IP dieses Servers (fuer DNS):" CHALLENGE_PROXY_PUBLIC_IP
-     ;;
-  3) TLS_MODE="dns"
-     echo ""
-     ask_default "DNS-Provider" DNS_PROVIDER "cloudflare"
-     ask "DNS API-Token:" DNS_API_TOKEN
-     ;;
-  4) TLS_MODE="internal" ;;
-  *) TLS_MODE="acme" ;;
-esac
-ok "TLS-Modus: ${TLS_MODE}"
-echo ""
-
 # SMTP
 ask "SMTP Host (leer = spaeter):" SMTP_HOST
 if [ -n "$SMTP_HOST" ]; then
@@ -151,10 +121,6 @@ if [ -n "$SMTP_HOST" ]; then
   ask "SMTP User:" SMTP_USER
   ask_default "SMTP From-Adresse" SMTP_FROM "noreply@${BASE_DOMAIN}"
 fi
-
-# Gateway
-echo ""
-ask "Public IP des Gateway-Servers (leer = spaeter):" GATEWAY_IP
 
 # --- Netbird (optional) ---
 echo ""
@@ -200,6 +166,47 @@ if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]]; then
     fi
   fi
 fi
+
+# --- TLS-Zertifikate ---
+echo ""
+echo -e "${BOLD}--- TLS-Zertifikate ---${NC}"
+echo ""
+echo "Wie sollen TLS-Zertifikate fuer die Admin-Dienste bezogen werden?"
+echo ""
+echo "  1) Automatisch (Let's Encrypt) — Server ist oeffentlich erreichbar"
+echo "  2) ACME via Challenge-Proxy — Nur ueber Netbird erreichbar, ein"
+echo "     oeffentlicher Server leitet ACME-Challenges weiter"
+echo "  3) DNS-Challenge — Server nicht oeffentlich, DNS-API vorhanden"
+echo "  4) Interne Zertifikate — Komplett offline, Caddy eigene CA"
+echo ""
+
+# Smart default: acme_proxy when Netbird is active, acme otherwise
+if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]]; then
+  TLS_DEFAULT="2"
+else
+  TLS_DEFAULT="1"
+fi
+
+ask_default "TLS-Modus (1-4)" TLS_MODE_NUM "$TLS_DEFAULT"
+case $TLS_MODE_NUM in
+  1) TLS_MODE="acme"
+     echo ""
+     ask "Public IP des Gateway-Servers (leer = spaeter):" GATEWAY_IP
+     ;;
+  2) TLS_MODE="acme_proxy"
+     echo ""
+     ask "Netbird-IP des oeffentlichen Servers (Challenge-Proxy):" CHALLENGE_PROXY_HOST
+     ask "Oeffentliche IP dieses Servers (fuer DNS):" CHALLENGE_PROXY_PUBLIC_IP
+     ;;
+  3) TLS_MODE="dns"
+     echo ""
+     ask_default "DNS-Provider" DNS_PROVIDER "cloudflare"
+     ask "DNS API-Token:" DNS_API_TOKEN
+     ;;
+  4) TLS_MODE="internal" ;;
+  *) TLS_MODE="acme" ;;
+esac
+ok "TLS-Modus: ${TLS_MODE}"
 
 echo ""
 echo -e "${BOLD}==========================================${NC}"
@@ -351,6 +358,85 @@ elif [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]] && [ -n "$NETBIRD_URL" ]; then
 elif [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]]; then
   warn "Netbird-Join uebersprungen."
   echo "  Spaeter: netbird up --management-url <URL> --setup-key <KEY>"
+fi
+
+# =====================================================
+# Phase 5b: Netbird MTU fix (wenn aktiviert)
+# =====================================================
+if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]]; then
+  info "Phase 5b: Netbird MTU-Fix anwenden"
+
+  # Pillar 1: systemd service to set wt0 MTU to 1420
+  cat > /etc/systemd/system/netbird-fix-mtu.service <<'MTUEOF'
+[Unit]
+Description=Set MTU on Netbird wt0 interface
+BindsTo=sys-subsystem-net-devices-wt0.device
+After=sys-subsystem-net-devices-wt0.device
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/ip link set dev wt0 mtu 1420
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sys-subsystem-net-devices-wt0.device
+MTUEOF
+
+  # udev rule (only on non-LXC — in LXC udev runs on host)
+  if [ ! -f /proc/1/cpuset ] || ! grep -q lxc /proc/1/cpuset 2>/dev/null; then
+    cat > /etc/udev/rules.d/99-netbird-mtu.rules <<'UDEVEOF'
+ACTION=="add", SUBSYSTEM=="net", KERNEL=="wt0", TAG+="systemd", ENV{SYSTEMD_WANTS}="netbird-fix-mtu.service"
+UDEVEOF
+    udevadm control --reload-rules 2>/dev/null || true
+  fi
+
+  systemctl daemon-reload
+  systemctl enable netbird-fix-mtu.service
+  ip link set dev wt0 mtu 1420 2>/dev/null || true
+
+  # Pillar 2: MSS clamping (nftables)
+  apt install -y nftables >/dev/null 2>&1 || true
+  mkdir -p /etc/nftables.d
+  cat > /etc/nftables.d/netbird-mss-local.conf <<'NFTEOF'
+table inet netbird-mss-local {
+    chain output {
+        type filter hook output priority mangle; policy accept;
+        oifname "wt0" tcp flags syn / syn,rst tcp option maxseg size set 1240
+    }
+    chain input {
+        type filter hook input priority mangle; policy accept;
+        iifname "wt0" tcp flags syn / syn,rst tcp option maxseg size set 1240
+    }
+}
+NFTEOF
+
+  cat > /etc/systemd/system/netbird-mss-clamping.service <<'MSSEOF'
+[Unit]
+Description=MSS Clamping for Netbird wt0 (local traffic)
+After=netbird.service ufw.service
+Wants=netbird.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/nft -f /etc/nftables.d/netbird-mss-local.conf
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+MSSEOF
+
+  systemctl daemon-reload
+  systemctl enable netbird-mss-clamping.service
+  /usr/sbin/nft -f /etc/nftables.d/netbird-mss-local.conf 2>/dev/null || true
+
+  # Pillar 3: TCP MTU probing
+  cat > /etc/sysctl.d/70-vpn-mtu.conf <<'SYSEOF'
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.tcp_base_mss = 1024
+SYSEOF
+  sysctl -p /etc/sysctl.d/70-vpn-mtu.conf 2>/dev/null || true
+
+  ok "Netbird MTU-Fix angewendet (MTU 1420, MSS 1240, TCP MTU Probing)"
 fi
 
 # =====================================================

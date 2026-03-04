@@ -1,0 +1,36 @@
+---
+# roles/netbird_mtu/tasks/mtu_service.yml
+# Pillar 1: systemd service + udev rule to set wt0 MTU
+#
+# Netbird has no CLI flag for MTU. The GUI setting works on Windows/macOS
+# but Linux (especially headless servers) needs this systemd workaround.
+# In LXC: udev doesn't run (host manages devices), but systemd's
+# BindsTo= on the device unit still works.
+
+- name: Deploy netbird-fix-mtu systemd service
+  ansible.builtin.template:
+    src: netbird-fix-mtu.service.j2
+    dest: /etc/systemd/system/netbird-fix-mtu.service
+    mode: "0644"
+  notify: reload systemd
+
+- name: Deploy udev rule for wt0 MTU (non-LXC only)
+  ansible.builtin.template:
+    src: 99-netbird-mtu.rules.j2
+    dest: /etc/udev/rules.d/99-netbird-mtu.rules
+    mode: "0644"
+  notify: reload udev
+  when: not (is_lxc | default(false))
+
+- name: Enable netbird-fix-mtu service
+  ansible.builtin.systemd:
+    name: netbird-fix-mtu.service
+    enabled: true
+    daemon_reload: true
+
+- name: Set MTU on wt0 immediately (if interface exists)
+  ansible.builtin.command:
+    cmd: "ip link set dev {{ netbird_interface }} mtu {{ netbird_mtu }}"
+  register: _mtu_set
+  changed_when: _mtu_set.rc == 0
+  failed_when: false

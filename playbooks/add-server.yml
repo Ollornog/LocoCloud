@@ -77,6 +77,10 @@
       tags: [netbird]
       when: loco.netbird.enabled | default(false)
 
+    - role: netbird_mtu
+      tags: [netbird, mtu]
+      when: loco.netbird.enabled | default(false)
+
     - role: gocryptfs
       tags: [gocryptfs]
       when: "'backup_server' not in (server_roles | default([]))"
