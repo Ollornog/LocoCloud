@@ -114,36 +114,6 @@ echo "  Grafana:     https://grafana.${ADMIN_DOMAIN}"
 echo "  Baserow:     https://baserow.${ADMIN_DOMAIN}"
 echo ""
 
-# TLS Mode
-echo -e "${BOLD}--- TLS-Zertifikate ---${NC}"
-echo ""
-echo "Wie sollen TLS-Zertifikate fuer die Admin-Dienste bezogen werden?"
-echo ""
-echo "  1) Automatisch (Let's Encrypt) — Server ist oeffentlich erreichbar"
-echo "  2) ACME via Challenge-Proxy — Nur ueber Netbird erreichbar, ein"
-echo "     oeffentlicher Server leitet ACME-Challenges weiter"
-echo "  3) DNS-Challenge — Server nicht oeffentlich, DNS-API vorhanden"
-echo "  4) Interne Zertifikate — Komplett offline, Caddy eigene CA"
-echo ""
-ask_default "TLS-Modus (1-4)" TLS_MODE_NUM "1"
-case $TLS_MODE_NUM in
-  1) TLS_MODE="acme" ;;
-  2) TLS_MODE="acme_proxy"
-     echo ""
-     ask "Netbird-IP des oeffentlichen Servers (Challenge-Proxy):" CHALLENGE_PROXY_HOST
-     ask "Oeffentliche IP dieses Servers (fuer DNS):" CHALLENGE_PROXY_PUBLIC_IP
-     ;;
-  3) TLS_MODE="dns"
-     echo ""
-     ask_default "DNS-Provider" DNS_PROVIDER "cloudflare"
-     ask "DNS API-Token:" DNS_API_TOKEN
-     ;;
-  4) TLS_MODE="internal" ;;
-  *) TLS_MODE="acme" ;;
-esac
-ok "TLS-Modus: ${TLS_MODE}"
-echo ""
-
 # SMTP
 ask "SMTP Host (leer = spaeter):" SMTP_HOST
 if [ -n "$SMTP_HOST" ]; then
@@ -151,10 +121,6 @@ if [ -n "$SMTP_HOST" ]; then
   ask "SMTP User:" SMTP_USER
   ask_default "SMTP From-Adresse" SMTP_FROM "noreply@${BASE_DOMAIN}"
 fi
-
-# Gateway
-echo ""
-ask "Public IP des Gateway-Servers (leer = spaeter):" GATEWAY_IP
 
 # --- Netbird (optional) ---
 echo ""
@@ -200,6 +166,47 @@ if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]]; then
     fi
   fi
 fi
+
+# --- TLS-Zertifikate ---
+echo ""
+echo -e "${BOLD}--- TLS-Zertifikate ---${NC}"
+echo ""
+echo "Wie sollen TLS-Zertifikate fuer die Admin-Dienste bezogen werden?"
+echo ""
+echo "  1) Automatisch (Let's Encrypt) — Server ist oeffentlich erreichbar"
+echo "  2) ACME via Challenge-Proxy — Nur ueber Netbird erreichbar, ein"
+echo "     oeffentlicher Server leitet ACME-Challenges weiter"
+echo "  3) DNS-Challenge — Server nicht oeffentlich, DNS-API vorhanden"
+echo "  4) Interne Zertifikate — Komplett offline, Caddy eigene CA"
+echo ""
+
+# Smart default: acme_proxy when Netbird is active, acme otherwise
+if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]]; then
+  TLS_DEFAULT="2"
+else
+  TLS_DEFAULT="1"
+fi
+
+ask_default "TLS-Modus (1-4)" TLS_MODE_NUM "$TLS_DEFAULT"
+case $TLS_MODE_NUM in
+  1) TLS_MODE="acme"
+     echo ""
+     ask "Public IP des Gateway-Servers (leer = spaeter):" GATEWAY_IP
+     ;;
+  2) TLS_MODE="acme_proxy"
+     echo ""
+     ask "Netbird-IP des oeffentlichen Servers (Challenge-Proxy):" CHALLENGE_PROXY_HOST
+     ask "Oeffentliche IP dieses Servers (fuer DNS):" CHALLENGE_PROXY_PUBLIC_IP
+     ;;
+  3) TLS_MODE="dns"
+     echo ""
+     ask_default "DNS-Provider" DNS_PROVIDER "cloudflare"
+     ask "DNS API-Token:" DNS_API_TOKEN
+     ;;
+  4) TLS_MODE="internal" ;;
+  *) TLS_MODE="acme" ;;
+esac
+ok "TLS-Modus: ${TLS_MODE}"
 
 echo ""
 echo -e "${BOLD}==========================================${NC}"
