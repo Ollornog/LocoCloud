@@ -1,0 +1,17 @@
+# {{ ansible_managed }}
+# MSS Clamping for Netbird {{ netbird_interface }} — local server traffic
+#
+# Netbird v0.65+ handles MSS clamping in FORWARD chain.
+# This covers INPUT/OUTPUT for traffic originating from/destined to this server.
+# MSS {{ netbird_mss_clamp }} = lowest mesh MTU (1280) - 40 byte IPv4 header
+
+table inet netbird-mss-local {
+    chain output {
+        type filter hook output priority mangle; policy accept;
+        oifname "{{ netbird_interface }}" tcp flags syn / syn,rst tcp option maxseg size set {{ netbird_mss_clamp }}
+    }
+    chain input {
+        type filter hook input priority mangle; policy accept;
+        iifname "{{ netbird_interface }}" tcp flags syn / syn,rst tcp option maxseg size set {{ netbird_mss_clamp }}
+    }
+}

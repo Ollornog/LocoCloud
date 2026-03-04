@@ -33,6 +33,7 @@ roles/
   pocketid/              # OIDC provider
   tinyauth/              # Forward auth
   netbird_client/        # VPN client
+  netbird_mtu/           # VPN MTU optimization (MTU 1420, MSS clamping, sysctl)
   netbird_server/        # Self-hosted Netbird management
   gocryptfs/             # Encryption for /mnt/data
   grafana_stack/         # Grafana + Prometheus + Loki

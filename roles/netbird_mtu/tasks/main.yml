@@ -1,0 +1,22 @@
+---
+# roles/netbird_mtu/tasks/main.yml
+# Netbird MTU optimization: MTU fix + MSS clamping + TCP MTU probing
+#
+# Three pillars:
+# 1. systemd + udev service to set wt0 MTU to 1420 (all Linux peers)
+# 2. nftables MSS clamping for local INPUT/OUTPUT (servers only)
+# 3. sysctl TCP MTU probing (all Linux systems)
+
+- name: Deploy MTU fix service
+  ansible.builtin.import_tasks: mtu_service.yml
+  tags: [netbird, mtu]
+
+- name: Deploy MSS clamping
+  ansible.builtin.import_tasks: mss_clamping.yml
+  when: netbird_mss_clamping_enabled
+  tags: [netbird, mtu, mss]
+
+- name: Deploy TCP MTU probing sysctl
+  ansible.builtin.import_tasks: sysctl.yml
+  when: netbird_tcp_mtu_probing
+  tags: [netbird, mtu, sysctl]

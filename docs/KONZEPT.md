@@ -842,7 +842,47 @@ Ansible erstellt beim Kunden-Onboarding **alle Netbird-Ressourcen automatisch** 
   when: backup.enabled | default(false)
 ```
 
-### 6.4 DNS in Netbird
+### 6.4 MTU-Optimierung (Rolle `netbird_mtu`)
+
+Netbird setzt die MTU des `wt0`-Interface standardmäßig auf 1280 Bytes — deutlich unter dem WireGuard-Standard von 1420. Das verursacht ~10% Throughput-Verlust und kann bei bestimmten Protokollen (SMTP, große HTTPS-Responses) zu Verbindungsabbrüchen führen.
+
+**Drei-Säulen-Strategie (automatisch auf allen Linux-Peers):**
+
+| Säule | Maßnahme | Details |
+|-------|----------|---------|
+| 1. MTU-Fix | systemd + udev Service | Setzt wt0 MTU auf 1420. In LXC: kein udev (Host verwaltet Geräte), systemd `BindsTo=` funktioniert trotzdem |
+| 2. MSS Clamping | nftables INPUT/OUTPUT | MSS auf 1240 (= MTU 1280 − 40 IPv4-Header). Schützt mobile Clients (Android/iOS) die auf MTU 1280 feststecken. Nur auf Servern, nicht auf Desktops |
+| 3. TCP MTU Probing | sysctl `tcp_mtu_probing=1` | Path MTU Discovery für TCP. Auf allen Linux-Systemen |
+
+**Warum 1420?** WireGuard-Overhead: 60 Bytes (IPv4) / 80 Bytes (IPv6). Hetzner Public Interface MTU: 1500. Worst Case (IPv6): 1500 − 80 = 1420. Hetzner Cloud Networks (private Netze) haben MTU 1450 — dort wäre 1370 nötig, wir nutzen aber nur das Public Interface.
+
+**Warum MSS 1240?** Niedrigste MTU im Mesh: 1280 (mobile Clients). MSS = MTU − 40 (IPv4 Header) = 1240.
+
+**MSS Clamping Architektur:** Netbird v0.65+ setzt eigenes MSS Clamping in der FORWARD-Chain. Die `netbird_mtu`-Rolle ergänzt INPUT/OUTPUT für lokalen Server-Traffic. Eigener nftables-Table + systemd-Service (nicht über `nftables.service`, da dessen `flush ruleset` UFW/Docker-Regeln löschen würde).
+
+**Plattform-Übersicht:**
+
+| Plattform | MTU-Methode | MSS Clamping | Sysctl |
+|-----------|-------------|-------------|--------|
+| Linux Server (headless) | systemd + udev | Ja (nftables) | Ja |
+| Linux LXC | systemd (kein udev) | Ja (`/usr/sbin/nft`) | Ja (einige Params host-kontrolliert) |
+| Windows/macOS | Netbird GUI: Settings → Advanced → MTU → 1420 | Nicht nötig | Nicht nötig |
+| Android/iOS | Nicht konfigurierbar (bleibt 1280) | Server-MSS schützt TCP | N/A |
+
+**Verifizierung:**
+```bash
+# MTU prüfen
+ip link show wt0 | grep mtu    # Erwartung: mtu 1420
+
+# Ping-Test (Don't-Fragment)
+ping -c 3 -M do -s 1392 <peer-ip>    # Muss funktionieren
+ping -c 3 -M do -s 1393 <peer-ip>    # Muss "message too long" zeigen
+
+# MSS Clamping prüfen (nur Server)
+tcpdump -i wt0 'tcp[tcpflags] & tcp-syn != 0' -v -c 4    # Erwartung: mss 1240
+```
+
+### 6.5 DNS in Netbird
 
 **NUR für interne Domains verwenden!**
 
@@ -2528,6 +2568,8 @@ Identisch für alle Server (Master + Kunden):
 | USB deaktiviert | Nur auf physischen Servern (`is_lxc`-Check!) |
 | .env chmod 600 | Alle Secrets-Files |
 | Docker Port-Bind | Entry-Point: `127.0.0.1:PORT` / App-LXCs: `0.0.0.0:PORT` + UFW auf wt0 |
+| Netbird MTU-Fix | wt0 MTU auf 1420 (systemd Service), TCP MTU Probing aktiviert |
+| MSS Clamping | nftables INPUT/OUTPUT: MSS 1240 für Netbird-Traffic — schützt mobile Clients mit MTU 1280 |
 
 ### 18.2 LXC-spezifisch
 

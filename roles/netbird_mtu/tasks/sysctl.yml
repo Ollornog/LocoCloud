@@ -1,0 +1,19 @@
+---
+# roles/netbird_mtu/tasks/sysctl.yml
+# Pillar 3: TCP MTU probing via sysctl
+#
+# Enables Path MTU Discovery for TCP, which helps with varying MTUs
+# across the VPN mesh. Works on both servers and desktops.
+# In LXC: some kernel params are host-controlled — permission denied
+# on kernel.* and fs.* is normal and ignored by the base role.
+
+- name: Apply TCP MTU probing sysctl
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_set: true
+    sysctl_file: /etc/sysctl.d/70-vpn-mtu.conf
+    reload: true
+  loop:
+    - { name: "net.ipv4.tcp_mtu_probing", value: "1" }
+    - { name: "net.ipv4.tcp_base_mss", value: "1024" }

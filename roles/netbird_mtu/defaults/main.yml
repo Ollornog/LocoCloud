@@ -1,0 +1,21 @@
+---
+# roles/netbird_mtu/defaults/main.yml
+# Netbird VPN MTU optimization — fixes WireGuard MTU 1280 default
+
+# Interface name (must match netbird_client)
+netbird_interface: "wt0"
+
+# Target MTU for wt0 (WireGuard standard: 1420)
+# Netbird default is 1280 — causes ~10% throughput loss and protocol issues
+netbird_mtu: 1420
+
+# MSS value for TCP clamping (MTU 1280 - 40 byte IPv4 header = 1240)
+# Protects mobile clients (Android/iOS) stuck at MTU 1280
+netbird_mss_clamp: 1240
+
+# Deploy MSS clamping (nftables INPUT/OUTPUT rules)
+# Only needed on servers, not on desktop clients
+netbird_mss_clamping_enabled: true
+
+# Deploy TCP MTU probing sysctl
+netbird_tcp_mtu_probing: true

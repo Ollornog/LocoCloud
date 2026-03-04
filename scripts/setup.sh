@@ -361,6 +361,85 @@ elif [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]]; then
 fi
 
 # =====================================================
+# Phase 5b: Netbird MTU fix (wenn aktiviert)
+# =====================================================
+if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]]; then
+  info "Phase 5b: Netbird MTU-Fix anwenden"
+
+  # Pillar 1: systemd service to set wt0 MTU to 1420
+  cat > /etc/systemd/system/netbird-fix-mtu.service <<'MTUEOF'
+[Unit]
+Description=Set MTU on Netbird wt0 interface
+BindsTo=sys-subsystem-net-devices-wt0.device
+After=sys-subsystem-net-devices-wt0.device
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/ip link set dev wt0 mtu 1420
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sys-subsystem-net-devices-wt0.device
+MTUEOF
+
+  # udev rule (only on non-LXC — in LXC udev runs on host)
+  if [ ! -f /proc/1/cpuset ] || ! grep -q lxc /proc/1/cpuset 2>/dev/null; then
+    cat > /etc/udev/rules.d/99-netbird-mtu.rules <<'UDEVEOF'
+ACTION=="add", SUBSYSTEM=="net", KERNEL=="wt0", TAG+="systemd", ENV{SYSTEMD_WANTS}="netbird-fix-mtu.service"
+UDEVEOF
+    udevadm control --reload-rules 2>/dev/null || true
+  fi
+
+  systemctl daemon-reload
+  systemctl enable netbird-fix-mtu.service
+  ip link set dev wt0 mtu 1420 2>/dev/null || true
+
+  # Pillar 2: MSS clamping (nftables)
+  apt install -y nftables >/dev/null 2>&1 || true
+  mkdir -p /etc/nftables.d
+  cat > /etc/nftables.d/netbird-mss-local.conf <<'NFTEOF'
+table inet netbird-mss-local {
+    chain output {
+        type filter hook output priority mangle; policy accept;
+        oifname "wt0" tcp flags syn / syn,rst tcp option maxseg size set 1240
+    }
+    chain input {
+        type filter hook input priority mangle; policy accept;
+        iifname "wt0" tcp flags syn / syn,rst tcp option maxseg size set 1240
+    }
+}
+NFTEOF
+
+  cat > /etc/systemd/system/netbird-mss-clamping.service <<'MSSEOF'
+[Unit]
+Description=MSS Clamping for Netbird wt0 (local traffic)
+After=netbird.service ufw.service
+Wants=netbird.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/nft -f /etc/nftables.d/netbird-mss-local.conf
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+MSSEOF
+
+  systemctl daemon-reload
+  systemctl enable netbird-mss-clamping.service
+  /usr/sbin/nft -f /etc/nftables.d/netbird-mss-local.conf 2>/dev/null || true
+
+  # Pillar 3: TCP MTU probing
+  cat > /etc/sysctl.d/70-vpn-mtu.conf <<'SYSEOF'
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.tcp_base_mss = 1024
+SYSEOF
+  sysctl -p /etc/sysctl.d/70-vpn-mtu.conf 2>/dev/null || true
+
+  ok "Netbird MTU-Fix angewendet (MTU 1420, MSS 1240, TCP MTU Probing)"
+fi
+
+# =====================================================
 # Phase 6: Repo klonen
 # =====================================================
 info "Phase 6: LocoCloud-Repo klonen"

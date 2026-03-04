@@ -120,6 +120,11 @@
       tags: [netbird]
       when: loco.netbird.enabled | default(false)
 
+    # 2b. Netbird MTU optimization
+    - role: netbird_mtu
+      tags: [netbird, mtu]
+      when: loco.netbird.enabled | default(false)
+
     # 3. gocryptfs encryption for /mnt/data
     - role: gocryptfs
       vars:

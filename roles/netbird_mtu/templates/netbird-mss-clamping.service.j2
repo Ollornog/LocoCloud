@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+# Loads MSS clamping nftables rules for Netbird local traffic
+# Separate from nftables.service to avoid "flush ruleset" destroying UFW/Docker rules
+
+[Unit]
+Description=MSS Clamping for Netbird {{ netbird_interface }} (local traffic)
+After=netbird.service ufw.service
+Wants=netbird.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/nft -f /etc/nftables.d/netbird-mss-local.conf
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

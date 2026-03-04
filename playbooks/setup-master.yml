@@ -46,6 +46,10 @@
       tags: [netbird]
       when: loco.netbird.enabled | default(false)
 
+    - role: netbird_mtu
+      tags: [netbird, mtu]
+      when: loco.netbird.enabled | default(false)
+
     - role: pocketid
       vars:
         pocketid_domain: "{{ loco.urls.pocketid }}"

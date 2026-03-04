@@ -1,0 +1,16 @@
+---
+# roles/netbird_mtu/handlers/main.yml
+
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: reload udev
+  ansible.builtin.command:
+    cmd: udevadm control --reload-rules
+  changed_when: true
+
+- name: reload mss clamping
+  ansible.builtin.systemd:
+    name: netbird-mss-clamping.service
+    state: restarted

@@ -1,0 +1,4 @@
+# {{ ansible_managed }}
+# Trigger MTU fix service when wt0 interface appears
+# Not used in LXC (udev runs on host, not in container)
+ACTION=="add", SUBSYSTEM=="net", KERNEL=="{{ netbird_interface }}", TAG+="systemd", ENV{SYSTEMD_WANTS}="netbird-fix-mtu.service"
