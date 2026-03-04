@@ -24,6 +24,9 @@
 | Caddy HTTP/2 leere Responses über Netbird VPN | HTTP/2 Binary Framing + WireGuard MTU ~1420 → Frame-Fragmentierung, Stream-Desync. Fix: `versions 1.1` im `transport http` Block + `tls_server_name` + `header_up Host`. Gilt für alle `reverse_proxy https://` über Netbird. |
 | Grafana Alloy hoher RAM | `--server.http.memory-limit-mb=256` auf kleinen LXCs. WAL-Größe begrenzen. |
 | Loki Retention greift nicht | `compactor` muss in Loki-Config aktiviert sein. Ohne Compactor werden alte Chunks nicht gelöscht. |
+| ACME schlägt fehl bei Netbird-only Setup | Server nicht öffentlich erreichbar → HTTP-01 Challenge fehlschlägt. Fix: `admin.tls_mode` in Config auf `acme_proxy`, `dns` oder `internal` setzen. Siehe `setup.sh` TLS-Frage. |
+| Caddy `tls internal` + Vaultwarden SSO | Vaultwarden validiert OIDC server-seitig gegen PocketID via HTTPS. Bei internem TLS muss Container die Caddy-CA vertrauen: `ca-bundle.crt` (System-CAs + Caddy-CA) wird als Volume gemountet + `extra_hosts` für DNS-Auflösung. Bundle wird erst nach Caddy-Start komplett — Caddy-Rolle erstellt Bundle und restartet Vaultwarden. |
+| Caddy DNS-Modus braucht Custom Image | Standard `caddy:2` hat kein DNS-Plugin. Bei `tls_mode: dns` wird ein `Dockerfile` mit `xcaddy build --with github.com/caddy-dns/<provider>` deployed. `docker compose build` statt Pull. |
 
 ## App-spezifisch
 

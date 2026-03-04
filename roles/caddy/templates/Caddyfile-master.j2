@@ -4,6 +4,32 @@
 # Generiert: {{ ansible_facts.date_time.iso8601 }}
 # ============================================
 
+{% set tls_mode = loco.admin.tls_mode | default('acme') %}
+{% if tls_mode == 'internal' %}
+{
+	pki {
+		ca local {
+			name "LocoCloud Internal CA"
+		}
+	}
+}
+{% endif %}
+
+{% if tls_mode == 'internal' %}
+(tls_config) {
+	tls internal
+}
+{% elif tls_mode == 'dns' %}
+(tls_config) {
+	tls {
+		dns {{ loco.admin.dns_provider }} {env.DNS_API_TOKEN}
+	}
+}
+{% else %}
+(tls_config) {
+}
+{% endif %}
+
 (public) {
 	header -Server
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
@@ -21,6 +47,7 @@
 
 # --- PocketID (Admin OIDC Provider) ---
 {{ loco.urls.pocketid }} {
+	import tls_config
 	import public
 	@blocked path /register*
 	handle @blocked {
@@ -38,12 +65,14 @@
 
 # --- Tinyauth (Admin Forward Auth Portal) ---
 {{ loco.urls.tinyauth }} {
+	import tls_config
 	import public
 	reverse_proxy 127.0.0.1:{{ tinyauth_port }}
 }
 
 # --- Vaultwarden (Admin Credential Store) ---
 {{ loco.urls.vaultwarden }} {
+	import tls_config
 	import public
 	import auth
 	reverse_proxy 127.0.0.1:{{ vaultwarden_port }}
@@ -51,6 +80,7 @@
 
 # --- Semaphore (Ansible UI) ---
 {{ loco.urls.semaphore }} {
+	import tls_config
 	import public
 	import auth
 	reverse_proxy 127.0.0.1:{{ semaphore_port }}
@@ -58,6 +88,7 @@
 
 # --- Grafana (Monitoring) ---
 {{ loco.urls.grafana }} {
+	import tls_config
 	import public
 	import auth
 	reverse_proxy 127.0.0.1:{{ grafana_port }}
@@ -65,6 +96,7 @@
 
 # --- Baserow (Berechtigungskonzept) ---
 {{ loco.urls.baserow }} {
+	import tls_config
 	import public
 	import auth
 	reverse_proxy 127.0.0.1:{{ baserow_port }}

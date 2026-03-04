@@ -35,7 +35,62 @@
   when: caddy_mode == "customer"
   notify: restart caddy
 
+# --- DNS mode: build custom Caddy image with DNS plugin ---
+- name: Deploy Caddy Dockerfile for DNS challenge
+  ansible.builtin.template:
+    src: Dockerfile-dns.j2
+    dest: "{{ caddy_stack_path }}/Dockerfile"
+    mode: "0644"
+  when:
+    - caddy_mode == "master"
+    - loco.admin.tls_mode | default('acme') == 'dns'
+
+- name: Deploy Caddy .env with DNS API token
+  ansible.builtin.copy:
+    content: "DNS_API_TOKEN={{ loco.admin.dns_api_token }}"
+    dest: "{{ caddy_stack_path }}/.env"
+    mode: "0600"
+  when:
+    - caddy_mode == "master"
+    - loco.admin.tls_mode | default('acme') == 'dns'
+  notify: restart caddy
+
+- name: Build custom Caddy image for DNS challenge
+  community.docker.docker_compose_v2:
+    project_src: "{{ caddy_stack_path }}"
+    build: always
+    state: present
+  when:
+    - caddy_mode == "master"
+    - loco.admin.tls_mode | default('acme') == 'dns'
+
 - name: Start Caddy
   community.docker.docker_compose_v2:
     project_src: "{{ caddy_stack_path }}"
     state: present
+  when: loco.admin.tls_mode | default('acme') != 'dns'
+
+# --- Internal TLS: export CA and set up container trust ---
+- name: Internal TLS setup
+  when:
+    - caddy_mode == "master"
+    - loco.admin.tls_mode | default('acme') == 'internal'
+  block:
+    - name: Wait for Caddy internal CA generation
+      ansible.builtin.wait_for:
+        path: "{{ caddy_data_path }}/caddy/pki/authorities/local/root.crt"
+        timeout: 30
+
+    - name: Create combined CA bundle (system CAs + Caddy internal CA)
+      ansible.builtin.shell:
+        cmd: >
+          cat /etc/ssl/certs/ca-certificates.crt
+          {{ caddy_data_path }}/caddy/pki/authorities/local/root.crt
+          > {{ caddy_stack_path }}/ca-bundle.crt
+      changed_when: true
+
+    - name: Restart Vaultwarden to pick up internal CA trust
+      community.docker.docker_compose_v2:
+        project_src: "{{ vaultwarden_stack_path | default('/opt/stacks/vaultwarden') }}"
+        state: restarted
+      failed_when: false
