@@ -6,7 +6,7 @@
 set -euo pipefail
 
 CERT_HOST="{{ loco.admin.cert_sync_host }}"
-CERT_USER="{{ loco.admin.cert_sync_user | default('drog') }}"
+CERT_USER="{{ loco.admin.cert_sync_user | default('certsync') }}"
 SSH_KEY="/root/.ssh/cert-sync-key"
 LOCAL_DIR="/opt/certs/"
 
@@ -17,7 +17,7 @@ fi
 
 echo "[$(date -Is)] Starting cert-sync from ${CERT_USER}@${CERT_HOST}"
 
-rsync -avz --delete \
+rsync -av --no-compress --delete \
     -e "ssh -i ${SSH_KEY} -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10" \
     "${CERT_USER}@${CERT_HOST}:/opt/certs-export/*admin*" \
     "${LOCAL_DIR}"

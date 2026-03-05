@@ -11,7 +11,7 @@
 #   5. vaultwarden — Credential store (needed before credentials role)
 #   6. semaphore  — Ansible Web-UI
 #   7. grafana    — Monitoring stack (Grafana + Prometheus + Loki)
-#   8. baserow    — Permission management (Berechtigungskonzept)
+#   8. nocodb     — Permission management (Berechtigungskonzept)
 #   9. caddy      — Reverse proxy (last: needs all backends running)
 
 - name: Setup Master Server
@@ -95,11 +95,11 @@
         grafana_alert_email_to: "{{ loco.grafana.alerting.email_to | default(loco.operator.email) }}"
       tags: [grafana, monitoring]
 
-    - role: baserow
+    - role: nocodb
       vars:
-        baserow_domain: "{{ loco.urls.baserow }}"
-        baserow_admin_email: "{{ loco.baserow.admin_email | default(loco.operator.email) }}"
-      tags: [baserow]
+        nocodb_domain: "{{ loco.urls.nocodb }}"
+        nocodb_admin_email: "{{ loco.nocodb.admin_email | default(loco.operator.email) }}"
+      tags: [nocodb]
 
     - role: caddy
       vars:
@@ -149,18 +149,18 @@
       when: grafana_admin_password is defined
       tags: [credentials]
 
-    - name: Store Baserow admin credentials in Vaultwarden
+    - name: Store NocoDB admin credentials in Vaultwarden
       ansible.builtin.include_role:
         name: credentials
         tasks_from: store.yml
       vars:
         vw_api_url: "{{ vw_local_api_url }}"
-        credential_name: "Master — Baserow Admin"
-        credential_username: "{{ baserow_admin_email | default(loco.operator.email) }}"
-        credential_password: "{{ baserow_admin_password }}"
-        credential_uri: "https://{{ loco.urls.baserow }}"
-        credential_notes: "Baserow admin account. Deployed: {{ ansible_facts.date_time.iso8601 }}"
-      when: baserow_admin_password is defined
+        credential_name: "Master — NocoDB Admin"
+        credential_username: "{{ nocodb_admin_email | default(loco.operator.email) }}"
+        credential_password: "{{ nocodb_admin_password }}"
+        credential_uri: "https://{{ loco.urls.nocodb }}"
+        credential_notes: "NocoDB admin account. Deployed: {{ ansible_facts.date_time.iso8601 }}"
+      when: nocodb_admin_password is defined
       tags: [credentials]
 
     - name: Master setup complete
@@ -171,4 +171,4 @@
           Vaultwarden: https://{{ loco.urls.vaultwarden }}
           Semaphore:   https://{{ loco.urls.semaphore }}
           Grafana:     https://{{ loco.urls.grafana }}
-          Baserow:     https://{{ loco.urls.baserow }}
+          NocoDB:      https://{{ loco.urls.nocodb }}

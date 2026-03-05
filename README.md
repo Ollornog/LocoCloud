@@ -59,7 +59,7 @@ The setup script interactively asks for configuration (domain, email, SMTP, opti
 │   ├── Vaultwarden (admin)       │
 │   ├── Semaphore (web UI)        │
 │   ├── Grafana Stack             │  ← Grafana + Prometheus + Loki
-│   ├── Baserow (permissions)     │
+│   ├── NocoDB (permissions)      │
 │   └── gocryptfs key store       │
 └─────────────────────────────────┘
 ```
@@ -134,7 +134,7 @@ LocoCloud/
 │   ├── gocryptfs/                 # Encryption for /mnt/data + auto-mount
 │   ├── grafana_stack/             # Grafana + Prometheus + Loki (master)
 │   ├── alloy/                     # Grafana Alloy agent (customer servers)
-│   ├── baserow/                   # Permission management (master)
+│   ├── nocodb/                    # Permission management (master)
 │   ├── credentials/               # Vaultwarden API integration
 │   ├── monitoring/                # Wrapper → delegates to alloy
 │   ├── backup/                    # Restic + pre-backup hooks + restore tests
@@ -196,7 +196,7 @@ LocoCloud/
 
 | Playbook | Purpose | Usage |
 |----------|---------|-------|
-| `setup-master.yml` | Set up master server (Grafana, Baserow, Auth, etc.) | `ansible-playbook playbooks/setup-master.yml -i inventories/master/` |
+| `setup-master.yml` | Set up master server (Grafana, NocoDB, Auth, etc.) | `ansible-playbook playbooks/setup-master.yml -i inventories/master/` |
 | `onboard-customer.yml` | Onboard new customer (Auth + gocryptfs + Alloy + Compliance) | `ansible-playbook playbooks/onboard-customer.yml -i inventories/kunde-abc/` |
 | `add-server.yml` | Bootstrap a fresh server (SSH key, base, gocryptfs, Alloy) | `ansible-playbook playbooks/add-server.yml -i inventories/kunde-abc/ -e "server_ip=... server_user=root server_pass=..."` |
 | `site.yml` | Full deploy (idempotent) | `ansible-playbook playbooks/site.yml -i inventories/kunde-abc/` |

@@ -72,7 +72,7 @@ LocoCloud definiert folgende Server-Rollen. Jeder Host im Inventar bekommt eine 
 
 | Rolle | Zweck | Typische Dienste |
 |-------|-------|------------------|
-| `master` | Betreiber-Administration | Ansible, PocketID, Tinyauth, Vaultwarden, Semaphore, Grafana Stack, Baserow, gocryptfs Key-Store |
+| `master` | Betreiber-Administration | Ansible, PocketID, Tinyauth, Vaultwarden, Semaphore, Grafana Stack, NocoDB, gocryptfs Key-Store |
 | `netbird_server` | VPN-Management (optional, kann extern sein) | Netbird Management + Relay + Signal |
 | `gateway` | Öffentlicher Entry-Point pro Kunde | Caddy (TLS-Terminierung), Reverse Proxy |
 | `customer_master` | Kunden-Auth & -Verwaltung | PocketID, Tinyauth (+ optional Vaultwarden) |
@@ -122,7 +122,7 @@ Jeder Host hat einen `hosting_type`, der bestimmt wo er läuft:
 │  │   ├── Grafana (Web-UI + Alerting)                         │
 │  │   ├── Prometheus (Metriken)                               │
 │  │   └── Loki (Logs)                                         │
-│  ├── Baserow (Berechtigungskonzept pro Kunde)                │
+│  ├── NocoDB (Berechtigungskonzept pro Kunde)                │
 │  ├── gocryptfs Key-Store (/opt/lococloudd/keys/)             │
 │  └── Netbird Client (optional)                               │
 │                                                              │
@@ -175,7 +175,7 @@ Dedizierter Server oder LXC für die Betreiber-Administration.
 
 **Empfohlene Spezifikationen:**
 - **OS:** Debian 13 (Trixie), unprivileged LXC mit nesting=1 (oder VM/VPS)
-- **RAM:** 8192 MB (Semaphore + Grafana Stack + Baserow + Vaultwarden + PocketID + Ansible)
+- **RAM:** 8192 MB (Semaphore + Grafana Stack + NocoDB + Vaultwarden + PocketID + Ansible)
 - **CPU:** 4 Cores
 - **Disk:** 64 GB
 
@@ -193,7 +193,7 @@ Alle Dienste laufen als Docker Container auf `127.0.0.1`. Caddy terminiert TLS.
 | Grafana | grafana.admin.example.com | 127.0.0.1:3100 | Monitoring-Dashboard + Alerting |
 | Prometheus | — | 127.0.0.1:9091 | Metriken-Speicherung (intern, kein externer Zugang) |
 | Loki | — | 127.0.0.1:3110 | Log-Speicherung (intern, kein externer Zugang) |
-| Baserow | permissions.admin.example.com | 127.0.0.1:8231 | Berechtigungskonzept pro Kunde (Tabellen) |
+| NocoDB | nocodb.admin.example.com | 127.0.0.1:8085 | Berechtigungskonzept pro Kunde (Tabellen) |
 | Ansible | — | — | Direkt installiert (apt/pip) |
 | Git | — | — | LocoCloud-Repo (geklont) |
 | msmtp | — | — | Alert-Mails |
@@ -210,7 +210,7 @@ auth.admin.example.com         → Tinyauth (Admin Forward-Auth)
 vault.admin.example.com        → Vaultwarden (Admin-Credentials)
 deploy.admin.example.com       → Semaphore (Ansible-UI)
 grafana.admin.example.com      → Grafana (Monitoring + Logging + Alerting)
-permissions.admin.example.com  → Baserow (Berechtigungskonzept)
+nocodb.admin.example.com  → NocoDB (Berechtigungskonzept)
 ```
 
 **DNS-Setup:**
@@ -257,7 +257,7 @@ nano inventories/master/group_vars/all.yml  # SSH-Keys, Netbird (optional)
 # 4. Vault-Datei für Secrets erstellen
 ansible-vault create inventories/master/group_vars/vault.yml
 
-# 5. Setup ausführen (Netbird optional, alle Tools + Grafana Stack + Baserow)
+# 5. Setup ausführen (Netbird optional, alle Tools + Grafana Stack + NocoDB)
 ansible-playbook playbooks/setup-master.yml -i inventories/master/
 ```
 
@@ -313,9 +313,9 @@ Der Master-Server speichert alle gocryptfs-Schlüsseldateien zentral:
 
 **Key-Backup:** Siehe Kapitel 12 (Verschlüsselung) für die `key_backup`-Server-Rolle.
 
-### 3.7 Baserow für Berechtigungskonzept
+### 3.7 NocoDB für Berechtigungskonzept
 
-Baserow läuft auf dem Master-Server und dient der dokumentierten Zugriffskontrolle pro Kunde.
+NocoDB läuft auf dem Master-Server und dient der dokumentierten Zugriffskontrolle pro Kunde.
 
 **Tabellenstruktur pro Kunde:**
 
@@ -336,7 +336,7 @@ Baserow läuft auf dem Master-Server und dient der dokumentierten Zugriffskontro
 - Dokumentiertes Berechtigungskonzept für TOM-Dokumentation
 - Nachweis für Behörden (wer darf was)
 - Wird bei Kunden-Audits als Referenz verwendet
-- Kein automatischer Sync mit PocketID — Baserow ist die Dokumentation, PocketID die Umsetzung
+- Kein automatischer Sync mit PocketID — NocoDB ist die Dokumentation, PocketID die Umsetzung
 
 ### 3.8 Backup-Server
 
@@ -1017,15 +1017,15 @@ API-Endpoints: `https://id.firma.de/api/...` mit Bearer-Token-Auth (`Authorizati
 3. Ansible konfiguriert die App mit diesen Credentials
 4. Credentials werden in Admin-Vaultwarden gespeichert (via `credentials`-Rolle)
 
-### 7.8 Berechtigungskonzept (Baserow)
+### 7.8 Berechtigungskonzept (NocoDB)
 
-Pro Kunde wird in Baserow auf dem Master-Server eine Berechtigungstabelle gepflegt (siehe Kap. 3.7). Diese Tabelle dokumentiert:
+Pro Kunde wird in NocoDB auf dem Master-Server eine Berechtigungstabelle gepflegt (siehe Kap. 3.7). Diese Tabelle dokumentiert:
 
 - Welcher Benutzer Zugriff auf welche Apps hat
 - Welche Rolle (Admin/Standard/Readonly) zugewiesen ist
 - Zeitliche Befristungen
 
-Die Tabelle ist die **Soll-Dokumentation** — PocketID + Tinyauth sind die **Ist-Umsetzung**. Bei Kunden-Audits (DSGVO Art. 5 Abs. 1 lit. f) kann die Baserow-Tabelle als Nachweis exportiert werden.
+Die Tabelle ist die **Soll-Dokumentation** — PocketID + Tinyauth sind die **Ist-Umsetzung**. Bei Kunden-Audits (DSGVO Art. 5 Abs. 1 lit. f) kann die NocoDB-Tabelle als Nachweis exportiert werden.
 
 ### 7.9 Tinyauth-Warnung
 
@@ -1400,7 +1400,7 @@ LocoCloud Organisation/
 │   ├── GitHub Deploy Key
 │   ├── Netbird API Credentials
 │   ├── Grafana Admin
-│   ├── Baserow Admin
+│   ├── NocoDB Admin
 │   └── Master PocketID Admin
 ├── Kunde ABC (firma-abc.de)/
 │   ├── Server/
@@ -1978,7 +1978,7 @@ roles/compliance/templates/tom.md.j2
 |---------------|--------------------------|
 | **Zutrittskontrolle** | Server in Rechenzentrum (Provider-Verantwortung) / On-Premise (Kunden-Verantwortung) |
 | **Zugangskontrolle** | SSH Key-Only + Netbird VPN, Fail2ban, UFW Firewall |
-| **Zugriffskontrolle** | PocketID SSO + Tinyauth Forward-Auth, Berechtigungskonzept in Baserow |
+| **Zugriffskontrolle** | PocketID SSO + Tinyauth Forward-Auth, Berechtigungskonzept in NocoDB |
 | **Weitergabekontrolle** | TLS überall (Caddy Let's Encrypt), Netbird WireGuard-Tunnel |
 | **Eingabekontrolle** | Audit-Logs (Nextcloud Activity, Paperless nativ), zentrale Logs in Loki |
 | **Auftragskontrolle** | Isolierte Kunden-Infrastruktur, kein Sharing |
@@ -2121,7 +2121,7 @@ LocoCloud/
 │   ├── gocryptfs/                    # Verschlüsselung /mnt/data + Auto-Mount
 │   ├── grafana_stack/                # Grafana + Prometheus + Loki (Master)
 │   ├── alloy/                        # Grafana Alloy Agent (Kundenserver)
-│   ├── baserow/                      # Baserow (Master, Berechtigungskonzept)
+│   ├── nocodb/                      # NocoDB (Master, Berechtigungskonzept)
 │   ├── backup/                       # Restic + Pre-Backup-Hooks + Restore-Tests
 │   ├── key_backup/                   # gocryptfs Key-Backup auf separatem Server
 │   ├── credentials/                  # Vaultwarden API
@@ -2224,7 +2224,7 @@ urls:
   vaultwarden: "vault.admin.example.com"
   semaphore: "deploy.admin.example.com"
   grafana: "grafana.admin.example.com"
-  baserow: "permissions.admin.example.com"
+  nocodb: "nocodb.admin.example.com"
 
 netbird:
   enabled: false                               # true wenn Netbird verwendet wird
@@ -2365,7 +2365,7 @@ ansible-playbook playbooks/setup-master.yml -i inventories/master/
 5. Vaultwarden deployen (`vault.admin.example.com`)
 6. Semaphore deployen (`deploy.admin.example.com`)
 7. Grafana Stack deployen (Grafana + Prometheus + Loki auf `grafana.admin.example.com`)
-8. Baserow deployen (`permissions.admin.example.com`)
+8. NocoDB deployen (`nocodb.admin.example.com`)
 9. gocryptfs Key-Store einrichten (`/opt/lococloudd/keys/`)
 10. Caddy deployen mit Admin-Caddyfile
 11. Alle Credentials in Vaultwarden speichern
@@ -2381,7 +2381,7 @@ bash scripts/new-customer.sh kunde-abc "Firma ABC GmbH" "firma-abc.de"
 1. Inventar-Verzeichnis `inventories/kunde-abc/` wird aus Template erstellt
 2. `hosts.yml` und `group_vars/all.yml` werden generiert
 3. Vault-Datei `group_vars/vault.yml` wird initialisiert
-4. Berechtigungstabelle in Baserow wird angelegt (Kap. 3.7)
+4. Berechtigungstabelle in NocoDB wird angelegt (Kap. 3.7)
 
 ### 17.3 Server zum Kunden hinzufügen (Schritt 2)
 
@@ -2623,7 +2623,7 @@ admin_user_nopasswd: true  # NOPASSWD für Ansible-Kompatibilität
 - Semaphore
 - Grafana, Prometheus, Loki (Master)
 - Grafana Alloy (Kundenserver)
-- Baserow (Master)
+- NocoDB (Master)
 - Watchtower selbst
 
 **Container MIT Watchtower-Label (Patches automatisch):**
@@ -3041,7 +3041,7 @@ Microsoft 365 / Google Workspace.
 | Monitoring | Grafana Stack auf Master (Grafana + Prometheus + Loki). Alloy als einziger Agent. Uptime Kuma als optionale Kunden-App | Kap. 13 |
 | Verschlüsselung at Rest | gocryptfs auf `/mnt/data` auf jedem Kundenserver. Keyfile nur auf Master + Key-Backup. Auto-Mount nach Reboot via Systemd | Kap. 12 |
 | Compliance-Dokumentation | TOM, VVT, Löschkonzept als Jinja2-Templates. Automatisch generiert pro Kunde bei Onboarding/App-Änderung | Kap. 14 |
-| Berechtigungskonzept | Baserow auf Master-Server. Pro Kunde eine Tabelle mit Benutzern und App-Zugriff. Dokumentation, nicht automatischer Sync | Kap. 7.8, 3.7 |
+| Berechtigungskonzept | NocoDB auf Master-Server. Pro Kunde eine Tabelle mit Benutzern und App-Zugriff. Dokumentation, nicht automatischer Sync | Kap. 7.8, 3.7 |
 | Server-Onboarding | Frische Server mit IP/User/Passwort. Ansible bootstrappt alles (SSH-Key, base-Rolle, gocryptfs, Alloy). Netbird optional | Kap. 17.3 |
 | Backup-Pflicht | Ohne Backup-Ziel = kein Backup. Bewusste Entscheidung pro Kunde. Pre-Backup-Hooks für DB-Dumps. Monatlicher Restore-Test | Kap. 11 |
 | Logging & DSGVO | Loki mit 6 Monate Retention. journald FSS Sealing. Personenbezogene Daten minimiert. Automatische Löschung | Kap. 13.4 |
@@ -3071,7 +3071,7 @@ Keine — alle Entscheidungen sind getroffen.
 | 8228 | Cal.com |
 | 8229 | Uptime Kuma |
 | 8230 | Listmonk |
-| 8231 | Baserow (nur Master) |
+| 8085 | NocoDB (nur Master) |
 | 9090 | Tinyauth |
 | 9091 | Prometheus (nur Master, intern) |
 | 12345 | Grafana Alloy (Kundenserver, intern) |

@@ -195,7 +195,7 @@ lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
 
 **Lösung:**
 - **Kunden-Apps** (Nextcloud, Paperless, Vaultwarden, Uptime Kuma): Watchtower-Label setzen
-- **Infrastruktur** (Caddy, Netbird, PocketID, Tinyauth, Semaphore, Grafana, Alloy, Baserow): KEIN Watchtower-Label. Updates nur über Ansible.
+- **Infrastruktur** (Caddy, Netbird, PocketID, Tinyauth, Semaphore, Grafana, Alloy, NocoDB): KEIN Watchtower-Label. Updates nur über Ansible.
 
 ---
 

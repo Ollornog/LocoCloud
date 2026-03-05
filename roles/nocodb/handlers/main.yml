@@ -1,0 +1,11 @@
+---
+# roles/nocodb/handlers/main.yml
+
+- name: restart caddy
+  ansible.builtin.command: docker restart caddy
+  changed_when: true
+
+- name: restart nocodb
+  community.docker.docker_compose_v2:
+    project_src: "{{ nocodb_stack_path }}"
+    state: restarted

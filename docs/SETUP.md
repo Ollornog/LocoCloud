@@ -143,7 +143,7 @@ Beim zweiten Lauf passiert automatisch:
 | Vaultwarden | `https://vault.admin.example.com` | Credential Store (SSO via PocketID) |
 | Semaphore | `https://deploy.admin.example.com` | Ansible Web-UI |
 | Grafana | `https://grafana.admin.example.com` | Monitoring (Grafana + Prometheus + Loki) |
-| Baserow | `https://baserow.admin.example.com` | Berechtigungsverwaltung |
+| NocoDB | `https://nocodb.admin.example.com` | Berechtigungsverwaltung |
 
 Alle Credentials (Admin-Passwoerter, API-Tokens, OIDC-Secrets) werden automatisch
 in der Admin-Vaultwarden-Instanz gespeichert.

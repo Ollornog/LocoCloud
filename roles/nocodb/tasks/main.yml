@@ -1,0 +1,11 @@
+---
+# roles/nocodb/tasks/main.yml
+
+- name: Deploy NocoDB
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [nocodb, deploy]
+
+- name: Configure OIDC for NocoDB
+  ansible.builtin.import_tasks: oidc.yml
+  tags: [nocodb, oidc]
+  when: nocodb_oidc_enabled | default(false)

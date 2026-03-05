@@ -1,0 +1,40 @@
+---
+# roles/nocodb/defaults/main.yml
+# NocoDB — Permission management (Berechtigungskonzept)
+# Replaces Baserow. Supports OIDC via PocketID (SSO-only, no email login).
+
+nocodb_stack_path: "/opt/stacks/nocodb"
+nocodb_image: "nocodb/nocodb:0.260.1"
+nocodb_port: 8085
+
+# Domain
+nocodb_domain: ""  # e.g. "nocodb.admin.example.com"
+
+# Admin — first user to access NocoDB becomes admin
+nocodb_admin_email: ""      # Set from loco.operator.email
+nocodb_admin_password: ""   # Generated if empty
+
+# JWT secret for authentication (generated if empty)
+nocodb_jwt_secret: ""
+
+# OIDC — configured via NocoDB UI after initial deployment
+# PocketID client is registered automatically by oidc.yml
+nocodb_oidc_enabled: false
+nocodb_oidc_client_id: ""
+nocodb_oidc_client_secret: ""
+nocodb_oidc_provider_url: ""  # e.g. "https://id.admin.example.com"
+
+# SSO-only: disable email/password login after OIDC is configured
+# WARNING: Only enable after OIDC is working, otherwise lockout!
+nocodb_disable_email_auth: false
+
+# Caddy blocked paths (defense-in-depth)
+nocodb_blocked_paths:
+  - "/signup*"
+
+# Health check
+nocodb_health_path: "/api/v1/health"
+
+# Backup paths
+nocodb_backup_paths:
+  - "/opt/stacks/nocodb"
