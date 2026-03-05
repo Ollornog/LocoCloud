@@ -1,0 +1,26 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Syncs TLS certificates from the public cert server to /opt/certs/
+# Runs via cron (daily) and on initial Ansible deployment.
+
+set -euo pipefail
+
+CERT_HOST="{{ loco.admin.cert_sync_host }}"
+CERT_USER="{{ loco.admin.cert_sync_user | default('drog') }}"
+SSH_KEY="/root/.ssh/cert-sync-key"
+LOCAL_DIR="/opt/certs/"
+
+if [ -z "$CERT_HOST" ]; then
+    echo "[ERROR] cert_sync_host not configured"
+    exit 1
+fi
+
+echo "[$(date -Is)] Starting cert-sync from ${CERT_USER}@${CERT_HOST}"
+
+rsync -avz --delete \
+    -e "ssh -i ${SSH_KEY} -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10" \
+    "${CERT_USER}@${CERT_HOST}:/opt/certs-export/*admin*" \
+    "${LOCAL_DIR}"
+
+echo "[$(date -Is)] Cert-sync complete, restarting Caddy"
+docker restart caddy

@@ -66,8 +66,9 @@ SMTP_FROM=""
 GATEWAY_IP=""
 TLS_MODE="acme"
 TLS_MODE_NUM=""
-CHALLENGE_PROXY_HOST=""
-CHALLENGE_PROXY_PUBLIC_IP=""
+CERT_SYNC_HOST=""
+CERT_SYNC_USER=""
+CERT_SYNC_PUBLIC_IP=""
 DNS_PROVIDER=""
 DNS_API_TOKEN=""
 POCKETID_API_TOKEN=""
@@ -174,13 +175,13 @@ echo ""
 echo "Wie sollen TLS-Zertifikate fuer die Admin-Dienste bezogen werden?"
 echo ""
 echo "  1) Automatisch (Let's Encrypt) — Server ist oeffentlich erreichbar"
-echo "  2) ACME via Challenge-Proxy — Nur ueber Netbird erreichbar, ein"
-echo "     oeffentlicher Server leitet ACME-Challenges weiter"
+echo "  2) Cert-Sync — Zertifikate von einem oeffentlichen Server per rsync holen"
+echo "     (der oeffentliche Server holt LE-Certs, Master pullt sie per Cron)"
 echo "  3) DNS-Challenge — Server nicht oeffentlich, DNS-API vorhanden"
 echo "  4) Interne Zertifikate — Komplett offline, Caddy eigene CA"
 echo ""
 
-# Smart default: acme_proxy when Netbird is active, acme otherwise
+# Smart default: cert_sync when Netbird is active, acme otherwise
 if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]]; then
   TLS_DEFAULT="2"
 else
@@ -193,10 +194,14 @@ case $TLS_MODE_NUM in
      echo ""
      ask "Public IP des Gateway-Servers (leer = spaeter):" GATEWAY_IP
      ;;
-  2) TLS_MODE="acme_proxy"
+  2) TLS_MODE="cert_sync"
      echo ""
-     ask "Netbird-IP des oeffentlichen Servers (Challenge-Proxy):" CHALLENGE_PROXY_HOST
-     ask "Oeffentliche IP dieses Servers (fuer DNS):" CHALLENGE_PROXY_PUBLIC_IP
+     echo "Ein oeffentlicher Server holt LE-Zertifikate und exportiert sie."
+     echo "Der Master pullt die Certs per rsync ueber SSH (Netbird oder direkt)."
+     echo ""
+     ask "IP des Cert-Servers (Netbird-IP oder oeffentliche IP):" CERT_SYNC_HOST
+     ask_default "SSH-User auf dem Cert-Server" CERT_SYNC_USER "drog"
+     ask "Oeffentliche IP des Cert-Servers (fuer DNS-Hinweis):" CERT_SYNC_PUBLIC_IP
      ;;
   3) TLS_MODE="dns"
      echo ""
@@ -524,8 +529,11 @@ admin:
   subdomain: "${ADMIN_SUB}"
   full_domain: "${ADMIN_DOMAIN}"
   tls_mode: "${TLS_MODE}"
-  challenge_proxy_host: "${CHALLENGE_PROXY_HOST}"
-  challenge_proxy_public_ip: "${CHALLENGE_PROXY_PUBLIC_IP}"
+  # Nur bei tls_mode: cert_sync — Zertifikate von oeffentlichem Server pullen
+  cert_sync_host: "${CERT_SYNC_HOST}"
+  cert_sync_user: "${CERT_SYNC_USER}"
+  cert_sync_public_ip: "${CERT_SYNC_PUBLIC_IP}"
+  # Nur bei tls_mode: dns — echte Zertifikate via DNS-Provider-API
   dns_provider: "${DNS_PROVIDER}"
   dns_api_token: "${DNS_API_TOKEN}"
 
@@ -794,47 +802,31 @@ case "$TLS_MODE" in
     STEP=$((STEP + 1))
     ;;
 
-  acme_proxy)
-    echo -e "${BOLD}  ${STEP}. Challenge-Proxy einrichten (TLS: acme_proxy)${NC}"
+  cert_sync)
+    echo -e "${BOLD}  ${STEP}. Cert-Sync einrichten (TLS: cert_sync)${NC}"
     echo ""
-    echo "     a) Oeffentliches DNS: *.${ADMIN_DOMAIN} -> A ${CHALLENGE_PROXY_PUBLIC_IP:-<PROXY-PUBLIC-IP>}"
+    echo "     a) Oeffentliches DNS: Subdomains auf den Cert-Server zeigen lassen:"
+    echo "        id.${ADMIN_DOMAIN}      -> A ${CERT_SYNC_PUBLIC_IP:-<CERT-SERVER-PUBLIC-IP>}"
+    echo "        auth.${ADMIN_DOMAIN}    -> A ${CERT_SYNC_PUBLIC_IP:-<CERT-SERVER-PUBLIC-IP>}"
+    echo "        vault.${ADMIN_DOMAIN}   -> A ${CERT_SYNC_PUBLIC_IP:-<CERT-SERVER-PUBLIC-IP>}"
+    echo "        deploy.${ADMIN_DOMAIN}  -> A ${CERT_SYNC_PUBLIC_IP:-<CERT-SERVER-PUBLIC-IP>}"
+    echo "        grafana.${ADMIN_DOMAIN} -> A ${CERT_SYNC_PUBLIC_IP:-<CERT-SERVER-PUBLIC-IP>}"
+    echo "        baserow.${ADMIN_DOMAIN} -> A ${CERT_SYNC_PUBLIC_IP:-<CERT-SERVER-PUBLIC-IP>}"
     echo ""
     echo "     b) Netbird DNS-Zone (im Netbird-Dashboard):"
-    echo "        *.${ADMIN_DOMAIN} -> ${NETBIRD_IP:-<MASTER-NETBIRD-IP>}"
+    echo "        Dieselben Subdomains -> ${NETBIRD_IP:-<MASTER-NETBIRD-IP>}"
     echo "        (Netbird DNS hat Vorrang bei VPN-verbundenen Geraeten)"
     echo ""
-    echo "     c) Challenge-Proxy deployen — auf dem oeffentlichen Server:"
+    echo "     c) Auf dem Cert-Server (${CERT_SYNC_HOST:-<CERT-SERVER-IP>}):"
+    echo "        - Caddy-Block fuer die Admin-Domains (respond 403 oeffentlich)"
+    echo "        - Export-Script: Certs nach /opt/certs-export/ kopieren"
+    echo "        - authorized_keys: restricted rsync-Zugriff fuer den Master"
     echo ""
-    echo "        mkdir -p /opt/stacks/challenge-proxy"
-    echo "        cat > /opt/stacks/challenge-proxy/Caddyfile <<'CADDYEOF'"
-    echo "        :80 {"
-    echo "            handle /.well-known/acme-challenge/* {"
-    echo "                reverse_proxy http://${CHALLENGE_PROXY_HOST:-<MASTER-NETBIRD-IP>}:80 {"
-    echo "                    header_up Host {host}"
-    echo "                }"
-    echo "            }"
-    echo "            handle {"
-    echo "                respond 404"
-    echo "            }"
-    echo "        }"
-    echo "        CADDYEOF"
+    echo "     d) SSH-Key vom Master auf den Cert-Server kopieren:"
+    echo "        ssh-copy-id -i /root/.ssh/cert-sync-key.pub ${CERT_SYNC_USER:-drog}@${CERT_SYNC_HOST:-<CERT-SERVER-IP>}"
     echo ""
-    echo "        cat > /opt/stacks/challenge-proxy/docker-compose.yml <<'COMPEOF'"
-    echo "        services:"
-    echo "          caddy:"
-    echo "            image: caddy:2"
-    echo "            container_name: challenge-proxy"
-    echo "            restart: unless-stopped"
-    echo "            ports:"
-    echo "              - \"80:80\""
-    echo "            volumes:"
-    echo "              - ./Caddyfile:/etc/caddy/Caddyfile:ro"
-    echo "        COMPEOF"
-    echo ""
-    echo "        docker compose -f /opt/stacks/challenge-proxy/docker-compose.yml up -d"
-    echo ""
-    echo "     Alternativ: Ansible-Playbook verwenden:"
-    echo "        ansible-playbook playbooks/deploy-challenge-proxy.yml -i <PROXY-HOST>,"
+    echo "     Ansible richtet den Cert-Sync automatisch ein (SSH-Key, Script, Cron)."
+    echo "     Certs landen in /opt/certs/ auf dem Master."
     echo ""
     STEP=$((STEP + 1))
     ;;

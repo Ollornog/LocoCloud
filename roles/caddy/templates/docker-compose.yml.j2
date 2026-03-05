@@ -21,6 +21,9 @@ services:
       - {{ caddy_stack_path }}/Caddyfile:/etc/caddy/Caddyfile:ro
       - {{ caddy_data_path }}:/data
       - {{ caddy_config_path }}:/config
+{% if tls_mode == 'cert_sync' %}
+      - /opt/certs:/opt/certs:ro
+{% endif %}
 {% if tls_mode == 'dns' %}
     env_file:
       - .env

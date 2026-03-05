@@ -13,7 +13,7 @@ One master server manages multiple customer environments via inventories.
 - **Credentials**: All generated passwords stored in Vaultwarden via `scripts/vw-credentials.py`
 - **Encryption**: gocryptfs on `/mnt/data`, keyfile only on master
 - **Networking**: Netbird VPN (optional) or direct IP connectivity
-- **TLS modes**: `acme` (public LE), `acme_proxy` (challenge forwarding via public server), `dns` (DNS-01 challenge), `internal` (Caddy CA)
+- **TLS modes**: `acme` (public LE), `cert_sync` (rsync certs from public server), `dns` (DNS-01 challenge), `internal` (Caddy CA)
 
 ## Key Config Files
 
@@ -67,7 +67,6 @@ playbooks/
   site.yml               # Full deploy (idempotent)
   add-app.yml            # Single app
   add-server.yml         # Bootstrap fresh server
-  deploy-challenge-proxy.yml  # ACME proxy for Netbird-only setups
 scripts/
   setup.sh               # Interactive master setup
   vw-credentials.py      # Vaultwarden API (Bitwarden protocol)

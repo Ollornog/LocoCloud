@@ -48,6 +48,9 @@
 # --- PocketID (Admin OIDC Provider) ---
 {{ loco.urls.pocketid }} {
 	import tls_config
+{% if tls_mode == 'cert_sync' %}
+	tls /opt/certs/id.admin-fullchain.pem /opt/certs/id.admin-privkey.pem
+{% endif %}
 	import public
 	@blocked path /register*
 	handle @blocked {
@@ -66,6 +69,9 @@
 # --- Tinyauth (Admin Forward Auth Portal) ---
 {{ loco.urls.tinyauth }} {
 	import tls_config
+{% if tls_mode == 'cert_sync' %}
+	tls /opt/certs/auth.admin-fullchain.pem /opt/certs/auth.admin-privkey.pem
+{% endif %}
 	import public
 	reverse_proxy 127.0.0.1:{{ tinyauth_port }}
 }
@@ -73,6 +79,9 @@
 # --- Vaultwarden (Admin Credential Store) ---
 {{ loco.urls.vaultwarden }} {
 	import tls_config
+{% if tls_mode == 'cert_sync' %}
+	tls /opt/certs/vault.admin-fullchain.pem /opt/certs/vault.admin-privkey.pem
+{% endif %}
 	import public
 	import auth
 	reverse_proxy 127.0.0.1:{{ vaultwarden_port }}
@@ -81,6 +90,9 @@
 # --- Semaphore (Ansible UI) ---
 {{ loco.urls.semaphore }} {
 	import tls_config
+{% if tls_mode == 'cert_sync' %}
+	tls /opt/certs/deploy.admin-fullchain.pem /opt/certs/deploy.admin-privkey.pem
+{% endif %}
 	import public
 	import auth
 	reverse_proxy 127.0.0.1:{{ semaphore_port }}
@@ -89,6 +101,9 @@
 # --- Grafana (Monitoring) ---
 {{ loco.urls.grafana }} {
 	import tls_config
+{% if tls_mode == 'cert_sync' %}
+	tls /opt/certs/grafana.admin-fullchain.pem /opt/certs/grafana.admin-privkey.pem
+{% endif %}
 	import public
 	import auth
 	reverse_proxy 127.0.0.1:{{ grafana_port }}
@@ -97,6 +112,9 @@
 # --- Baserow (Berechtigungskonzept) ---
 {{ loco.urls.baserow }} {
 	import tls_config
+{% if tls_mode == 'cert_sync' %}
+	tls /opt/certs/baserow.admin-fullchain.pem /opt/certs/baserow.admin-privkey.pem
+{% endif %}
 	import public
 	import auth
 	reverse_proxy 127.0.0.1:{{ baserow_port }}

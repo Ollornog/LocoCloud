@@ -224,9 +224,16 @@ Internet → Gateway-Caddy (öffentliche IP) → Netbird → Master-Server
 
 ### 3.4 TLS für Master-Dienste
 
-- Caddy auf dem öffentlichen Gateway terminiert TLS
-- Leitet über Netbird an den Master weiter (HTTP, kein TLS nötig im Tunnel)
-- Master-Caddy lauscht auf HTTP und fügt Header hinzu
+Vier TLS-Modi für Admin-Dienste (`admin.tls_mode` in Config):
+
+| Modus | Beschreibung |
+|-------|-------------|
+| `acme` | Server ist öffentlich erreichbar, Caddy holt LE-Certs per HTTP-01 |
+| `cert_sync` | Öffentlicher Server holt LE-Certs, Master pullt sie per rsync/SSH (Cron). Caddy referenziert die Cert-Dateien per `tls /opt/certs/...` |
+| `dns` | DNS-01 Challenge via DNS-Provider-API (Caddy Custom Image mit DNS-Plugin) |
+| `internal` | Caddy generiert eigene Root-CA (offline-tauglich, CA muss auf Clients importiert werden) |
+
+**cert_sync** ist der empfohlene Modus wenn der Master nur über Netbird erreichbar ist: Der öffentliche Server (z.B. Hetzner) hält die DNS-Einträge, holt LE-Zertifikate per HTTP-01, und exportiert sie. Der Master pullt die Certs täglich per rsync über SSH (Netbird oder direkt). Caddy auf dem Master nutzt die Certs direkt via `tls`-Direktive.
 
 ### 3.5 Repo auf dem Master & Betriebsablauf
 
