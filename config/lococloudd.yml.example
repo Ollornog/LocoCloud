@@ -15,10 +15,11 @@ operator:
 admin:
   subdomain: "admin"
   full_domain: "admin.example.com"
-  tls_mode: "acme"                # acme | acme_proxy | dns | internal
-  # Nur bei tls_mode: acme_proxy — oeffentlicher Server leitet ACME-Challenges weiter
-  challenge_proxy_host: ""        # Netbird-IP des oeffentlichen Servers
-  challenge_proxy_public_ip: ""   # Oeffentliche IP (fuer DNS-Hinweis)
+  tls_mode: "acme"                # acme | cert_sync | dns | internal
+  # Nur bei tls_mode: cert_sync — Zertifikate per rsync von oeffentlichem Server
+  cert_sync_host: ""              # IP des Cert-Servers (Netbird-IP oder oeffentlich)
+  cert_sync_user: "drog"          # SSH-User auf dem Cert-Server
+  cert_sync_public_ip: ""         # Oeffentliche IP (fuer DNS-Hinweis)
   # Nur bei tls_mode: dns — echte Zertifikate via DNS-Provider-API
   dns_provider: ""                # cloudflare | hetzner | ...
   dns_api_token: ""               # API-Token (NICHT im Repo!)

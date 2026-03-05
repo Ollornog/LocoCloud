@@ -55,6 +55,49 @@
     - loco.admin.tls_mode | default('acme') == 'dns'
   notify: restart caddy
 
+# --- Cert-sync mode: SSH key, sync script, cron ---
+- name: Cert-sync setup
+  when:
+    - caddy_mode == "master"
+    - loco.admin.tls_mode | default('acme') == 'cert_sync'
+  block:
+    - name: Create cert directory
+      ansible.builtin.file:
+        path: /opt/certs
+        state: directory
+        mode: "0700"
+
+    - name: Generate cert-sync SSH key
+      ansible.builtin.command:
+        cmd: ssh-keygen -t ed25519 -f /root/.ssh/cert-sync-key -N "" -C "cert-sync@loco-master"
+        creates: /root/.ssh/cert-sync-key
+
+    - name: Create scripts directory
+      ansible.builtin.file:
+        path: /opt/scripts
+        state: directory
+        mode: "0755"
+
+    - name: Deploy cert-sync script
+      ansible.builtin.template:
+        src: cert-sync.sh.j2
+        dest: /opt/scripts/cert-sync.sh
+        mode: "0755"
+
+    - name: Deploy cert-sync cron job (daily at 04:10)
+      ansible.builtin.cron:
+        name: "LocoCloud cert-sync"
+        minute: "10"
+        hour: "4"
+        job: "/opt/scripts/cert-sync.sh >> /var/log/cert-sync.log 2>&1"
+
+    - name: Run initial cert-sync
+      ansible.builtin.command:
+        cmd: /opt/scripts/cert-sync.sh
+      register: _cert_sync_result
+      changed_when: _cert_sync_result.rc == 0
+      failed_when: false
+
 - name: Build custom Caddy image for DNS challenge
   community.docker.docker_compose_v2:
     project_src: "{{ caddy_stack_path }}"
