@@ -30,6 +30,7 @@
 | ACME schlägt fehl bei Netbird-only Setup | Server nicht öffentlich erreichbar → HTTP-01 Challenge fehlschlägt. Fix: `admin.tls_mode` in Config auf `cert_sync`, `dns` oder `internal` setzen. Siehe `setup.sh` TLS-Frage. |
 | Caddy `tls internal` + Vaultwarden SSO | Vaultwarden validiert OIDC server-seitig gegen PocketID via HTTPS. Bei internem TLS muss Container die Caddy-CA vertrauen: `ca-bundle.crt` (System-CAs + Caddy-CA) wird als Volume gemountet + `extra_hosts` für DNS-Auflösung. Bundle wird erst nach Caddy-Start komplett — Caddy-Rolle erstellt Bundle und restartet Vaultwarden. |
 | Caddy DNS-Modus braucht Custom Image | Standard `caddy:2` hat kein DNS-Plugin. Bei `tls_mode: dns` wird ein `Dockerfile` mit `xcaddy build --with github.com/caddy-dns/<provider>` deployed. `docker compose build` statt Pull. |
+| Cert-Server: Caddy Docker vs systemd | Cert-Server kann Caddy als Docker-Container oder systemd-Service betreiben. Docker: Certs in Docker-Volume (dynamisch via `docker volume inspect`), Caddyfile auf Host (bind mount), `docker restart caddy`. Systemd: Certs in `/var/lib/caddy/...`, Caddyfile `/etc/caddy/Caddyfile`, `systemctl reload caddy`. Export-Script erkennt Modus automatisch. |
 
 ## App-spezifisch
 
