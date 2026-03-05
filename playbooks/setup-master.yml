@@ -6,8 +6,8 @@
 # Order matters:
 #   1. base       — OS hardening, Docker, UFW, Fail2ban
 #   2. netbird    — VPN connectivity (everything after this uses Netbird)
-#   3. pocketid   — OIDC provider (needed before Tinyauth)
-#   4. tinyauth   — Forward-auth (needs PocketID OIDC client)
+#   3. pocketid   — OIDC provider (SSO for all apps)
+#   4. tinyauth   — Forward-auth (optional, disabled by default)
 #   5. vaultwarden — Credential store (needed before credentials role)
 #   6. semaphore  — Ansible Web-UI
 #   7. grafana    — Monitoring stack (Grafana + Prometheus + Loki)
@@ -57,11 +57,12 @@
 
     - role: tinyauth
       vars:
-        tinyauth_domain: "{{ loco.urls.tinyauth }}"
+        tinyauth_domain: "{{ loco.urls.tinyauth | default('auth.' + loco.admin.full_domain) }}"
         tinyauth_oidc_issuer_url: "https://{{ loco.urls.pocketid }}"
         tinyauth_oauth_whitelist:
           - "{{ loco.operator.email }}"
       tags: [tinyauth]
+      when: loco.tinyauth.enabled | default(false)
 
     - role: apps/vaultwarden
       vars:
@@ -167,7 +168,6 @@
         msg: |
           Master setup complete!
           PocketID:    https://{{ loco.urls.pocketid }}
-          Tinyauth:    https://{{ loco.urls.tinyauth }}
           Vaultwarden: https://{{ loco.urls.vaultwarden }}
           Semaphore:   https://{{ loco.urls.semaphore }}
           Grafana:     https://{{ loco.urls.grafana }}

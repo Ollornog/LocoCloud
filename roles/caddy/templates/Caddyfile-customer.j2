@@ -13,11 +13,13 @@
 	header Permissions-Policy "camera=(), microphone=(), geolocation=()"
 }
 
+{% if tinyauth_enabled | default(false) %}
 (auth) {
 	forward_auth 127.0.0.1:{{ tinyauth_port }} {
 		uri /api/auth/caddy
 	}
 }
+{% endif %}
 
 # --- PocketID (OIDC Provider) ---
 id.{{ kunde_domain }} {
@@ -26,26 +28,30 @@ id.{{ kunde_domain }} {
 	handle @blocked {
 		respond "Access Denied" 403
 	}
-	@admin path /settings*
-	handle @admin {
-		import auth
-		reverse_proxy 127.0.0.1:{{ pocketid_port }}
-	}
 	handle {
 		reverse_proxy 127.0.0.1:{{ pocketid_port }}
 	}
 }
 
+{% if tinyauth_enabled | default(false) %}
 # --- Tinyauth Login Portal ---
 auth.{{ kunde_domain }} {
 	import public
 	reverse_proxy 127.0.0.1:{{ tinyauth_port }}
 }
+{% endif %}
 
 # --- Apps ---
 {% for app in apps_enabled %}
 {{ app.subdomain }}.{{ kunde_domain }} {
 	import public
+
+{% if app.blocked_paths is defined and app.blocked_paths | length > 0 %}
+	@blocked_{{ app.subdomain }} path {{ app.blocked_paths | join(' ') }}
+	handle @blocked_{{ app.subdomain }} {
+		respond "Access Denied" 403
+	}
+{% endif %}
 
 {% if app.public_paths is defined and app.public_paths | length > 0 %}
 {% for path in app.public_paths %}
@@ -61,7 +67,9 @@ auth.{{ kunde_domain }} {
 {% endif %}
 
 	handle {
+{% if tinyauth_enabled | default(false) and app.tinyauth | default(false) %}
 		import auth
+{% endif %}
 {% if app.target == 'lokal' %}
 		reverse_proxy {{ app.netbird_ip }}:{{ app.port }}
 {% else %}

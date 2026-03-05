@@ -68,7 +68,12 @@ nextcloud_smtp_port: 587
 nextcloud_smtp_user: ""
 nextcloud_smtp_from: ""
 
-# Public paths (accessible without Tinyauth)
+# Caddy defense-in-depth: block registration paths
+nextcloud_blocked_paths:
+  - "/index.php/apps/registration*"
+  - "/apps/registration*"
+
+# Public paths (accessible without auth proxy)
 nextcloud_public_paths:
   - "/index.php/s/*"
   - "/s/*"

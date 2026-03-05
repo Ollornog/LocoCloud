@@ -10,7 +10,7 @@
 | USB in LXC | NICHT deaktivieren (existiert nicht). `is_lxc`-Check. |
 | Docker UFW-Bypass | Docker umgeht UFW. Für App-LXCs mit `0.0.0.0`-Bind: UFW App-Port nur auf `wt0` erlauben. |
 | Netbird DNS Konflikte | Custom DNS Zones NUR für interne Domains. Öffentliche Domains NICHT eintragen. |
-| Tinyauth nicht prod-ready | Im Betrieb bewährt: Nur OIDC-Forward-Auth via PocketID (kein direkter Login, kein Brute-Force-Risiko). Kein Fallback nötig. |
+| Tinyauth deaktiviert per Default | Alle Apps haben eigene OIDC-Auth via PocketID (SSO-only, Signup disabled). Tinyauth ist optional (`loco.tinyauth.enabled: false`) für Apps ohne eigene Auth. Verursachte CSS/JS-Ladeprobleme bei öffentlichen Signing-Links (Documenso `/d/*`). |
 | LXC Bootstrap Chicken-and-Egg | Frische LXCs haben kein SSH/Netbird. Lösung: `pct exec` via Proxmox-Host (delegiert). |
 | Netbird-IP erst nach Join bekannt | Bootstrap via `pct exec`, Netbird-IP aus `netbird status --json` lesen, dann `hosts.yml` updaten. |
 | Watchtower + `:latest` = Breaking Changes | Image-Tags auf Major-Version pinnen (`nextcloud:29`). Watchtower nur Label-basiert. Major-Updates manuell. |

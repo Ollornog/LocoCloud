@@ -7,9 +7,10 @@ One master server manages multiple customer environments via inventories.
 
 ## Architecture Essentials
 
-- **Master server**: PocketID, Tinyauth, Vaultwarden, Semaphore, Grafana Stack, Baserow, Caddy
+- **Master server**: PocketID, Vaultwarden, Semaphore, Grafana Stack, Baserow, Caddy
 - **Customer servers**: Gateway (Caddy) → App servers (Nextcloud, Paperless, etc.)
-- **Auth chain**: PocketID (OIDC) → Tinyauth (forward-auth) → Apps
+- **Auth chain**: PocketID (OIDC) → Apps (each app has native OIDC, SSO-only, signup disabled)
+- **Tinyauth**: Optional forward-auth proxy (disabled by default, for apps without own auth)
 - **Credentials**: All generated passwords stored in Vaultwarden via `scripts/vw-credentials.py`
 - **Encryption**: gocryptfs on `/mnt/data`, keyfile only on master
 - **Networking**: Netbird VPN (optional) or direct IP connectivity
@@ -91,6 +92,8 @@ docs/
 - **Port binding**: `127.0.0.1:PORT` on gateways, `0.0.0.0:PORT` + UFW on app servers
 - **PocketID API**: `X-API-Key` header, NOT `Authorization: Bearer`
 - **Watchtower**: Only customer apps, NEVER infrastructure containers
+- **SSO-only**: All apps disable email/password login when OIDC is enabled. Caddy blocks signup/register paths as defense-in-depth
+- **Tinyauth**: Disabled by default (`loco.tinyauth.enabled`). Only for apps without native auth
 - **Secrets**: Never in Git. Ansible Vault or Vaultwarden only.
 
 ## Rules Location

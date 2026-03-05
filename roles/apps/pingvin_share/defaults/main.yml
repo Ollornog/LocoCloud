@@ -15,6 +15,10 @@ pingvin_share_oidc_client_id: ""
 pingvin_share_oidc_client_secret: ""
 pingvin_share_oidc_provider_url: ""
 
+# Caddy defense-in-depth: block signup path
+pingvin_share_blocked_paths:
+  - "/auth/signUp*"
+
 pingvin_share_public_paths: []
 
 pingvin_share_backup_paths:

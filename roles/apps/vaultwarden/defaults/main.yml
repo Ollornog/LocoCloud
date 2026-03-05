@@ -22,7 +22,11 @@ vaultwarden_smtp_from: ""
 
 # SSO/OIDC via PocketID
 vaultwarden_sso_enabled: false
-vaultwarden_sso_only: false
+vaultwarden_sso_only: true  # Disable password login when SSO is enabled
 vaultwarden_sso_authority: ""  # e.g. "https://id.firma.de"
 vaultwarden_sso_client_id: ""
 vaultwarden_sso_client_secret: ""
+
+# Caddy defense-in-depth: block admin panel via public URL
+vaultwarden_blocked_paths:
+  - "/admin*"

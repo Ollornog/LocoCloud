@@ -24,7 +24,13 @@ documenso_oidc_client_id: ""
 documenso_oidc_client_secret: ""
 documenso_oidc_provider_url: ""
 
-documenso_public_paths: []
+# Caddy defense-in-depth: block signup path
+documenso_blocked_paths:
+  - "/signup*"
+
+# Public paths for document signing links
+documenso_public_paths:
+  - "/d/*"
 
 documenso_backup_paths:
   - "/opt/stacks/documenso"
