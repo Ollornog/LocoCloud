@@ -29,3 +29,6 @@ netbird_relay_port: 33073
 netbird_stun_servers:
   - "stun:stun.cloudflare.com:3478"
   - "stun:stun.l.google.com:19302"
+
+# Disable local email/password login (only external IdP like PocketID)
+netbird_local_auth_disabled: true
