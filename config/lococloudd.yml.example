@@ -18,7 +18,7 @@ admin:
   tls_mode: "acme"                # acme | cert_sync | dns | internal
   # Nur bei tls_mode: cert_sync — Zertifikate per rsync von oeffentlichem Server
   cert_sync_host: ""              # IP des Cert-Servers (Netbird-IP oder oeffentlich)
-  cert_sync_user: "drog"          # SSH-User auf dem Cert-Server
+  cert_sync_user: "certsync"      # SSH-User auf dem Cert-Server
   cert_sync_public_ip: ""         # Oeffentliche IP (fuer DNS-Hinweis)
   # Nur bei tls_mode: dns — echte Zertifikate via DNS-Provider-API
   dns_provider: ""                # cloudflare | hetzner | ...
@@ -27,11 +27,10 @@ admin:
 # --- Admin-Dienste URLs ---
 urls:
   pocketid: "id.admin.example.com"
-  tinyauth: "auth.admin.example.com"
   vaultwarden: "vault.admin.example.com"
   semaphore: "deploy.admin.example.com"
   grafana: "grafana.admin.example.com"
-  baserow: "permissions.admin.example.com"
+  baserow: "baserow.admin.example.com"
 
 # --- Netbird (optional, geteilter Manager) ---
 netbird:
