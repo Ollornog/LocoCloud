@@ -111,14 +111,20 @@ auth.{{ loco.admin.full_domain }} {
 	reverse_proxy 127.0.0.1:{{ grafana_port }}
 }
 
-# --- Baserow (Berechtigungskonzept) ---
-{{ loco.urls.baserow }} {
+# --- NocoDB (Berechtigungskonzept) ---
+{{ loco.urls.nocodb }} {
 	import tls_config
 {% if tls_mode == 'cert_sync' %}
-	tls /opt/certs/baserow.admin-fullchain.pem /opt/certs/baserow.admin-privkey.pem
+	tls /opt/certs/nocodb.admin-fullchain.pem /opt/certs/nocodb.admin-privkey.pem
 {% endif %}
 	import public
-	reverse_proxy 127.0.0.1:{{ baserow_port }}
+	@blocked path /signup*
+	handle @blocked {
+		respond "Access Denied" 403
+	}
+	handle {
+		reverse_proxy 127.0.0.1:{{ nocodb_port }}
+	}
 }
 
 # --- Catch-All ---

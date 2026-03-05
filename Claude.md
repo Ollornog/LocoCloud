@@ -30,7 +30,7 @@ LocoCloud/
 │   ├── gocryptfs/               ✓ Verschlüsselung /mnt/data + Auto-Mount
 │   ├── grafana_stack/           ✓ Grafana + Prometheus + Loki (Master)
 │   ├── alloy/                   ✓ Grafana Alloy Agent (Kundenserver)
-│   ├── baserow/                 ✓ Berechtigungskonzept (Master)
+│   ├── nocodb/                  ✓ Berechtigungskonzept (Master)
 │   ├── credentials/             ✓ Vaultwarden API (store + folders)
 │   ├── backup/                  ✓ Restic + Pre-Backup-Hooks + Restore-Tests
 │   ├── key_backup/              ✓ gocryptfs Key-Backup Server
@@ -54,7 +54,7 @@ LocoCloud/
 │       ├── calcom/              ✓ Terminplanung (PostgreSQL)
 │       └── listmonk/            ✓ Newsletter/Mailing (PostgreSQL)
 ├── playbooks/
-│   ├── setup-master.yml         ← Master-Server einrichten (inkl. Grafana Stack, Baserow)
+│   ├── setup-master.yml         ← Master-Server einrichten (inkl. Grafana Stack, NocoDB)
 │   ├── onboard-customer.yml     ← Neukunden-Onboarding (Auth + gocryptfs + Alloy + Compliance)
 │   ├── add-server.yml           ← Frischen Server zum Kunden hinzufügen (IP/User/Pass)
 │   ├── site.yml                 ← Full Deploy (idempotent)
@@ -96,7 +96,7 @@ LocoCloud/
 - **Caddy als Entry-Point.** Default: alles blockiert. Öffentliche Pfade explizit gewhitelistet.
 - **gocryptfs auf /mnt/data.** Jeder Kundenserver verschlüsselt. Keyfile nur auf Master + Key-Backup.
 - **Grafana Stack statt Zabbix.** Grafana + Prometheus + Loki auf Master. Alloy als einziger Agent auf Kundenservern.
-- **Baserow für Berechtigungskonzept.** Pro Kunde eine Tabelle: wer darf was.
+- **NocoDB für Berechtigungskonzept.** Pro Kunde eine Tabelle: wer darf was.
 - **Secrets:** Ansible Vault für Repo-Encryption, Vaultwarden als Credential-Store. `scripts/vault-pass.sh` holt Vault-Passwort.
 - **Backup:** Restic + Pre-Backup-Hooks (DB-Dumps) + monatliche Restore-Tests. Ohne Backup-Ziel = kein Backup.
 - **Server-Rollen:** `master`, `netbird_server`, `gateway`, `customer_master`, `app_server`, `backup_server`, `key_backup`, `proxmox`.
@@ -104,14 +104,14 @@ LocoCloud/
 - **DSGVO/GoBD-konforme Logs.** Loki 6 Monate Retention, journald FSS Sealing, automatische Löschung.
 - **Server-Onboarding:** Frische Server mit IP/User/Passwort. Ansible bootstrappt alles (SSH-Key, base, gocryptfs, Alloy).
 - **Port-Binding:** Entry-Point `127.0.0.1:PORT`, App-LXCs `0.0.0.0:PORT` + UFW auf `wt0`.
-- **Admin-Infra:** `*.admin.example.com` → Caddy → Master (Grafana, Baserow, Semaphore, Vaultwarden, PocketID).
+- **Admin-Infra:** `*.admin.example.com` → Caddy → Master (Grafana, NocoDB, Semaphore, Vaultwarden, PocketID).
 
 ---
 
 ## Betriebsablauf
 
 ```
-1. Master installieren    → setup-master.yml (Grafana Stack, Baserow, Vaultwarden, Semaphore, Auth)
+1. Master installieren    → setup-master.yml (Grafana Stack, NocoDB, Vaultwarden, Semaphore, Auth)
 2. Kunde hinzufügen       → scripts/new-customer.sh (Inventar aus Template)
 3. Server hinzufügen      → add-server.yml (IP/User/Pass → Bootstrap: SSH-Key, base, gocryptfs, Alloy)
 4. Apps konfigurieren     → Inventar editieren (Serverrolle, Apps, Backup-Ziel)

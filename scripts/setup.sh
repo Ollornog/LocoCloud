@@ -111,7 +111,7 @@ echo "  PocketID:    https://id.${ADMIN_DOMAIN}"
 echo "  Vaultwarden: https://vault.${ADMIN_DOMAIN}"
 echo "  Semaphore:   https://deploy.${ADMIN_DOMAIN}"
 echo "  Grafana:     https://grafana.${ADMIN_DOMAIN}"
-echo "  Baserow:     https://baserow.${ADMIN_DOMAIN}"
+echo "  NocoDB:      https://nocodb.${ADMIN_DOMAIN}"
 echo ""
 
 # SMTP
@@ -542,7 +542,7 @@ urls:
   vaultwarden: "vault.${ADMIN_DOMAIN}"
   semaphore: "deploy.${ADMIN_DOMAIN}"
   grafana: "grafana.${ADMIN_DOMAIN}"
-  baserow: "baserow.${ADMIN_DOMAIN}"
+  nocodb: "nocodb.${ADMIN_DOMAIN}"
 
 # --- Tinyauth (optional) ---
 # Deaktiviert per Default. Apps haben eigene Auth via PocketID OIDC.
@@ -609,8 +609,8 @@ grafana:
     enabled: true
     email_to: "${OPERATOR_EMAIL}"
 
-# --- Baserow ---
-baserow:
+# --- NocoDB ---
+nocodb:
   admin_email: "${OPERATOR_EMAIL}"
 
 # --- Compliance ---
@@ -697,7 +697,7 @@ fi
 info "Phase 12: Master-Playbook ausfuehren"
 echo ""
 echo "Das Playbook richtet die Admin-Dienste ein:"
-echo "  base → pocketid → vaultwarden → semaphore → grafana → baserow → caddy"
+echo "  base → pocketid → vaultwarden → semaphore → grafana → nocodb → caddy"
 echo ""
 
 ansible-playbook "$REPO_DIR/playbooks/setup-master.yml" \
@@ -748,7 +748,7 @@ echo "  PocketID:    https://id.${ADMIN_DOMAIN}"
 echo "  Vaultwarden: https://vault.${ADMIN_DOMAIN}"
 echo "  Semaphore:   https://deploy.${ADMIN_DOMAIN}"
 echo "  Grafana:     https://grafana.${ADMIN_DOMAIN}"
-echo "  Baserow:     https://baserow.${ADMIN_DOMAIN}"
+echo "  NocoDB:      https://nocodb.${ADMIN_DOMAIN}"
 
 echo ""
 echo ""
@@ -822,7 +822,7 @@ case "$TLS_MODE" in
     echo "     vault.${ADMIN_DOMAIN}   -> A ${CS_PUBLIC_IP}"
     echo "     deploy.${ADMIN_DOMAIN}  -> A ${CS_PUBLIC_IP}"
     echo "     grafana.${ADMIN_DOMAIN} -> A ${CS_PUBLIC_IP}"
-    echo "     baserow.${ADMIN_DOMAIN} -> A ${CS_PUBLIC_IP}"
+    echo "     nocodb.${ADMIN_DOMAIN} -> A ${CS_PUBLIC_IP}"
     echo ""
     if [[ "$NETBIRD_ENABLED" =~ ^[jJyY]$ ]]; then
       echo -e "  ${BOLD}b) Netbird DNS-Zone (im Dashboard — hat Vorrang bei VPN-Geraeten):${NC}"
@@ -831,7 +831,7 @@ case "$TLS_MODE" in
       echo "     vault.${ADMIN_DOMAIN}   -> ${NETBIRD_IP:-<MASTER-NETBIRD-IP>}"
       echo "     deploy.${ADMIN_DOMAIN}  -> ${NETBIRD_IP:-<MASTER-NETBIRD-IP>}"
       echo "     grafana.${ADMIN_DOMAIN} -> ${NETBIRD_IP:-<MASTER-NETBIRD-IP>}"
-      echo "     baserow.${ADMIN_DOMAIN} -> ${NETBIRD_IP:-<MASTER-NETBIRD-IP>}"
+      echo "     nocodb.${ADMIN_DOMAIN} -> ${NETBIRD_IP:-<MASTER-NETBIRD-IP>}"
       echo ""
     fi
     echo -e "  ${BOLD}c) Auf dem Cert-Server ausfuehren (${CS_HOST}):${NC}"
@@ -859,7 +859,7 @@ case "$TLS_MODE" in
     echo "# --- LocoCloud Admin Cert-Domains ---"
     echo "# Diese Bloecke existieren NUR fuer die LE-Zertifikatsausstellung."
     echo "# Der eigentliche Traffic laeuft ueber Netbird direkt zum Master."
-    echo "id.${ADMIN_DOMAIN}, vault.${ADMIN_DOMAIN}, deploy.${ADMIN_DOMAIN}, grafana.${ADMIN_DOMAIN}, baserow.${ADMIN_DOMAIN} {"
+    echo "id.${ADMIN_DOMAIN}, vault.${ADMIN_DOMAIN}, deploy.${ADMIN_DOMAIN}, grafana.${ADMIN_DOMAIN}, nocodb.${ADMIN_DOMAIN} {"
     echo "    respond \"LocoCloud Cert Server\" 403"
     echo "}"
     echo "CADDYEOF"
@@ -876,7 +876,7 @@ case "$TLS_MODE" in
     echo "EXPORT_DIR=\"/opt/certs-export\""
     echo "ADMIN_DOMAIN=\"${ADMIN_DOMAIN}\""
     echo ""
-    echo "for sub in id vault deploy grafana baserow; do"
+    echo "for sub in id vault deploy grafana nocodb; do"
     echo "    domain=\"\${sub}.\${ADMIN_DOMAIN}\""
     echo "    src=\"\${CADDY_CERTS}/\${domain}\""
     echo "    if [ -d \"\${src}\" ]; then"

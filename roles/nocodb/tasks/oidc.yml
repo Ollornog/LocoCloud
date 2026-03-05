@@ -1,0 +1,69 @@
+---
+# roles/nocodb/tasks/oidc.yml
+# Register OIDC client in PocketID for NocoDB
+
+- name: Create OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ nocodb_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    body_format: json
+    body:
+      name: "NocoDB ({{ kunde_name | default('admin') }})"
+      callbackURLs:
+        - "https://{{ nocodb_domain }}/api/v1/auth/callback/oidc"
+    status_code: [200, 201]
+  register: nocodb_oidc_client
+  when:
+    - nocodb_oidc_client_id | length == 0
+    - loco.pocketid.api_token | default('') | length > 0
+
+- name: Set OIDC client ID from API response
+  ansible.builtin.set_fact:
+    nocodb_oidc_client_id: "{{ nocodb_oidc_client.json.id }}"
+  when: nocodb_oidc_client is not skipped and nocodb_oidc_client is changed
+
+- name: Generate OIDC client secret
+  ansible.builtin.uri:
+    url: "https://{{ nocodb_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients/{{ nocodb_oidc_client_id }}/secret"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    status_code: 200
+  register: nocodb_secret_result
+  when: nocodb_oidc_client_id | default('') | length > 0
+
+- name: Set OIDC client secret
+  ansible.builtin.set_fact:
+    nocodb_oidc_client_secret: "{{ nocodb_secret_result.json.secret }}"
+  when: nocodb_secret_result is defined and nocodb_secret_result is not skipped
+
+- name: Store NocoDB OIDC credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ vw_local_api_url | default(loco.vaultwarden.url) }}"
+    credential_name: "NocoDB OIDC Client"
+    credential_username: "{{ nocodb_oidc_client_id }}"
+    credential_password: "{{ nocodb_oidc_client_secret }}"
+    credential_uri: "https://{{ nocodb_domain }}"
+    credential_notes: "PocketID OIDC client for NocoDB. Configure in NocoDB UI: Settings > Authentication > OIDC. Deployed: {{ ansible_facts.date_time.iso8601 }}"
+  when:
+    - loco is defined
+    - nocodb_oidc_client_id | length > 0
+
+- name: OIDC configuration reminder
+  ansible.builtin.debug:
+    msg: |
+      NocoDB OIDC client registered in PocketID!
+      Client-ID: {{ nocodb_oidc_client_id }}
+
+      NEXT STEP: Configure OIDC in NocoDB UI:
+        1. Open https://{{ nocodb_domain }}
+        2. Settings > Authentication > OIDC
+        3. Issuer URL: https://{{ nocodb_oidc_provider_url | regex_replace('^https?://', '') }}
+        4. Client-ID and Secret: stored in Vaultwarden as "NocoDB OIDC Client"
+        5. After OIDC works: set nocodb_disable_email_auth: true in config
+  when: nocodb_oidc_client_id | length > 0

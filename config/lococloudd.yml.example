@@ -30,7 +30,7 @@ urls:
   vaultwarden: "vault.admin.example.com"
   semaphore: "deploy.admin.example.com"
   grafana: "grafana.admin.example.com"
-  baserow: "baserow.admin.example.com"
+  nocodb: "nocodb.admin.example.com"
 
 # --- Netbird (optional, geteilter Manager) ---
 netbird:
@@ -102,8 +102,8 @@ grafana:
   alerting:
     email_to: "admin@example.com"                  # Alert-Empfaenger
 
-# --- Baserow (Berechtigungskonzept) ---
-baserow:
+# --- NocoDB (Berechtigungskonzept) ---
+nocodb:
   admin_email: "admin@example.com"
   # Passwort wird beim Setup generiert und in Vaultwarden gespeichert
 

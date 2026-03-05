@@ -24,4 +24,4 @@ pocketid_port: 1411
 vaultwarden_port: 8222
 semaphore_port: 3010
 grafana_port: 3000
-baserow_port: 8085
+nocodb_port: 8085

@@ -1,0 +1,18 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# NocoDB — Permission management (Berechtigungskonzept)
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  nocodb:
+    image: {{ nocodb_image }}
+    container_name: nocodb
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:{{ nocodb_port }}:8080"
+    volumes:
+      - {{ nocodb_stack_path }}/data:/usr/app/data
+    env_file:
+      - .env
+    # NO watchtower label — infrastructure container
