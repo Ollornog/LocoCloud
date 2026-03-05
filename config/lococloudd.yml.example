@@ -39,6 +39,12 @@ netbird:
   manager_url: "https://netbird.example.com"
   api_token: ""                                # Netbird API Token (NICHT im Repo!)
 
+# --- Tinyauth (optional, Forward-Auth-Proxy) ---
+# Deaktiviert per Default — alle Apps haben eigene Auth via PocketID OIDC.
+# Aktivieren fuer Apps ohne eigene Authentifizierung (interne Dashboards etc.)
+tinyauth:
+  enabled: false
+
 # --- PocketID (Admin-Instanz) ---
 pocketid:
   api_token: ""                                # PocketID REST-API Token

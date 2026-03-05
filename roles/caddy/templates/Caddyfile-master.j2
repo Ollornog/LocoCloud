@@ -39,11 +39,13 @@
 	header Permissions-Policy "camera=(), microphone=(), geolocation=()"
 }
 
+{% if loco.tinyauth.enabled | default(false) %}
 (auth) {
-	forward_auth 127.0.0.1:{{ tinyauth_port }} {
+	forward_auth 127.0.0.1:{{ tinyauth_port | default(9090) }} {
 		uri /api/auth/caddy
 	}
 }
+{% endif %}
 
 # --- PocketID (Admin OIDC Provider) ---
 {{ loco.urls.pocketid }} {
@@ -56,25 +58,22 @@
 	handle @blocked {
 		respond "Access Denied" 403
 	}
-	@admin path /settings*
-	handle @admin {
-		import auth
-		reverse_proxy 127.0.0.1:{{ pocketid_port }}
-	}
 	handle {
 		reverse_proxy 127.0.0.1:{{ pocketid_port }}
 	}
 }
 
-# --- Tinyauth (Admin Forward Auth Portal) ---
-{{ loco.urls.tinyauth }} {
+{% if loco.tinyauth.enabled | default(false) %}
+# --- Tinyauth (Forward Auth Portal) ---
+auth.{{ loco.admin.full_domain }} {
 	import tls_config
 {% if tls_mode == 'cert_sync' %}
 	tls /opt/certs/auth.admin-fullchain.pem /opt/certs/auth.admin-privkey.pem
 {% endif %}
 	import public
-	reverse_proxy 127.0.0.1:{{ tinyauth_port }}
+	reverse_proxy 127.0.0.1:{{ tinyauth_port | default(9090) }}
 }
+{% endif %}
 
 # --- Vaultwarden (Admin Credential Store) ---
 {{ loco.urls.vaultwarden }} {
@@ -83,8 +82,13 @@
 	tls /opt/certs/vault.admin-fullchain.pem /opt/certs/vault.admin-privkey.pem
 {% endif %}
 	import public
-	import auth
-	reverse_proxy 127.0.0.1:{{ vaultwarden_port }}
+	@block_admin path /admin*
+	handle @block_admin {
+		respond "Access Denied" 403
+	}
+	handle {
+		reverse_proxy 127.0.0.1:{{ vaultwarden_port }}
+	}
 }
 
 # --- Semaphore (Ansible UI) ---
@@ -94,7 +98,6 @@
 	tls /opt/certs/deploy.admin-fullchain.pem /opt/certs/deploy.admin-privkey.pem
 {% endif %}
 	import public
-	import auth
 	reverse_proxy 127.0.0.1:{{ semaphore_port }}
 }
 
@@ -105,7 +108,6 @@
 	tls /opt/certs/grafana.admin-fullchain.pem /opt/certs/grafana.admin-privkey.pem
 {% endif %}
 	import public
-	import auth
 	reverse_proxy 127.0.0.1:{{ grafana_port }}
 }
 
@@ -116,7 +118,6 @@
 	tls /opt/certs/baserow.admin-fullchain.pem /opt/certs/baserow.admin-privkey.pem
 {% endif %}
 	import public
-	import auth
 	reverse_proxy 127.0.0.1:{{ baserow_port }}
 }
 

@@ -38,7 +38,12 @@ paperless_oidc_client_id: ""
 paperless_oidc_client_secret: ""
 paperless_oidc_provider_url: ""  # e.g. "https://id.firma-abc.de"
 
-# Public paths (none by default — everything behind Tinyauth)
+# Caddy defense-in-depth: block signup/register paths
+paperless_blocked_paths:
+  - "/accounts/signup*"
+  - "/accounts/register*"
+
+# Public paths (none by default)
 paperless_public_paths: []
 
 # Backup paths

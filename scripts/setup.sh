@@ -108,7 +108,6 @@ ADMIN_DOMAIN="${ADMIN_SUB}.${BASE_DOMAIN}"
 echo ""
 info "Generierte Admin-URLs:"
 echo "  PocketID:    https://id.${ADMIN_DOMAIN}"
-echo "  Tinyauth:    https://auth.${ADMIN_DOMAIN}"
 echo "  Vaultwarden: https://vault.${ADMIN_DOMAIN}"
 echo "  Semaphore:   https://deploy.${ADMIN_DOMAIN}"
 echo "  Grafana:     https://grafana.${ADMIN_DOMAIN}"
@@ -540,11 +539,15 @@ admin:
 # --- Admin-Dienste URLs ---
 urls:
   pocketid: "id.${ADMIN_DOMAIN}"
-  tinyauth: "auth.${ADMIN_DOMAIN}"
   vaultwarden: "vault.${ADMIN_DOMAIN}"
   semaphore: "deploy.${ADMIN_DOMAIN}"
   grafana: "grafana.${ADMIN_DOMAIN}"
   baserow: "baserow.${ADMIN_DOMAIN}"
+
+# --- Tinyauth (optional) ---
+# Deaktiviert per Default. Apps haben eigene Auth via PocketID OIDC.
+tinyauth:
+  enabled: false
 
 # --- Netbird (optional) ---
 netbird:
@@ -742,7 +745,6 @@ fi
 
 echo -e "${BOLD}Admin-URLs:${NC}"
 echo "  PocketID:    https://id.${ADMIN_DOMAIN}"
-echo "  Tinyauth:    https://auth.${ADMIN_DOMAIN}"
 echo "  Vaultwarden: https://vault.${ADMIN_DOMAIN}"
 echo "  Semaphore:   https://deploy.${ADMIN_DOMAIN}"
 echo "  Grafana:     https://grafana.${ADMIN_DOMAIN}"
