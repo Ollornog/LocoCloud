@@ -67,6 +67,11 @@
         state: directory
         mode: "0700"
 
+    - name: Install rsync
+      ansible.builtin.apt:
+        name: rsync
+        state: present
+
     - name: Generate cert-sync SSH key
       ansible.builtin.command:
         cmd: ssh-keygen -t ed25519 -f /root/.ssh/cert-sync-key -N "" -C "cert-sync@loco-master"
