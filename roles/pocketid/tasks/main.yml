@@ -5,3 +5,8 @@
 - name: Deploy PocketID
   ansible.builtin.import_tasks: deploy.yml
   tags: [pocketid, deploy]
+
+- name: Initial admin setup
+  ansible.builtin.include_tasks: admin-setup.yml
+  when: pocketid_api_token | default('') | length > 0
+  tags: [pocketid, admin-setup]

@@ -67,6 +67,11 @@
         state: directory
         mode: "0700"
 
+    - name: Install rsync
+      ansible.builtin.apt:
+        name: rsync
+        state: present
+
     - name: Generate cert-sync SSH key
       ansible.builtin.command:
         cmd: ssh-keygen -t ed25519 -f /root/.ssh/cert-sync-key -N "" -C "cert-sync@loco-master"
@@ -97,6 +102,18 @@
       register: _cert_sync_result
       changed_when: _cert_sync_result.rc == 0
       failed_when: false
+
+    - name: Deploy ensure-certs script (placeholder for missing certs)
+      ansible.builtin.template:
+        src: ensure-certs.sh.j2
+        dest: /opt/scripts/ensure-certs.sh
+        mode: "0755"
+
+    - name: Ensure all referenced certs exist (create placeholders if missing)
+      ansible.builtin.command:
+        cmd: /opt/scripts/ensure-certs.sh
+      register: _ensure_certs_result
+      changed_when: "'Platzhalter-Certs erzeugt' in _ensure_certs_result.stdout"
 
 - name: Build custom Caddy image for DNS challenge
   community.docker.docker_compose_v2:

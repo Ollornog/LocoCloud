@@ -1,0 +1,60 @@
+---
+# roles/pocketid/tasks/admin-setup.yml
+# Create initial admin user in PocketID and retrieve one-time access token.
+# Only runs on first setup (no users exist yet).
+
+- name: Check for existing PocketID users
+  ansible.builtin.uri:
+    url: "{{ pocketid_api_url | default('http://127.0.0.1:' + (pocketid_port | string)) }}/api/users"
+    method: GET
+    headers:
+      X-API-Key: "{{ pocketid_api_token }}"
+    status_code: [200]
+  register: _pocketid_users
+
+- name: Initial admin setup
+  when: (_pocketid_users.json | default([])) | length == 0
+  block:
+    - name: Create admin user via PocketID API
+      ansible.builtin.uri:
+        url: "{{ pocketid_api_url | default('http://127.0.0.1:' + (pocketid_port | string)) }}/api/users"
+        method: POST
+        headers:
+          X-API-Key: "{{ pocketid_api_token }}"
+        body_format: json
+        body:
+          username: "{{ loco.operator.name | default('admin') | lower | regex_replace(' ', '.') }}"
+          email: "{{ loco.operator.email }}"
+          first_name: "{{ loco.operator.name | default('Admin') | split(' ') | first }}"
+          last_name: "{{ (loco.operator.name | default('Admin') | split(' '))[1:] | join(' ') | default('') }}"
+          is_admin: true
+        status_code: [200, 201]
+      register: _pocketid_admin_created
+
+    - name: Request one-time access token for admin
+      ansible.builtin.uri:
+        url: "{{ pocketid_api_url | default('http://127.0.0.1:' + (pocketid_port | string)) }}/api/users/{{ _pocketid_admin_created.json.id }}/one-time-access-token"
+        method: POST
+        headers:
+          X-API-Key: "{{ pocketid_api_token }}"
+        status_code: [200, 201]
+      register: _pocketid_otp
+
+    - name: Store one-time login URL for display
+      ansible.builtin.set_fact:
+        pocketid_login_url: "https://{{ pocketid_domain }}/login/one-time-access/{{ _pocketid_otp.json.token }}"
+
+    - name: Display one-time login URL
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          PocketID — Erster Login
+          ============================================
+          Admin-User angelegt: {{ loco.operator.email }}
+
+          Einmal-Login-URL (NUR EINMAL gueltig!):
+          {{ pocketid_login_url }}
+
+          Oeffne diese URL im Browser und registriere
+          deinen Passkey (Fingerabdruck, Face ID, o.ae.).
+          ============================================

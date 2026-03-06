@@ -31,6 +31,9 @@
 | Caddy `tls internal` + Vaultwarden SSO | Vaultwarden validiert OIDC server-seitig gegen PocketID via HTTPS. Bei internem TLS muss Container die Caddy-CA vertrauen: `ca-bundle.crt` (System-CAs + Caddy-CA) wird als Volume gemountet + `extra_hosts` für DNS-Auflösung. Bundle wird erst nach Caddy-Start komplett — Caddy-Rolle erstellt Bundle und restartet Vaultwarden. |
 | Caddy DNS-Modus braucht Custom Image | Standard `caddy:2` hat kein DNS-Plugin. Bei `tls_mode: dns` wird ein `Dockerfile` mit `xcaddy build --with github.com/caddy-dns/<provider>` deployed. `docker compose build` statt Pull. |
 | Cert-Server: Caddy Docker vs systemd | Cert-Server kann Caddy als Docker-Container oder systemd-Service betreiben. Docker: Certs in Docker-Volume (dynamisch via `docker volume inspect`), Caddyfile auf Host (bind mount), `docker restart caddy`. Systemd: Certs in `/var/lib/caddy/...`, Caddyfile `/etc/caddy/Caddyfile`, `systemctl reload caddy`. Export-Script erkennt Modus automatisch. |
+| Cert-Export: Bind-Mounts nicht erkannt | Cert-Export-Script suchte nur Named Volumes + systemd-Pfade. Bind-Mount (`/opt/stacks/caddy/data:/data`) wurde nicht gefunden. Fix: Prüfreihenfolge Bind-Mount (`docker inspect`) → Named Volume → systemd-Pfad. `setup.sh` Export-Script ist angepasst. |
+| Caddyfile Duplikate auf Cert-Server | `cat >> Caddyfile` mehrfach ausgeführt → doppelte Admin-Cert-Blöcke → Caddy-Fehler. Fix: `setup.sh` entfernt bestehende Admin-Blöcke (inkl. alte aus früheren Setups) per `sed` bevor der neue Block angehängt wird. Alle Caddyfile-Modifikationen müssen idempotent sein. |
+| Caddy cert_sync: fehlendes Cert → kompletter Ausfall | Caddy validiert ALLE referenzierten Cert-Dateien beim Start. Fehlt eine → Startup-Abbruch → ALLE Dienste down. Fix: `ensure-certs.sh` erzeugt selbstsignierte Platzhalter für fehlende Certs VOR Caddy-Start. Werden beim nächsten cert-sync durch echte Certs ersetzt. |
 
 ## App-spezifisch
 

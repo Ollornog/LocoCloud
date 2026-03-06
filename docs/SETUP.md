@@ -90,24 +90,26 @@ Auf dem Gateway-Server muss Caddy den Admin-Wildcard an den Master weiterleiten:
 > **Wichtig:** `versions 1.1` ist bei `reverse_proxy https://` ueber Netbird VPN Pflicht.
 > HTTP/2 Binary Framing fragmentiert bei WireGuard MTU ~1420 und fuehrt zu leeren Responses.
 
-### 3. PocketID: Passkey registrieren + API-Key erstellen
+### 3. PocketID: Passkey registrieren
 
-1. `https://id.admin.example.com` im Browser oeffnen
-2. Admin-Account mit Passkey einrichten
-3. Settings → API Keys → Neuen Key erstellen
-4. Key in `config/lococloudd.yml` eintragen:
-   ```yaml
-   pocketid:
-     api_token: "euer-api-key"
-   ```
+Das Playbook hat automatisch:
+- Einen Admin-User mit eurer E-Mail angelegt
+- Einen **Einmal-Login-Code** generiert und in der Konsole angezeigt
 
-### 4. Playbook erneut ausfuehren (mit API-Key)
+1. Die angezeigte Einmal-Login-URL im Browser oeffnen
+2. Passkey registrieren (Fingerabdruck, Face ID, Hardware-Key, o.ae.)
+3. Fertig — ab jetzt authentifiziert ihr euch per Passkey
 
-```bash
-ansible-playbook playbooks/setup-master.yml -i inventories/master/
-```
+> **Wichtig:** Die URL ist NUR EINMAL gueltig. Falls sie abgelaufen ist,
+> kann ueber die PocketID API ein neuer Token generiert werden:
+> `POST /api/users/{id}/one-time-access-token` (mit `X-API-Key`-Header)
 
-Beim zweiten Lauf passiert automatisch:
+Der PocketID API-Key wurde automatisch generiert und in `config/lococloudd.yml`
+gespeichert. Er wird auch in der Admin-Vaultwarden-Instanz abgelegt.
+
+### 4. Vaultwarden und weitere Dienste
+
+Beim Setup-Lauf passiert automatisch:
 - Vaultwarden wird als OIDC-Client in PocketID registriert
 - SSO-Login fuer Vaultwarden wird aktiviert (`SSO_ONLY=true`)
 - OIDC-Credentials werden in Vaultwarden gespeichert
