@@ -167,8 +167,16 @@
       ansible.builtin.debug:
         msg: |
           Master setup complete!
+
           PocketID:    https://{{ loco.urls.pocketid }}
           Vaultwarden: https://{{ loco.urls.vaultwarden }}
           Semaphore:   https://{{ loco.urls.semaphore }}
           Grafana:     https://{{ loco.urls.grafana }}
           NocoDB:      https://{{ loco.urls.nocodb }}
+          {% if pocketid_login_url is defined %}
+
+          ============================================
+          NAECHSTER SCHRITT: Passkey registrieren!
+          {{ pocketid_login_url }}
+          ============================================
+          {% endif %}
