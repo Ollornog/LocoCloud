@@ -1,0 +1,37 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Erzeugt selbstsignierte Platzhalter fuer fehlende Cert-Dateien.
+# Caddy validiert ALLE referenzierten Certs beim Start — fehlt eines,
+# startet Caddy gar nicht und ALLE Dienste sind down.
+# Platzhalter werden beim naechsten cert-sync durch echte Certs ersetzt.
+
+set -euo pipefail
+
+CERT_DIR="/opt/certs"
+ADMIN_DOMAIN="{{ loco.admin.full_domain }}"
+
+# Subdomains die im Caddyfile referenziert werden
+SUBS=(id vault deploy grafana nocodb)
+{% if loco.tinyauth.enabled | default(false) %}
+SUBS+=(auth)
+{% endif %}
+
+CHANGED=0
+for sub in "${SUBS[@]}"; do
+    CERT="${CERT_DIR}/${sub}.admin-fullchain.pem"
+    KEY="${CERT_DIR}/${sub}.admin-privkey.pem"
+    if [ ! -f "$CERT" ] || [ ! -f "$KEY" ]; then
+        echo "[WARN] ${sub}.${ADMIN_DOMAIN}: Cert fehlt, erzeuge Platzhalter"
+        openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+            -nodes -days 1 -subj "/CN=${sub}.${ADMIN_DOMAIN}" \
+            -keyout "$KEY" -out "$CERT" 2>/dev/null
+        chmod 600 "$KEY" "$CERT"
+        CHANGED=1
+    fi
+done
+
+if [ "$CHANGED" -eq 1 ]; then
+    echo "[INFO] Platzhalter-Certs erzeugt. Werden beim naechsten cert-sync ersetzt."
+else
+    echo "[OK] Alle Certs vorhanden."
+fi

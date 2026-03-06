@@ -23,6 +23,8 @@
       - fail2ban
       - msmtp
       - msmtp-mta
+      - rsync
+      - openssl
       - unattended-upgrades
       - apt-listchanges
     state: present
