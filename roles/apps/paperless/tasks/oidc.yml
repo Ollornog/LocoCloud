@@ -12,7 +12,7 @@
     body:
       name: "Paperless ({{ kunde_name }})"
       callbackURLs:
-        - "https://{{ paperless_domain }}/accounts/oidc/callback/"
+        - "https://{{ paperless_domain }}/accounts/oidc/{{ paperless_oidc_provider_id }}/login/callback/"
     status_code: [200, 201]
   register: pl_oidc_client
   when:

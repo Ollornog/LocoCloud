@@ -50,11 +50,11 @@
 
 - name: Wait for Paperless to be ready
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ paperless_port }}/api/"
+    url: "http://127.0.0.1:{{ paperless_port }}{{ paperless_health_path }}"
     method: GET
-    status_code: [200, 403]
+    status_code: [200, 401, 403]
   register: pl_health
-  until: pl_health.status in [200, 403]
+  until: pl_health.status in [200, 401, 403]
   retries: 60
   delay: 10
 

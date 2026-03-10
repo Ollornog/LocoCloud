@@ -43,6 +43,13 @@
 | Nextcloud Single Logout | `--send-id-token-hint=0` in user_oidc setzen |
 | Nextcloud extrem langsam (1+ Min Ladezeit) | Tinyauth Forward-Auth als Bottleneck: Jeder Sub-Request (JS, CSS, Fonts, Bilder — 184 Stück) geht durch Tinyauth-Roundtrip über Netbird. 184 × 150ms + Queuing = über 1 Minute. Fix: `import auth` aus dem Nextcloud Caddy-Block entfernen — NC hat eigene OIDC-Auth über PocketID. |
 | Paperless ESC-Registrierung | `PAPERLESS_ACCOUNT_ALLOW_SIGNUPS: false` explizit setzen! |
+| Paperless OIDC Callback-URL | Provider-ID muss im Pfad stehen: `/accounts/oidc/pocketid/login/callback/` (NICHT `/accounts/oidc/callback/`). |
+| Paperless API /api/ gibt 302 bei SSO | Root-Endpoint `/api/` leitet bei aktivem SSO um. Für Health-Checks `/api/tags/` verwenden. |
+| Paperless SOCIALACCOUNT_PROVIDERS | `PAPERLESS_APPS=allauth.socialaccount.providers.openid_connect` muss gesetzt sein, sonst wird der OIDC-Provider ignoriert. |
+| Paperless Consumption-Trigger braucht Filter | Workflow mit `type: 1` (Consumption Started) braucht mindestens einen Filter (`filter_filename: "*"` für alle). Ohne Filter wird der Trigger nie ausgelöst. |
+| Paperless Default Permissions pro User | Settings → Permissions gilt nur für den eingeloggten User, nicht global. Für automatische Zuweisung bei Mail/Consume: Workflow mit `assign_view_groups`/`assign_change_groups`. |
+| Paperless IMAP-Ordner bei Dovecot | Alle Ordner haben `INBOX.` Prefix. In Mail-Regeln: `INBOX.Archiv`, nicht `Archiv`. |
+| Paperless API Trailing Slash | Alle API-Endpoints enden mit `/`. Ohne Slash gibt es 301 Redirects. |
 | PocketID /register | Per Caddy auf 403 blocken. PocketID kann Registrierung nicht nativ deaktivieren. |
 | Netbird Dashboard lokaler Login | Combined Setup: `localAuthDisabled: true` in `config.yaml` unter `auth:` setzen, dann `docker restart netbird-server`. Embedded IdP (Dex) muss auch `enabled: false` sein. Vorher PocketID als externen IdP konfigurieren, sonst Aussperrung! |
 | Semaphore DB env var | `SEMAPHORE_DB` (NICHT `SEMAPHORE_DB_NAME`). Falscher Name → Semaphore kann keine DB-Verbindung herstellen → Crash beim Start → Connection refused auf Port 3000. |
