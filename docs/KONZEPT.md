@@ -3048,7 +3048,46 @@ Microsoft 365 / Google Workspace.
 
 ### Noch offene Entscheidungen
 
-Keine — alle Entscheidungen sind getroffen.
+#### OE-1: Monitoring-Stack verschlanken — Prometheus ersetzen?
+
+**Status:** Offen
+
+**Kontext:** Der aktuelle Stack ist Grafana + Prometheus + Loki + Alloy. Prometheus ist ein mächtiges Metrics-Backend, aber für unseren Use-Case (5–20 Kundenserver mit je 2–5 Containern) möglicherweise überdimensioniert. RAM-Verbrauch auf dem Master liegt bei 200–500 MB für Prometheus allein.
+
+**Ziel:** Ein einzelnes Dashboard das ALLES zeigt:
+- **System-Metriken:** CPU, RAM, Disk pro Server
+- **Container-Status:** Laufende Container, Restart-Count, Health
+- **Software-Versionen:** Image-Tags aller laufenden Container
+- **Health-Checks:** HTTP-Status aller Apps
+- **Logs:** Aggregierte Logs aller Dienste (journald + Docker)
+- **User-Nutzung:** Aktive User pro App (soweit die App eine API dafür bietet)
+- **App-Nutzung:** Dokumente in Paperless, Dateien in Nextcloud, etc.
+
+**Optionen:**
+
+| Option | Pro | Contra |
+|--------|-----|--------|
+| **A) Status quo (Prometheus)** | Bewährt, gute Grafana-Integration, PromQL mächtig | RAM-hungrig (~300 MB+), Overkill für <20 Server, TSDB-Maintenance |
+| **B) VictoriaMetrics** (single-node) | Drop-in Prometheus-Ersatz, ~5x weniger RAM, schnellere Queries, gleiche PromQL, gleiche remote_write API | Zusätzliches Projekt zu pflegen, Community-Edition ausreichend? |
+| **C) Prometheus → weglassen, nur Alloy + Loki** | Alloy kann Metriken direkt als Loki-Labels/Structured-Metadata pushen. Kein separates Metrics-Backend. Grafana kann Loki für alles nutzen | LogQL statt PromQL für Metriken ist ungewohnt, Aggregationen langsamer als TSDB, keine nativen Prometheus-Dashboards |
+| **D) Beszel** | Ultraleicht (~50 MB RAM Hub + ~30 MB Agent), eigenes Dashboard, einfachstes Setup, Server+Container-Monitoring built-in | Eigenes UI (nicht Grafana), keine Log-Aggregation, keine Custom-Metriken, kein PromQL, kein OIDC, nicht so flexibel |
+| **E) Beszel + Loki (hybrid)** | Beszel für System/Container-Dashboard, Loki für Logs | Zwei separate Dashboards, doppelte Agent-Installation, kein einheitliches Dashboard |
+
+**Empfehlung (vorläufig):** Option **B) VictoriaMetrics** als wahrscheinlich bester Kompromiss:
+- Drop-in für Prometheus (gleiche remote_write API, Alloy braucht keine Änderung)
+- 5–10x weniger RAM bei gleicher Funktionalität
+- Alle bestehenden Grafana-Dashboards funktionieren weiter (PromQL-kompatibel)
+- Single Binary, kein Cluster nötig für unsere Größe
+
+Falls Prometheus sich im Betrieb als unproblematisch herausstellt (RAM <300 MB stabil), besteht kein Handlungsbedarf.
+
+**Beszel** ist interessant als _zusätzliches_ Lightweight-Monitoring (z.B. für Kunden-Sichtbarkeit), aber kein Ersatz für den Grafana-Stack wegen fehlender Log-Aggregation und fehlender Flexibilität.
+
+**Nächste Schritte:**
+1. RAM-Verbrauch von Prometheus im Betrieb messen (nach 2–4 Wochen mit echten Daten)
+2. Falls >500 MB: VictoriaMetrics als Drop-in testen (nur Image im docker-compose tauschen)
+3. Grafana-Dashboard bauen das alle gewünschten Infos vereint (Container-Versionen, Health, Metriken, Logs)
+4. Beszel evaluieren als optionale Kunden-App (ähnlich Uptime Kuma)
 
 ---
 
