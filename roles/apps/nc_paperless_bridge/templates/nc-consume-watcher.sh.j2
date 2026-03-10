@@ -1,0 +1,25 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Watches Nextcloud INBOX and Paperless archive for changes.
+# - INBOX: copies new files to Paperless consume folder
+# - Archive: triggers Nextcloud file scan so new docs appear
+# Runs as systemd service (nc-consume-watcher.service).
+
+inotifywait -m -r -e close_write,moved_to,delete,moved_from \
+  {{ nc_paperless_sort_path }}/ \
+  {{ nc_paperless_documents_path }}/archive/ | while read dir event file; do
+    [ -z "$file" ] && continue
+    # Ignore Nextcloud chunked upload temp files
+    [[ "$file" == *.part ]] && continue
+
+    # Sort folder: copy new files to Paperless consume
+    if [[ "$dir" == {{ nc_paperless_sort_path }}/* ]]; then
+        src="${dir}${file}"
+        [ -f "$src" ] || continue
+        cp "$src" {{ nc_paperless_consume_path }}/
+    fi
+
+    # Both events: refresh Nextcloud file cache
+    sleep 2
+    docker exec -u www-data {{ nc_paperless_nc_container }} php occ files:scan --all --quiet 2>/dev/null
+done

@@ -1,0 +1,14 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Watch Paperless consume folder for Nextcloud sync
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart={{ nc_paperless_watcher_script }}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

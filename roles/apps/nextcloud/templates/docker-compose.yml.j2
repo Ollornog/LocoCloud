@@ -18,6 +18,10 @@ services:
 {% if nextcloud_security_conf is defined %}
       - {{ nextcloud_stack_path }}/security.conf:/etc/apache2/conf-enabled/security.conf:ro
 {% endif %}
+{% if nc_paperless_bridge_enabled | default(false) %}
+      - {{ nc_paperless_sort_path | default('/mnt/data/paperless-sort') }}:{{ nc_paperless_inbox_container_path | default('/opt/paperless-sort') }}
+      - {{ nc_paperless_documents_path | default('/mnt/data/paperless/media/documents') }}:{{ nc_paperless_docs_container_path | default('/opt/paperless-docs') }}:ro
+{% endif %}
     env_file:
       - .env
     depends_on:

@@ -42,6 +42,12 @@
 | Nextcloud HSTS-Warning | Apache im Container setzt Header selbst via Volume-Mount `security.conf` |
 | Nextcloud Single Logout | `--send-id-token-hint=0` in user_oidc setzen |
 | Nextcloud extrem langsam (1+ Min Ladezeit) | Tinyauth Forward-Auth als Bottleneck: Jeder Sub-Request (JS, CSS, Fonts, Bilder — 184 Stück) geht durch Tinyauth-Roundtrip über Netbird. 184 × 150ms + Queuing = über 1 Minute. Fix: `import auth` aus dem Nextcloud Caddy-Block entfernen — NC hat eigene OIDC-Auth über PocketID. |
+| Nextcloud Chunked Upload + inotifywait | NC schreibt `.ocTransferId*.part` → dann rename. Watcher braucht `moved_to` Event (fängt rename ab) + `.part`-Filter (ignoriert Temp-Datei). |
+| Nextcloud `occ files_external:delete` Bestätigung | Erwartet interaktive Bestätigung. Fix: `echo "y" \| docker exec -i -u www-data nextcloud php occ files_external:delete <ID>` |
+| Paperless Consume-Ordner Permissions | `chmod 777` + kein Sticky Bit (`chmod -t`). Watcher (root) kopiert rein, Paperless (UID 1000) muss nach Verarbeitung löschen können. Sticky Bit verhindert cross-user Delete → Paperless bleibt hängen. |
+| Paperless kein Archiv für non-PDF | `.txt`, `.jpg` etc. landen nur in `originals/`, nicht in `archive/`. Archiv enthält nur OCR'd PDFs. Nextcloud-Mount deshalb auf `documents/` (Elternordner mit allen 3 Unterordnern). |
+| Paperless `trash/` erst nach erstem Löschen | Unterordner `trash/` existiert erst nach dem ersten Dokument-Löschen in Paperless. Normales Verhalten. |
+| NC-Paperless Watcher 1 statt 3 Tasks | `systemctl status` zeigt nur 1 Task statt 3 (bash + inotifywait + bash). Ursache: Script-Syntaxfehler. Fix: `bash -n /opt/scripts/nc-consume-watcher.sh` prüfen, dann `systemctl restart`. |
 | Paperless ESC-Registrierung | `PAPERLESS_ACCOUNT_ALLOW_SIGNUPS: false` explizit setzen! |
 | Paperless OIDC Callback-URL | Provider-ID muss im Pfad stehen: `/accounts/oidc/pocketid/login/callback/` (NICHT `/accounts/oidc/callback/`). |
 | Paperless API /api/ gibt 302 bei SSO | Root-Endpoint `/api/` leitet bei aktivem SSO um. Für Health-Checks `/api/tags/` verwenden. |

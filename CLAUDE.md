@@ -50,7 +50,8 @@ roles/
   apps/
     _template/           # Copy for new app roles
     nextcloud/           # MariaDB + Redis
-    paperless/           # PostgreSQL
+    paperless/           # PostgreSQL + Redis + Gotenberg + Tika
+    nc_paperless_bridge/ # Nextcloud↔Paperless inotifywait bridge
     vaultwarden/         # SQLite, OIDC via PocketID
     semaphore/           # Ansible Web-UI
     outline/             # PostgreSQL + Redis

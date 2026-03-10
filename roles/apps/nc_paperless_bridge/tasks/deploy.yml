@@ -1,0 +1,100 @@
+---
+# roles/apps/nc_paperless_bridge/tasks/deploy.yml
+# Sets up inotifywait-based bridge between Nextcloud and Paperless.
+# Requires: Nextcloud and Paperless containers already running.
+
+- name: Install inotify-tools
+  ansible.builtin.apt:
+    name: inotify-tools
+    state: present
+
+- name: Create sort directory (Nextcloud INBOX)
+  ansible.builtin.file:
+    path: "{{ nc_paperless_sort_path }}"
+    state: directory
+    owner: "{{ nc_paperless_nc_uid }}"
+    group: "{{ nc_paperless_nc_uid }}"
+    mode: "0770"
+
+# Consume folder needs 777 without sticky bit:
+# - Watcher (root) copies files in
+# - Paperless (UID 1000) must delete after processing
+# - Sticky bit would prevent cross-user deletion
+- name: Set consume directory permissions
+  ansible.builtin.file:
+    path: "{{ nc_paperless_consume_path }}"
+    state: directory
+    mode: "0777"
+
+- name: Remove sticky bit from consume directory
+  ansible.builtin.command:
+    cmd: "chmod -t {{ nc_paperless_consume_path }}"
+  changed_when: false
+
+- name: Create scripts directory
+  ansible.builtin.file:
+    path: /opt/scripts
+    state: directory
+    mode: "0755"
+
+- name: Deploy watcher script
+  ansible.builtin.template:
+    src: nc-consume-watcher.sh.j2
+    dest: "{{ nc_paperless_watcher_script }}"
+    mode: "0755"
+  notify: restart nc-consume-watcher
+
+- name: Deploy watcher systemd service
+  ansible.builtin.template:
+    src: nc-consume-watcher.service.j2
+    dest: /etc/systemd/system/nc-consume-watcher.service
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart nc-consume-watcher
+
+- name: Enable and start watcher service
+  ansible.builtin.systemd:
+    name: nc-consume-watcher.service
+    enabled: true
+    state: started
+    daemon_reload: true
+
+# --- Nextcloud External Storage Mounts ---
+
+- name: Check existing Nextcloud external storages
+  ansible.builtin.command:
+    cmd: >
+      docker exec -u www-data {{ nc_paperless_nc_container }}
+      php occ files_external:list --output=json
+  register: nc_ext_storages
+  changed_when: false
+
+- name: Create INBOX external storage mount
+  ansible.builtin.command:
+    cmd: >
+      docker exec -u www-data {{ nc_paperless_nc_container }}
+      php occ files_external:create
+      "{{ nc_paperless_inbox_mount }}" local null::null
+      -c datadir={{ nc_paperless_inbox_container_path }}
+  register: nc_inbox_mount
+  changed_when: nc_inbox_mount.rc == 0
+  when: nc_paperless_inbox_mount not in (nc_ext_storages.stdout | from_json | map(attribute='mount_point') | list)
+
+- name: Create Paperless Dokumente external storage mount (read-only)
+  ansible.builtin.command:
+    cmd: >
+      docker exec -u www-data {{ nc_paperless_nc_container }}
+      php occ files_external:create
+      "{{ nc_paperless_docs_mount }}" local null::null
+      -c datadir={{ nc_paperless_docs_container_path }}
+  register: nc_docs_mount
+  changed_when: nc_docs_mount.rc == 0
+  when: nc_paperless_docs_mount not in (nc_ext_storages.stdout | from_json | map(attribute='mount_point') | list)
+
+- name: Trigger initial Nextcloud file scan
+  ansible.builtin.command:
+    cmd: >
+      docker exec -u www-data {{ nc_paperless_nc_container }}
+      php occ files:scan --all --quiet
+  changed_when: false
