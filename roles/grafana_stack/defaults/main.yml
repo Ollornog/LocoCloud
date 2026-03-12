@@ -1,17 +1,21 @@
 ---
 # roles/grafana_stack/defaults/main.yml
-# Grafana Stack — Grafana + Prometheus + Loki on master
+# Grafana Stack — Grafana + VictoriaMetrics/Prometheus + Loki on master
 
 grafana_stack_path: "/opt/stacks/grafana"
 
+# Metrics backend: "victoriametrics" (default, lightweight) or "prometheus" (fallback)
+metrics_backend: "victoriametrics"
+
 # Images (pinned to minor version — no watchtower!)
 grafana_image: "grafana/grafana:12.4"
+victoriametrics_image: "victoriametrics/victoria-metrics:v1.114"
 prometheus_image: "prom/prometheus:v3"
 loki_image: "grafana/loki:3.6"
 
 # Ports
 grafana_port: 3000
-prometheus_port: 9090
+metrics_port: 9090  # same port for both backends (PromQL-compatible)
 loki_port: 3100
 
 # Grafana domain
@@ -21,8 +25,8 @@ grafana_domain: ""  # e.g. "grafana.admin.example.com"
 grafana_admin_user: "admin"
 grafana_admin_password: ""  # Generated if empty
 
-# Prometheus retention
-prometheus_retention: "30d"
+# Metrics retention (works for both backends)
+metrics_retention: "30d"
 
 # Loki retention
 loki_retention_period: "4320h"  # 6 months = 4320h

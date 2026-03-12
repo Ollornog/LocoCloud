@@ -52,7 +52,7 @@ prometheus.scrape "docker" {
 }
 
 // -----------------------------------------------
-// Remote write to Prometheus on master
+// Remote write to metrics backend on master (VictoriaMetrics or Prometheus)
 // -----------------------------------------------
 prometheus.remote_write "default" {
   endpoint {

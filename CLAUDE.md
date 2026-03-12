@@ -7,7 +7,7 @@ One master server manages multiple customer environments via inventories.
 
 ## Architecture Essentials
 
-- **Master server**: PocketID, Vaultwarden, Semaphore, Grafana Stack, NocoDB, Caddy
+- **Master server**: PocketID, Vaultwarden, Semaphore, Grafana Stack (VictoriaMetrics + Loki), NocoDB, Caddy
 - **Customer servers**: Gateway (Caddy) → App servers (Nextcloud, Paperless, etc.)
 - **Auth chain**: PocketID (OIDC) → Apps (each app has native OIDC, SSO-only, signup disabled)
 - **Tinyauth**: Optional forward-auth proxy (disabled by default, for apps without own auth)

@@ -9,7 +9,7 @@
   loop:
     - "{{ grafana_stack_path }}"
     - "{{ grafana_stack_path }}/grafana-data"
-    - "{{ grafana_stack_path }}/prometheus-data"
+    - "{{ grafana_stack_path }}/{{ 'victoria-data' if metrics_backend == 'victoriametrics' else 'prometheus-data' }}"
     - "{{ grafana_stack_path }}/loki-data"
     - "{{ grafana_stack_path }}/prometheus-targets"
     - "{{ grafana_stack_path }}/provisioning"
@@ -40,12 +40,13 @@
     dest: "{{ grafana_stack_path }}/docker-compose.yml"
     mode: "0644"
 
-- name: Deploy Prometheus config
+# Scrape config works for both VictoriaMetrics (-promscrape) and Prometheus
+- name: Deploy metrics scrape config
   ansible.builtin.template:
     src: prometheus.yml.j2
     dest: "{{ grafana_stack_path }}/prometheus.yml"
     mode: "0644"
-  notify: restart prometheus
+  notify: restart metrics
 
 - name: Deploy Loki config
   ansible.builtin.template:
