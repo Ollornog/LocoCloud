@@ -18,3 +18,12 @@ pocketid_api_token: ""
 # Encryption key for sensitive data (mandatory in PocketID v2).
 # Auto-generated and persisted in pocketid_data_path/.encryption_key
 pocketid_encryption_key: ""
+
+# --- LDAP backend (optional, lldap as user directory) ---
+pocketid_ldap_enabled: false
+pocketid_ldap_url: "ldap://127.0.0.1:3890"
+pocketid_ldap_bind_dn: ""      # e.g. "uid=admin,ou=people,dc=firma,dc=at"
+pocketid_ldap_bind_password: ""
+pocketid_ldap_base_dn: ""      # e.g. "ou=people,dc=firma,dc=at"
+pocketid_ldap_group_base_dn: "" # e.g. "ou=groups,dc=firma,dc=at"
+pocketid_ldap_admin_group: "admins"

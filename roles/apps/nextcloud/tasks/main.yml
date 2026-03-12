@@ -9,3 +9,8 @@
   ansible.builtin.import_tasks: oidc.yml
   tags: [nextcloud, oidc]
   when: nextcloud_oidc_enabled | default(false)
+
+- name: Configure LDAP for Nextcloud
+  ansible.builtin.import_tasks: ldap.yml
+  tags: [nextcloud, ldap]
+  when: nextcloud_ldap_enabled | default(false)

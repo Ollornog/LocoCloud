@@ -1,0 +1,84 @@
+---
+# roles/lldap/tasks/deploy.yml
+
+- name: Create lldap directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ lldap_stack_path }}"
+    - "{{ lldap_data_path }}"
+
+- name: Set lldap data directory ownership (UID 1000)
+  ansible.builtin.file:
+    path: "{{ lldap_data_path }}"
+    owner: "1000"
+    group: "1000"
+    recurse: true
+
+- name: Generate lldap admin password
+  ansible.builtin.set_fact:
+    lldap_admin_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: lldap_admin_password | length == 0
+
+- name: Generate lldap JWT secret
+  ansible.builtin.set_fact:
+    lldap_jwt_secret: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=64') }}"
+  when: lldap_jwt_secret | length == 0
+
+- name: Generate lldap key seed
+  ansible.builtin.set_fact:
+    lldap_key_seed: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=64') }}"
+  when: lldap_key_seed | length == 0
+
+- name: Generate lldap service account password
+  ansible.builtin.set_fact:
+    lldap_service_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: lldap_service_password | length == 0
+
+- name: Deploy lldap docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ lldap_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Deploy lldap .env
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ lldap_stack_path }}/.env"
+    mode: "0600"
+
+- name: Start lldap
+  community.docker.docker_compose_v2:
+    project_src: "{{ lldap_stack_path }}"
+    state: present
+
+- name: Wait for lldap to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ lldap_web_port }}/"
+    method: GET
+    status_code: [200, 302]
+  register: lldap_health
+  until: lldap_health.status in [200, 302]
+  retries: 30
+  delay: 5
+
+- name: Store lldap admin credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — lldap Admin"
+    credential_username: "admin"
+    credential_password: "{{ lldap_admin_password }}"
+    credential_uri: "http://127.0.0.1:{{ lldap_web_port }}"
+    credential_notes: |
+      lldap user directory admin.
+      LDAP: 127.0.0.1:{{ lldap_ldap_port }}
+      Base DN: {{ lldap_base_dn }}
+      Bind DN: uid=admin,ou=people,{{ lldap_base_dn }}
+      Web-UI: nur via Netbird erreichbar!
+      Deployed: {{ ansible_facts.date_time.iso8601 }}
+  when: loco is defined

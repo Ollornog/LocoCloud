@@ -1,0 +1,48 @@
+---
+# roles/lldap/defaults/main.yml
+# lldap — Lightweight LDAP server for user directory
+# Single source of truth for user lifecycle management.
+# ~30 MB RAM, Rust-based, SQLite default.
+
+lldap_stack_path: "/opt/stacks/lldap"
+lldap_data_path: "/mnt/data/lldap"
+lldap_image: "lldap/lldap:stable"
+
+# Ports (bind to localhost only — apps on same host)
+lldap_ldap_port: 3890
+lldap_web_port: 17170
+
+# Base DN — derived from customer domain
+# brunpower.at → dc=brunpower,dc=at
+lldap_base_dn: ""  # e.g. "dc=brunpower,dc=at"
+
+# Admin credentials (admin username is fixed to "admin" in lldap)
+lldap_admin_password: ""  # Generated if empty
+
+# JWT secret and key seed (auto-generated)
+lldap_jwt_secret: ""     # Generated if empty
+lldap_key_seed: ""       # Generated if empty
+
+# Service account for app bindings (read-only, recommended over admin)
+lldap_service_user: "readonly"
+lldap_service_password: ""  # Generated if empty
+
+# Default groups to create
+lldap_default_groups:
+  - "admins"       # Full access to all apps
+  - "users"        # Standard employees
+
+# Timezone
+lldap_timezone: "Europe/Vienna"
+
+# lldap Web-UI: NEVER expose publicly — Netbird only
+# No Caddy route is created for this service.
+
+# Health check
+lldap_health_port: "{{ lldap_web_port }}"
+lldap_health_path: "/"
+
+# Backup paths
+lldap_backup_paths:
+  - "/mnt/data/lldap"
+  - "/opt/stacks/lldap"

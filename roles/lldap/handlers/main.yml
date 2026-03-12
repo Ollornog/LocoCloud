@@ -1,0 +1,6 @@
+---
+# roles/lldap/handlers/main.yml
+
+- name: restart lldap
+  ansible.builtin.command: docker restart lldap
+  changed_when: true

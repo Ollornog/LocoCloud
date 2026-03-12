@@ -24,3 +24,16 @@ services:
 {% if pocketid_api_token | length > 0 %}
       - STATIC_API_KEY={{ pocketid_api_token }}
 {% endif %}
+{% if pocketid_ldap_enabled %}
+      - LDAP_ENABLED=true
+      - LDAP_URL={{ pocketid_ldap_url }}
+      - LDAP_BIND_DN={{ pocketid_ldap_bind_dn }}
+      - LDAP_BIND_PASSWORD={{ pocketid_ldap_bind_password }}
+      - LDAP_BASE_DN={{ pocketid_ldap_base_dn }}
+      - LDAP_ATTRIBUTE_USER_UNIQUE_IDENTIFIER=uid
+      - LDAP_ATTRIBUTE_MAIL=mail
+      - LDAP_ATTRIBUTE_DISPLAY_NAME=displayName
+      - LDAP_ATTRIBUTE_GROUP_MEMBER=member
+      - LDAP_ATTRIBUTE_ADMIN_GROUP={{ pocketid_ldap_admin_group }}
+      - LDAP_GROUP_BASE_DN={{ pocketid_ldap_group_base_dn }}
+{% endif %}

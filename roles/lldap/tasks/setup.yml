@@ -1,0 +1,84 @@
+---
+# roles/lldap/tasks/setup.yml
+# Creates default groups and service account via lldap GraphQL API.
+# lldap exposes a GraphQL API on the web-UI port.
+
+- name: Get lldap admin JWT token
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ lldap_web_port }}/auth/simple/login"
+    method: POST
+    body_format: json
+    body:
+      username: "admin"
+      password: "{{ lldap_admin_password }}"
+    status_code: 200
+  register: _lldap_auth
+
+- name: Set lldap auth token
+  ansible.builtin.set_fact:
+    _lldap_token: "{{ _lldap_auth.json.token }}"
+
+# --- Create default groups ---
+
+- name: Create default groups in lldap
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ lldap_web_port }}/api/graphql"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ _lldap_token }}"
+    body_format: json
+    body:
+      query: 'mutation { createGroup(name: "{{ item }}") { id displayName } }'
+    status_code: [200]
+  loop: "{{ lldap_default_groups }}"
+  register: _lldap_groups
+  # Group may already exist — that's fine
+  failed_when: >-
+    _lldap_groups.status != 200 and
+    'already exists' not in (_lldap_groups.json.errors | default([]) | map(attribute='message') | join(' '))
+  changed_when: >-
+    _lldap_groups.json.data is defined and
+    _lldap_groups.json.data.createGroup is defined
+
+# --- Create read-only service account for app bindings ---
+
+- name: Create service account in lldap
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ lldap_web_port }}/api/graphql"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ _lldap_token }}"
+    body_format: json
+    body:
+      query: >-
+        mutation {
+          createUser(user: {
+            id: "{{ lldap_service_user }}"
+            email: "{{ lldap_service_user }}@{{ lldap_base_dn | regex_replace('dc=', '') | regex_replace(',', '.') }}"
+            displayName: "Service Account (read-only)"
+          }) { id }
+        }
+    status_code: [200]
+  register: _lldap_svc
+  failed_when: >-
+    _lldap_svc.status != 200 and
+    'already exists' not in (_lldap_svc.json.errors | default([]) | map(attribute='message') | join(' '))
+  changed_when: >-
+    _lldap_svc.json.data is defined and
+    _lldap_svc.json.data.createUser is defined
+
+- name: Store lldap service account credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — lldap Service Account"
+    credential_username: "{{ lldap_service_user }}"
+    credential_password: "{{ lldap_service_password }}"
+    credential_uri: "ldap://127.0.0.1:{{ lldap_ldap_port }}"
+    credential_notes: |
+      Read-only service account for app LDAP bindings.
+      Bind DN: uid={{ lldap_service_user }},ou=people,{{ lldap_base_dn }}
+      Deployed: {{ ansible_facts.date_time.iso8601 }}
+  when: loco is defined

@@ -3045,6 +3045,8 @@ Microsoft 365 / Google Workspace.
 | Server-Onboarding | Frische Server mit IP/User/Passwort. Ansible bootstrappt alles (SSH-Key, base-Rolle, gocryptfs, Alloy). Netbird optional | Kap. 17.3 |
 | Backup-Pflicht | Ohne Backup-Ziel = kein Backup. Bewusste Entscheidung pro Kunde. Pre-Backup-Hooks für DB-Dumps. Monatlicher Restore-Test | Kap. 11 |
 | Logging & DSGVO | Loki mit 6 Monate Retention. journald FSS Sealing. Personenbezogene Daten minimiert. Automatische Löschung | Kap. 13.4 |
+| User-Directory | lldap als Single Source of Truth. PocketID synct aus lldap (LDAP-Backend). Apps mit LDAP (Nextcloud, Pingvin Share) binden direkt. Apps ohne LDAP via `disable-user.yml` Playbook | Kap. 7 |
+| Metrics-Backend | VictoriaMetrics als Default (leichtgewichtig, PromQL-kompatibel). Prometheus als Fallback (`metrics_backend: prometheus`) | Kap. 13 |
 
 ### Noch offene Entscheidungen
 
@@ -3067,6 +3069,20 @@ Microsoft 365 / Google Workspace.
 3. App-spezifische Metriken evaluieren (Paperless API, Nextcloud OCS API)
 4. Beszel als optionale Kunden-App evaluieren (leichtgewichtiges Server-Dashboard)
 
+#### OE-2: lldap — Offene Detailfragen
+
+**Status:** Offen
+
+**Kontext:** lldap ist als User-Directory (Single Source of Truth) implementiert. PocketID nutzt lldap als LDAP-Backend, Apps mit nativem LDAP (Nextcloud, Pingvin Share) binden direkt an. Apps ohne LDAP (Paperless, Vaultwarden, Documenso) werden via `disable-user.yml` Playbook manuell gehandhabt.
+
+**Offene Fragen:**
+- [ ] Documenso: Exaktes DB-Schema für User-Deaktivierung prüfen (Feld `disabled` vs. anderer Mechanismus)
+- [ ] Vaultwarden: SQLite vs. PostgreSQL — unterschiedlicher Pfad im disable-Playbook
+- [ ] PocketID: LDAP-Sync-Intervall konfigurierbar? Manueller Trigger via API möglich?
+- [ ] Nextcloud: LDAP + OIDC parallel testen vs. nur LDAP (Empfehlung: erstmal nur LDAP)
+- [ ] lldap: PostgreSQL vs. SQLite für Produktion evaluieren (SQLite reicht für <50 User)
+- [ ] Migration bestehender PocketID-User: Lokale Accounts löschen bevor LDAP aktiviert wird (sonst werden LDAP-Accounts ignoriert)
+
 ---
 
 ## Anhang A: Port-Zuordnung
@@ -3074,6 +3090,8 @@ Microsoft 365 / Google Workspace.
 | Port | Dienst |
 |------|--------|
 | 1411 | PocketID |
+| 3890 | lldap LDAP (Kundenserver, intern) |
+| 17170 | lldap Web-UI (Kundenserver, nur via Netbird) |
 | 3000 | Semaphore (nur Master) |
 | 3100 | Grafana (nur Master) |
 | 3110 | Loki (nur Master, intern) |

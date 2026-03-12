@@ -9,6 +9,14 @@ pingvin_share_port: 8087
 
 pingvin_share_domain: ""
 
+# LDAP via lldap (native support since v1.0.0)
+pingvin_share_ldap_enabled: false
+pingvin_share_ldap_url: "ldap://127.0.0.1:3890"
+pingvin_share_ldap_bind_dn: ""        # e.g. "uid=readonly,ou=people,dc=firma,dc=at"
+pingvin_share_ldap_bind_password: ""
+pingvin_share_ldap_search_base: ""    # e.g. "ou=people,dc=firma,dc=at"
+pingvin_share_ldap_admin_group: "admins"
+
 # OIDC
 pingvin_share_oidc_enabled: false
 pingvin_share_oidc_client_id: ""

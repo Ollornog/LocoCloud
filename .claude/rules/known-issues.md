@@ -57,6 +57,10 @@
 | Paperless IMAP-Ordner bei Dovecot | Alle Ordner haben `INBOX.` Prefix. In Mail-Regeln: `INBOX.Archiv`, nicht `Archiv`. |
 | Paperless API Trailing Slash | Alle API-Endpoints enden mit `/`. Ohne Slash gibt es 301 Redirects. |
 | PocketID /register | Per Caddy auf 403 blocken. PocketID kann Registrierung nicht nativ deaktivieren. |
+| PocketID + LDAP: lokale Accounts kollidieren | Lokaler PocketID-Account mit gleicher E-Mail wie LDAP-Account → LDAP-Account wird ignoriert. Fix: Lokale Accounts ERST löschen, dann LDAP aktivieren. |
+| PocketID LDAP-Sync max 1h | User/Gruppen werden beim Start + stündlich gesynct. Kein Sofort-Trigger. Für sofortige Sperrung: App muss direkt LDAP sprechen (Nextcloud, Pingvin Share). |
+| lldap Web-UI NICHT öffentlich exponieren | Port 17170 nur auf 127.0.0.1 binden. Zugriff nur via Netbird. Keine Caddy-Route erstellen! |
+| lldap Admin-User ist fix "admin" | Kann nicht umbenannt werden. Service-Account für App-Bindings erstellen (uid=readonly). |
 | Netbird Dashboard lokaler Login | Combined Setup: `localAuthDisabled: true` in `config.yaml` unter `auth:` setzen, dann `docker restart netbird-server`. Embedded IdP (Dex) muss auch `enabled: false` sein. Vorher PocketID als externen IdP konfigurieren, sonst Aussperrung! |
 | Semaphore DB env var | `SEMAPHORE_DB` (NICHT `SEMAPHORE_DB_NAME`). Falscher Name → Semaphore kann keine DB-Verbindung herstellen → Crash beim Start → Connection refused auf Port 3000. |
 | Semaphore PG Passwort-Mismatch | PostgreSQL liest `POSTGRES_PASSWORD` nur bei erster DB-Init. Bei erneutem Run mit neuem Passwort → `password authentication failed`. `deploy.yml` hat zweistufigen Schutz: 1) Passwort-Persistenz aus bestehender `.env`, 2) Auto-Recovery bei Mismatch (Logs prüfen → DB-Reset → Neustart). |

@@ -9,7 +9,7 @@ One master server manages multiple customer environments via inventories.
 
 - **Master server**: PocketID, Vaultwarden, Semaphore, Grafana Stack (VictoriaMetrics + Loki), NocoDB, Caddy
 - **Customer servers**: Gateway (Caddy) → App servers (Nextcloud, Paperless, etc.)
-- **Auth chain**: PocketID (OIDC) → Apps (each app has native OIDC, SSO-only, signup disabled)
+- **Auth chain**: lldap (user directory) → PocketID (OIDC) → Apps. Apps with native LDAP (Nextcloud, Pingvin Share) connect directly to lldap for real-time user status
 - **Tinyauth**: Optional forward-auth proxy (disabled by default, for apps without own auth)
 - **Credentials**: All generated passwords stored in Vaultwarden via `scripts/vw-credentials.py`
 - **Encryption**: gocryptfs on `/mnt/data`, keyfile only on master
@@ -31,13 +31,14 @@ One master server manages multiple customer environments via inventories.
 roles/
   base/                  # OS hardening, Docker, UFW, Fail2ban
   caddy/                 # Reverse proxy (master + customer templates)
-  pocketid/              # OIDC provider
+  lldap/                 # Lightweight LDAP user directory (user lifecycle)
+  pocketid/              # OIDC provider (optionally backed by lldap)
   tinyauth/              # Forward auth
   netbird_client/        # VPN client
   netbird_mtu/           # VPN MTU optimization (MTU 1420, MSS clamping, sysctl)
   netbird_server/        # Self-hosted Netbird management
   gocryptfs/             # Encryption for /mnt/data
-  grafana_stack/         # Grafana + Prometheus + Loki
+  grafana_stack/         # Grafana + VictoriaMetrics + Loki
   alloy/                 # Grafana Alloy agent (customer servers)
   nocodb/                # Permission management
   credentials/           # Vaultwarden API integration
@@ -69,6 +70,7 @@ playbooks/
   site.yml               # Full deploy (idempotent)
   add-app.yml            # Single app
   add-server.yml         # Bootstrap fresh server
+  disable-user.yml       # Offboarding: disable user across non-LDAP apps
 scripts/
   setup.sh               # Interactive master setup
   vw-credentials.py      # Vaultwarden API (Bitwarden protocol)
