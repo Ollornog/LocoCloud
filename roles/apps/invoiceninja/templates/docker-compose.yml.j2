@@ -1,0 +1,52 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Invoice Ninja
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  invoiceninja:
+    image: {{ invoiceninja_image }}
+    container_name: invoiceninja
+    restart: unless-stopped
+    volumes:
+      - {{ invoiceninja_data_path }}/public:/var/www/app/public
+      - {{ invoiceninja_data_path }}/storage:/var/www/app/storage
+    env_file:
+      - .env
+    depends_on:
+      invoiceninja-db:
+        condition: service_healthy
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  invoiceninja-nginx:
+    image: {{ invoiceninja_nginx_image }}
+    container_name: invoiceninja-nginx
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ invoiceninja_port }}:80"
+    volumes:
+      - {{ invoiceninja_stack_path }}/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - {{ invoiceninja_data_path }}/public:/var/www/app/public:ro
+    depends_on:
+      - invoiceninja
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  invoiceninja-db:
+    image: {{ invoiceninja_db_image }}
+    container_name: invoiceninja-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: {{ invoiceninja_db_name }}
+      MYSQL_USER: {{ invoiceninja_db_user }}
+      MYSQL_PASSWORD: {{ invoiceninja_db_password }}
+      MYSQL_ROOT_PASSWORD: {{ invoiceninja_db_root_password }}
+    volumes:
+      - {{ invoiceninja_data_path }}/db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u root -p{{ invoiceninja_db_root_password }} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

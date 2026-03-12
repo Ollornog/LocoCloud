@@ -106,3 +106,6 @@
           - Nextcloud: sofort (LDAP-Check bei jedem Request)
           - Pingvin Share: sofort (LDAP-Check bei Login)
           - PocketID: max 1h (nächster LDAP-Sync)
+
+          Tinyauth-basiert (gesperrt via PocketID/LDAP):
+          - Invoice Ninja: sofort nach PocketID-Sync (max 1h)

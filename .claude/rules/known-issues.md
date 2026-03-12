@@ -64,6 +64,11 @@
 | Netbird Dashboard lokaler Login | Combined Setup: `localAuthDisabled: true` in `config.yaml` unter `auth:` setzen, dann `docker restart netbird-server`. Embedded IdP (Dex) muss auch `enabled: false` sein. Vorher PocketID als externen IdP konfigurieren, sonst Aussperrung! |
 | Semaphore DB env var | `SEMAPHORE_DB` (NICHT `SEMAPHORE_DB_NAME`). Falscher Name → Semaphore kann keine DB-Verbindung herstellen → Crash beim Start → Connection refused auf Port 3000. |
 | Semaphore PG Passwort-Mismatch | PostgreSQL liest `POSTGRES_PASSWORD` nur bei erster DB-Init. Bei erneutem Run mit neuem Passwort → `password authentication failed`. `deploy.yml` hat zweistufigen Schutz: 1) Passwort-Persistenz aus bestehender `.env`, 2) Auto-Recovery bei Mismatch (Logs prüfen → DB-Reset → Neustart). |
+| Invoice Ninja kein OIDC | Kein nativer OIDC-Support. Auth via Tinyauth forward-auth (`import auth` in Caddy). `invoiceninja_tinyauth: true` in Inventar. |
+| Invoice Ninja APP_KEY | Muss `base64:...`-Format haben. Wird beim ersten Deploy via `php artisan key:generate --show` generiert. Bei Key-Verlust: alle verschlüsselten Daten (Tokens, API-Keys) unlesbar. |
+| Invoice Ninja PHP-FPM + Nginx | Sidecar-Pattern: PHP-FPM Container (`invoiceninja:5`) exponiert Port 9000 intern, Nginx leitet HTTP an FPM weiter. Shared Volume für `/var/www/app/public`. Kein Octane-Mode (experimentell). |
+| Invoice Ninja ZUGFeRD Validierung | ZUGFeRD-PDFs erzeugen ≠ validieren. Validierung mit `mustangproject` CLI separat prüfen. E-Rechnungs-Pflicht ab 2025 (DE) / teilweise AT. |
+| Invoice Ninja Client-Registrierung | `/client/register*` per Caddy auf 403 blocken. Sonst können sich beliebige Kunden selbst registrieren. |
 
 ## Caddy
 

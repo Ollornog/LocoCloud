@@ -64,6 +64,7 @@ roles/
     stirling_pdf/        # No DB
     listmonk/            # PostgreSQL
     uptime_kuma/         # SQLite
+    invoiceninja/        # MariaDB, Tinyauth (no native OIDC)
 playbooks/
   setup-master.yml       # Master setup (run first)
   onboard-customer.yml   # New customer

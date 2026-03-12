@@ -3106,6 +3106,7 @@ Microsoft 365 / Google Workspace.
 | 8228 | Cal.com |
 | 8229 | Uptime Kuma |
 | 8230 | Listmonk |
+| 8231 | Invoice Ninja |
 | 8085 | NocoDB (nur Master) |
 | 9090 | Tinyauth |
 | 9091 | Prometheus (nur Master, intern) |
