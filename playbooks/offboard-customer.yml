@@ -4,8 +4,14 @@
 # Usage: ansible-playbook playbooks/offboard-customer.yml -i inventories/kunde-abc/ \
 #        [-e "destroy=true"]
 #
-# Default (destroy=false): Final backup, stop all services, archive data.
-# With destroy=true: Also removes LXCs and Netbird peers.
+# Default (destroy=false): Final backup, stop all services, cleanup API resources, archive data.
+# With destroy=true: Also removes Netbird peers/groups and Proxmox LXCs.
+#
+# Play 1: Final backup on customer servers
+# Play 2: Stop all Docker stacks + Alloy agent
+# Play 3: API cleanup (OIDC clients, Vaultwarden archive)
+# Play 4: Netbird peer/group removal (only destroy=true)
+# Play 5: LXC destruction on Proxmox (only destroy=true)
 
 # =====================================================
 # Play 1: Final backup
@@ -69,7 +75,72 @@
         msg: "All services stopped on {{ inventory_hostname }}. Data is preserved."
 
 # =====================================================
-# Play 3: Remove Netbird peers (API)
+# Play 3: API Cleanup (PocketID OIDC clients, Vaultwarden archive)
+# =====================================================
+- name: "Offboarding — API Cleanup"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+      tags: [always]
+
+    - name: Load customer config
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/group_vars/all.yml"
+
+  tasks:
+    # --- Remove OIDC clients from PocketID ---
+    - name: List OIDC clients in PocketID
+      ansible.builtin.uri:
+        url: "https://id.{{ kunde_domain }}/api/oidc/clients"
+        method: GET
+        headers:
+          X-API-Key: "{{ loco.pocketid.api_token }}"
+        status_code: [200, 404, 502]
+      register: _oidc_clients
+      failed_when: false
+      when: loco.pocketid.api_token | default('') | length > 0
+
+    - name: Remove OIDC clients for customer
+      ansible.builtin.uri:
+        url: "https://id.{{ kunde_domain }}/api/oidc/clients/{{ item.id }}"
+        method: DELETE
+        headers:
+          X-API-Key: "{{ loco.pocketid.api_token }}"
+        status_code: [200, 204, 404]
+      loop: "{{ _oidc_clients.json | default([]) }}"
+      loop_control:
+        label: "{{ item.name | default(item.id) }}"
+      when:
+        - _oidc_clients.status | default(0) == 200
+        - _oidc_clients.json is defined
+      failed_when: false
+
+    # --- Archive Vaultwarden credentials folder ---
+    - name: Archive customer credentials in Vaultwarden
+      ansible.builtin.include_role:
+        name: credentials
+        tasks_from: archive_folder.yml
+      vars:
+        vw_api_url: "{{ loco.vaultwarden.url }}"
+        credential_folder_name: "{{ kunde_name }} ({{ kunde_domain }})"
+        archive_prefix: "[ARCHIV]"
+      when: loco.vaultwarden.url | default('') | length > 0
+      failed_when: false
+
+    - name: API cleanup complete
+      ansible.builtin.debug:
+        msg: >
+          API cleanup for {{ kunde_name }}:
+          OIDC clients removed, Vaultwarden folder archived.
+
+# =====================================================
+# Play 4: Remove Netbird peers (API)
 # =====================================================
 - name: "Offboarding — Netbird Cleanup"
   hosts: localhost
@@ -141,7 +212,7 @@
         msg: "Removed {{ customer_peers | length }} Netbird peers and customer group for {{ kunde_id }}."
 
 # =====================================================
-# Play 4: Destroy LXCs on Proxmox (optional)
+# Play 5: Destroy LXCs on Proxmox (optional)
 # =====================================================
 - name: "Offboarding — Destroy LXCs"
   hosts: "*proxmox*"

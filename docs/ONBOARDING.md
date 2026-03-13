@@ -12,6 +12,7 @@ Diese Anleitung beschreibt den kompletten Ablauf, einen neuen Kunden in LocoClou
 3. Netbird + Auth-Stack deployen    ← onboard-customer.yml
 4. Apps deployen                    ← site.yml oder add-app.yml
 5. Benutzer anlegen                 ← add-user.yml
+6. Break-Glass Notfallzugang        ← setup-breakglass.yml
 ```
 
 ---
@@ -250,6 +251,17 @@ ansible-playbook playbooks/remove-user.yml -i inventories/kunde-abc001/ \
   -e "username=m.mustermann email=m.mustermann@firma-abc.de"
 ```
 
+### Benutzer deaktivieren (ohne Offboarding)
+
+Deaktiviert einen Benutzer in allen Apps, die NICHT über LDAP gesteuert werden (Paperless, Vaultwarden, Documenso). LDAP-basierte Apps (Nextcloud, Pingvin Share) werden automatisch über LLDAP gesperrt.
+
+```bash
+ansible-playbook playbooks/disable-user.yml -i inventories/kunde-abc001/ \
+  -e "user_email=m.mustermann@firma-abc.de"
+```
+
+**Hinweis:** Zuerst den Benutzer in LLDAP deaktivieren, dann `disable-user.yml` für die restlichen Apps ausführen.
+
 ### Kunden-Offboarding
 
 ```bash
@@ -260,6 +272,26 @@ ansible-playbook playbooks/offboard-customer.yml -i inventories/kunde-abc001/
 ansible-playbook playbooks/offboard-customer.yml -i inventories/kunde-abc001/ \
   -e "destroy=true"
 ```
+
+Das Playbook durchläuft:
+1. **Final Backup** — letzte Sicherung aller Daten
+2. **Services stoppen** — alle Docker-Stacks + Alloy-Agent herunterfahren
+3. **API Cleanup** — OIDC-Clients aus PocketID entfernen, Vaultwarden-Ordner archivieren
+4. **Netbird Cleanup** — Peers und Kundengruppe entfernen (nur bei `destroy=true`)
+5. **LXCs zerstören** — Proxmox-LXCs entfernen (nur bei `destroy=true`)
+
+**Manuelle Nacharbeit:**
+- DNS-Einträge beim Domain-Provider löschen
+- Inventar-Verzeichnis archivieren: `mv inventories/kunde-abc001 inventories/_archived/abc001`
+- gocryptfs-Keyfile vom Master entfernen (nach Ablauf der Archivierungsfrist)
+
+## Schritt 6: Break-Glass Notfallzugang einrichten
+
+```bash
+ansible-playbook playbooks/setup-breakglass.yml -i inventories/kunde-abc001/
+```
+
+Erstellt einen versiegelten Notfall-Admin-Account (`notfall-admin`) in LLDAP, unabhängig vom IT-Dienstleister nutzbar. Das Passwort wird in Vaultwarden gespeichert und muss dem Kunden ausgedruckt und versiegelt übergeben werden.
 
 ---
 
@@ -273,4 +305,7 @@ ansible-playbook playbooks/offboard-customer.yml -i inventories/kunde-abc001/ \
 - [ ] Backup konfiguriert und getestet (falls aktiviert)
 - [ ] Alloy-Agent sendet Metriken/Logs an Grafana Stack auf Master
 - [ ] gocryptfs auf /mnt/data aktiv, Auto-Mount konfiguriert
-- [ ] Compliance-Dokumente generiert (TOM, VVT, Löschkonzept)
+- [ ] Compliance-Dokumente generiert (AVV, TOM, VVT, Löschkonzept)
+- [ ] Break-Glass Notfallzugang eingerichtet und Passwort übergeben
+- [ ] Audit-Logging aktiv (Docker-Events + Admin-Aktionen → Loki)
+- [ ] Kunden-Panel erreichbar (`panel.kunde-domain.de`)

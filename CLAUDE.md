@@ -96,9 +96,17 @@ playbooks/
   site.yml               # Full deploy (idempotent)
   add-app.yml            # Single app
   add-server.yml         # Bootstrap fresh server
+  add-user.yml           # Create user in PocketID/LLDAP
+  remove-user.yml        # Remove user from PocketID/LLDAP
+  remove-app.yml         # Remove app (archive data, not delete)
   update-customer.yml    # Pull + recreate all Docker containers (Watchtower replacement)
   update-app.yml         # Update single app
+  update-all.yml         # Update all customers
+  update-caddy.yml       # Update Caddy config only
+  backup-now.yml         # Trigger immediate backup
+  restore.yml            # Restore from backup
   restore-test.yml       # Monthly backup restore verification
+  generate-docs.yml      # Regenerate compliance documents
   setup-breakglass.yml   # Create break-glass emergency admin account
   offboard-customer.yml  # Full offboarding (backup, stop, cleanup)
   disable-user.yml       # Offboarding: disable user across non-LDAP apps
