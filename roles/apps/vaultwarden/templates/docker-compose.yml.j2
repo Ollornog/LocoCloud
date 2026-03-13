@@ -20,7 +20,3 @@ services:
 {% endif %}
     env_file:
       - .env
-{% if caddy_mode | default('') != 'master' %}
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-{% endif %}

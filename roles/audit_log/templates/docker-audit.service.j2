@@ -1,0 +1,19 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Docker Container Event Audit Logger
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+[Unit]
+Description=Docker Container Event Audit Logger
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart={{ audit_log_path }}/docker-audit.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -18,8 +18,6 @@ services:
       - .env
     depends_on:
       - gitea-db
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   gitea-db:
     image: {{ gitea_db_image }}

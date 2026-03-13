@@ -22,8 +22,6 @@ services:
     depends_on:
       easy-appointments-db:
         condition: service_healthy
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   easy-appointments-db:
     image: {{ easy_appointments_db_image }}

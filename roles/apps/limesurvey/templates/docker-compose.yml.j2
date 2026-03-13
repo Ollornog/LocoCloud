@@ -26,8 +26,6 @@ services:
     depends_on:
       limesurvey-db:
         condition: service_healthy
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   limesurvey-db:
     image: {{ limesurvey_db_image }}

@@ -63,9 +63,13 @@
         - "'customer_master' in server_roles"
         - loco.tinyauth.enabled | default(false)
 
-    # Watchtower on all servers with Docker
+    # Watchtower removal (deprecated — updates via Ansible/Semaphore)
     - role: watchtower
       tags: [watchtower]
+
+    # Audit logging (Docker events, SSH, admin actions → Loki)
+    - role: audit_log
+      tags: [audit_log]
 
     # Monitoring (Grafana Alloy agent)
     - role: monitoring

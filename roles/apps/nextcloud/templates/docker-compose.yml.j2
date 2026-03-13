@@ -31,8 +31,6 @@ services:
         condition: service_started
       nextcloud-imaginary:
         condition: service_started
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   nextcloud-db:
     image: {{ nextcloud_db_image }}
@@ -50,8 +48,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   nextcloud-redis:
     image: {{ nextcloud_redis_image }}
@@ -60,8 +56,6 @@ services:
     command: redis-server --save 60 1
     volumes:
       - {{ nextcloud_stack_path }}/redis:/data
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   nextcloud-imaginary:
     image: {{ nextcloud_imaginary_image }}
@@ -69,5 +63,3 @@ services:
     restart: unless-stopped
     cap_add:
       - SYS_NICE
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"

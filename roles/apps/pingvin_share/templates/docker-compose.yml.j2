@@ -16,5 +16,3 @@ services:
       - {{ pingvin_share_data_path }}/data:/opt/app/backend/data
     env_file:
       - .env
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"

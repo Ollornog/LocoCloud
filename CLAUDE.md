@@ -15,6 +15,12 @@ One master server manages multiple customer environments via inventories.
 - **Encryption**: gocryptfs on `/mnt/data`, keyfile only on master
 - **Networking**: Netbird VPN (optional) or direct IP connectivity
 - **TLS modes**: `acme` (public LE), `cert_sync` (rsync certs from public server), `dns` (DNS-01 challenge), `internal` (Caddy CA)
+- **Updates**: Ansible via Semaphore (NO Watchtower — removed due to silent breaking changes)
+- **Audit logging**: Docker events + admin actions → Loki via Alloy, customer-visible
+- **Self-healing**: Automatic container restart on health failure (systemd timer)
+- **Break-glass**: Per-customer emergency admin account (sealed, independent of provider)
+- **Customer panel**: Status dashboard with LLDAP user link, emergency contact, self-healing status
+- **Compliance**: Auto-generated AVV, TOM, VVT, Löschkonzept per customer
 
 ## Key Config Files
 
@@ -42,10 +48,12 @@ roles/
   alloy/                 # Grafana Alloy agent (customer servers)
   nocodb/                # Permission management
   credentials/           # Vaultwarden API integration
-  backup/                # Restic backups
+  backup/                # Restic backups (+ Netbird DB)
   key_backup/            # gocryptfs key backup
-  compliance/            # TOM, VVT, Löschkonzept templates
-  watchtower/            # Auto-update (customer apps only)
+  compliance/            # AVV, TOM, VVT, Löschkonzept templates
+  audit_log/             # Docker events + admin action logging → Loki
+  customer_panel/        # Customer dashboard (status, LLDAP, contact, self-healing)
+  watchtower/            # DEPRECATED — now removes Watchtower (updates via Ansible)
   monitoring/            # Wrapper → delegates to alloy
   lxc_create/            # Proxmox LXC creation
   apps/
@@ -88,6 +96,11 @@ playbooks/
   site.yml               # Full deploy (idempotent)
   add-app.yml            # Single app
   add-server.yml         # Bootstrap fresh server
+  update-customer.yml    # Pull + recreate all Docker containers (Watchtower replacement)
+  update-app.yml         # Update single app
+  restore-test.yml       # Monthly backup restore verification
+  setup-breakglass.yml   # Create break-glass emergency admin account
+  offboard-customer.yml  # Full offboarding (backup, stop, cleanup)
   disable-user.yml       # Offboarding: disable user across non-LDAP apps
 scripts/
   setup.sh               # Interactive master setup
@@ -112,8 +125,10 @@ docs/
 - **PostgreSQL 18**: Mount on `/var/lib/postgresql`, NOT `/var/lib/postgresql/data`
 - **Port binding**: `127.0.0.1:PORT` on gateways, `0.0.0.0:PORT` + UFW on app servers
 - **PocketID API**: `X-API-Key` header, NOT `Authorization: Bearer`
-- **Watchtower**: Only customer apps, NEVER infrastructure containers
+- **NO Watchtower**: Removed — updates via `update-customer.yml` (Semaphore trigger). OS patches via unattended-upgrades
 - **SSO-only**: All apps disable email/password login when OIDC is enabled. Caddy blocks signup/register paths as defense-in-depth
+- **Break-glass**: Every customer gets a sealed emergency admin account via `setup-breakglass.yml`
+- **AVV required**: Every customer must have an AVV (auto-generated via compliance role)
 - **Tinyauth**: Disabled by default (`loco.tinyauth.enabled`). Only for apps without native auth
 - **Secrets**: Never in Git. Ansible Vault or Vaultwarden only.
 

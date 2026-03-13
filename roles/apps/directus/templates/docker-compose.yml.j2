@@ -19,8 +19,6 @@ services:
     depends_on:
       directus-db:
         condition: service_healthy
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   directus-db:
     image: {{ directus_db_image }}

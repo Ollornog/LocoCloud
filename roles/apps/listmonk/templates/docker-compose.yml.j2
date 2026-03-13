@@ -17,8 +17,6 @@ services:
       - .env
     depends_on:
       - listmonk-db
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   listmonk-db:
     image: {{ listmonk_db_image }}

@@ -37,8 +37,6 @@ services:
     depends_on:
       bookstack-db:
         condition: service_healthy
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   bookstack-db:
     image: {{ bookstack_db_image }}

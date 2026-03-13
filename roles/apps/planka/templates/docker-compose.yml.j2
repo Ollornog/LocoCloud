@@ -20,8 +20,6 @@ services:
     depends_on:
       planka-db:
         condition: service_healthy
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   planka-db:
     image: {{ planka_db_image }}

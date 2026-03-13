@@ -33,6 +33,10 @@ restic -r "$REPO" backup \
 {% endfor %}
     {{ backup_dump_path }} \
     /opt/stacks \
+{% if loco.netbird.enabled | default(false) %}
+    /var/lib/netbird \
+{% endif %}
+    /var/log/audit \
     2>&1 | tee -a "$LOG_FILE"
 
 # Apply retention policy

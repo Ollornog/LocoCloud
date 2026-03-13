@@ -21,8 +21,6 @@ services:
     depends_on:
       orangehrm-db:
         condition: service_healthy
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   orangehrm-db:
     image: {{ orangehrm_db_image }}

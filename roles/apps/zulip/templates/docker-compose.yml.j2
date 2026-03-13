@@ -36,8 +36,6 @@ services:
       - zulip-rabbitmq
       - zulip-memcached
       - zulip-redis
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   zulip-db:
     image: {{ zulip_db_image }}

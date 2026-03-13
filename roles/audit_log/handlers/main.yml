@@ -1,0 +1,6 @@
+---
+- name: restart docker audit
+  ansible.builtin.systemd:
+    name: "{{ audit_log_docker_events_service }}"
+    state: restarted
+    daemon_reload: true

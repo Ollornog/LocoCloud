@@ -1831,7 +1831,7 @@ services:
     command: run /etc/alloy/config.alloy
     network_mode: host
     pid: host
-    # KEIN Watchtower-Label — Updates nur über Ansible
+    # Watchtower entfernt — alle Updates über Ansible/Semaphore
 ```
 
 **Alloy-Konfiguration (Auszug):**
@@ -2571,7 +2571,7 @@ Identisch für alle Server (Master + Kunden):
 | Kernel-Hardening | sysctl (rp_filter, syncookies, etc.) — **LXC-kompatible Params beachten!** |
 | Fail2ban | SSH (10 Versuche, 3600s Ban) |
 | Unattended-upgrades | Automatische Sicherheitsupdates |
-| Watchtower | Docker-Image-Patches täglich 04:00 — NUR Kunden-Apps (Label-basiert, Major gepinnt). Infra-Container OHNE Label, Updates nur über Ansible |
+| Docker-Updates | Manuell via `update-customer.yml` (Semaphore). Kein Watchtower — entfernt wegen Silent Breaking Changes (Netbird v0.65 Vorfall). Image-Tags auf Major-Version pinnen |
 | USB deaktiviert | Nur auf physischen Servern (`is_lxc`-Check!) |
 | .env chmod 600 | Alle Secrets-Files |
 | Docker Port-Bind | Entry-Point: `127.0.0.1:PORT` / App-LXCs: `0.0.0.0:PORT` + UFW auf wt0 |
@@ -2608,59 +2608,33 @@ admin_user_nopasswd: true  # NOPASSWD für Ansible-Kompatibilität
 | Backup | Ja | Restic Cron |
 | Health-Checks | Ja | Grafana Alerting |
 | SSL-Erneuerung | Ja | Caddy (ACME) |
-| **Infrastruktur-Container** (Netbird, Caddy, PocketID, Tinyauth, Semaphore, Grafana, Alloy) | **NEIN** | **Nur über Ansible** (`update-all.yml` / `update-app.yml`) |
-| **Kunden-App-Container** (Nextcloud, Paperless, Vaultwarden, etc.) | Ja (Patches) | Watchtower (Label-basiert, Major-Version gepinnt) |
+| **Alle Docker-Container** (Infra + Apps) | **NEIN** | **Nur über Ansible** (`update-customer.yml` / `update-app.yml` via Semaphore) |
 
-### 19.2 Watchtower-Strategie: Nur Kunden-Apps, nie Infrastruktur
+### 19.2 Update-Strategie: Kein Watchtower, alles über Ansible
 
-**Watchtower darf NUR Kunden-App-Container updaten.** Infrastruktur-Container (alles was Netzwerk, Auth oder Routing betrifft) bekommen KEIN Watchtower-Label.
+**Watchtower wurde komplett entfernt.** Die `watchtower`-Rolle entfernt bestehende Installationen idempotent.
 
-**Container OHNE Watchtower-Label (Updates nur über Ansible):**
-- Caddy
-- Netbird (Server + Client via apt)
-- PocketID
-- Tinyauth
-- Semaphore
-- Grafana, Prometheus, Loki (Master)
-- Grafana Alloy (Kundenserver)
-- NocoDB (Master)
-- Watchtower selbst
+**Grund:** Watchtower hat den Netbird-Server automatisch aktualisiert → neuer Relay-Endpoint `/relay` (ohne Slash) → Caddy-Route `handle /relay/*` hat nicht mehr gematcht → VPN-Tunnel weg → alle Dienste unerreichbar. Selbst Label-basiert ist das Risiko für Silent Breaking Changes bei Patch-Updates zu hoch.
 
-**Container MIT Watchtower-Label (Patches automatisch):**
-- Nextcloud (gepinnt auf Major: `nextcloud:29`)
-- Paperless-NGX (gepinnt auf Major: `ghcr.io/paperless-ngx/paperless-ngx:2`)
-- Vaultwarden (Kunden-Instanz)
-- Uptime Kuma
-- Weitere Kunden-Apps
-
-```yaml
-# Docker Compose Template für Kunden-Apps:
-services:
-  app:
-    image: "nextcloud:29"          # Pinned auf Major-Version, Patches automatisch
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-```
+**Ersatz:**
+- `update-customer.yml` — Zieht alle Images und recreated Container. Manuell via Semaphore getriggert.
+- `update-app.yml` — Aktualisiert eine einzelne App gezielt.
+- OS-Sicherheitspatches bleiben automatisch via `unattended-upgrades`.
 
 **Image-Tag-Strategie:**
-- `nextcloud:29` → bekommt automatisch 29.0.1, 29.0.2, etc. (Patches)
-- `nextcloud:30` → manuell via `update-app.yml` wenn getestet (Major-Update)
-- Container ohne Label werden von Watchtower ignoriert
-
-**Major-Updates** (die was kaputt machen können) werden ausschließlich über Semaphore/`update-app.yml` gemacht:
-1. Image-Tag im Inventar ändern (z.B. `nextcloud_version: "30"`)
-2. `update-app.yml` ausführen → neues Image pullen, Container neu starten
-3. Post-Update-Checks (Health-Check, DB-Migration prüfen)
+- `nextcloud:29` → Patches (29.0.1, 29.0.2) werden beim nächsten `update-customer.yml` gezogen
+- `nextcloud:30` → Major-Update: Image-Tag im Inventar ändern, dann `update-app.yml`
 
 ### 19.3 Manuell (Semaphore)
 
 | Task | Playbook |
 |------|----------|
-| Infra-Updates (Netbird, Caddy, PocketID, etc.) | `update-all.yml` — kontrolliertes Ansible-Rollout |
-| Major App-Updates | `update-app.yml` — Image-Tag im Inventar ändern, dann ausführen |
-| Full OS-Update | `update-all.yml` |
-| Backup-Test | `backup-test.yml` |
+| Alle Docker-Updates (Pull + Recreate) | `update-customer.yml` — für ganzen Kunden |
+| Einzelne App updaten | `update-app.yml` — Image-Tag im Inventar ändern, dann ausführen |
+| OS-Updates | `update-all.yml` — kontrolliertes Rollout |
+| Backup-Test | `restore-test.yml` — monatlicher Restore-Verifikation |
 | Mitarbeiter anlegen/entfernen | `add-user.yml` / `remove-user.yml` |
+| Break-Glass Account | `setup-breakglass.yml` — Notfallzugang erstellen |
 
 ---
 
@@ -3032,7 +3006,7 @@ Microsoft 365 / Google Workspace.
 | Isolation auf Proxmox | `lxc_per_app` empfohlen, `single_lxc` als Option | Kap. 5 |
 | LXC-Bootstrap-Methode | `pct exec` via Proxmox-Host (SSH-Key + Netbird injizieren, dann direkte Verbindung) | Kap. 5.6 |
 | Netbird-Gruppen/Keys/Policies | Vollautomatisch via Netbird REST-API durch Ansible (kein manueller Eingriff) | Kap. 6.3 |
-| Watchtower-Strategie | NUR für Kunden-Apps (Label-basiert + gepinnte Major-Versionen). Infra-Container OHNE Label — Updates nur über Ansible. | Kap. 19.2 |
+| Update-Strategie | Kein Watchtower — alle Docker-Updates über `update-customer.yml` via Semaphore. OS-Patches via unattended-upgrades. | Kap. 19.2 |
 | LXC-Template auf Proxmox | Ansible lädt Template via `pveam download` automatisch herunter wenn fehlend | Kap. 5.6 |
 | Offboarding-Strategie | Gestuft: Archivieren (Standard) oder komplett löschen. Server manuell beim Provider löschen. Credentials archiviert | Kap. 17.7 |
 | Tinyauth als Forward-Auth | PocketID + Tinyauth — im Betrieb bewährt. Nur OIDC via PocketID (kein direkter Login, kein Brute-Force-Risiko) | Kap. 7.9 |

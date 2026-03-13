@@ -1,0 +1,11 @@
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+[Unit]
+Description=LocoCloud Self-Healing Timer
+
+[Timer]
+OnBootSec=120
+OnUnitActiveSec={{ customer_panel_health_interval }}
+AccuracySec=10
+
+[Install]
+WantedBy=timers.target

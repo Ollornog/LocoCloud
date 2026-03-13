@@ -24,8 +24,6 @@ services:
       - huly-mongo
       - huly-minio
       - huly-elastic
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   huly-mongo:
     image: {{ huly_mongo_image }}

@@ -21,8 +21,6 @@ services:
       OVERWRITE_SETTING_Show_Setup_Wizard: "completed"
     depends_on:
       - rocketchat-db
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   rocketchat-db:
     image: {{ rocketchat_db_image }}

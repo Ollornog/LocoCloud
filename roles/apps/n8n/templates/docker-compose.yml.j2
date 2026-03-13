@@ -18,8 +18,6 @@ services:
     depends_on:
       n8n-db:
         condition: service_healthy
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   n8n-db:
     image: {{ n8n_db_image }}

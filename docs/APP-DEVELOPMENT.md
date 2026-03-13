@@ -311,10 +311,11 @@ Mount-Pfad ist `/var/lib/postgresql`, NICHT `/var/lib/postgresql/data`.
 - Immer `mode: "0600"` im Ansible-Template-Task
 - Secrets als Variablen, niemals hardcodiert
 
-### Watchtower
+### Updates (kein Watchtower)
 
-- Kunden-Apps bekommen: `labels: { com.centurylinklabs.watchtower.enable: "true" }`
-- Infrastruktur-Container: KEIN Watchtower-Label
+- **Keine Watchtower-Labels** in docker-compose Templates
+- Watchtower wurde komplett entfernt — alle Updates über `update-customer.yml` via Semaphore
+- Image-Tags auf Major-Version pinnen (z.B. `nextcloud:29`, nicht `:latest`)
 
 ### CSP (Content Security Policy)
 

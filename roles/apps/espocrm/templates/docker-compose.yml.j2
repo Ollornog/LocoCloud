@@ -26,8 +26,6 @@ services:
     depends_on:
       espocrm-db:
         condition: service_healthy
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   espocrm-daemon:
     image: {{ espocrm_daemon_image }}
@@ -38,8 +36,6 @@ services:
       - {{ espocrm_data_path }}/custom:/var/www/html/custom
       - {{ espocrm_data_path }}/client-custom:/var/www/html/client/custom
     entrypoint: docker-daemon.sh
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   espocrm-db:
     image: {{ espocrm_db_image }}

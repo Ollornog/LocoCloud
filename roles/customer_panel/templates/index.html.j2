@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ kunde_name | default('Kunde') }} — Admin Dashboard</title>
+  <style>
+    :root { --bg: #f8f9fa; --card: #fff; --primary: #2563eb; --success: #22c55e; --warn: #eab308; --danger: #ef4444; --text: #1e293b; --muted: #64748b; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); padding: 2rem; }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
+    .card { background: var(--card); border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+    .card h2 { font-size: 1.1rem; color: var(--muted); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+    .status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: .75rem; }
+    .status-item { display: flex; align-items: center; gap: .5rem; padding: .5rem .75rem; background: var(--bg); border-radius: 6px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .dot.ok { background: var(--success); }
+    .dot.warn { background: var(--warn); }
+    .dot.fail { background: var(--danger); }
+    .contact-info { display: grid; gap: .5rem; }
+    .contact-info a { color: var(--primary); text-decoration: none; }
+    .links a { display: inline-block; padding: .5rem 1rem; background: var(--primary); color: white; border-radius: 6px; text-decoration: none; margin-right: .5rem; margin-bottom: .5rem; }
+    .links a:hover { opacity: .9; }
+    .muted { color: var(--muted); font-size: .85rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>{{ kunde_name | default('Kunde') }} — Admin Dashboard</h1>
+
+    <div class="card">
+      <h2>Dienste</h2>
+      <div class="status-grid" id="services">
+        <p class="muted">Lade Status...</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Schnellzugriff</h2>
+      <div class="links">
+{% for app in apps_enabled | default([]) %}
+        <a href="https://{{ app.subdomain }}.{{ kunde_domain }}" target="_blank">{{ app.name }}</a>
+{% endfor %}
+{% if customer_panel_lldap_url | default('') | length > 0 %}
+        <a href="{{ customer_panel_lldap_url }}" target="_blank">Benutzerverwaltung (LLDAP)</a>
+{% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Notfallkontakt</h2>
+      <div class="contact-info">
+{% if customer_panel_emergency_name | default('') | length > 0 %}
+        <p><strong>{{ customer_panel_emergency_name }}</strong></p>
+{% endif %}
+{% if customer_panel_emergency_email | default('') | length > 0 %}
+        <p>E-Mail: <a href="mailto:{{ customer_panel_emergency_email }}">{{ customer_panel_emergency_email }}</a></p>
+{% endif %}
+{% if customer_panel_emergency_phone | default('') | length > 0 %}
+        <p>Telefon: <a href="tel:{{ customer_panel_emergency_phone }}">{{ customer_panel_emergency_phone }}</a></p>
+{% endif %}
+        <p class="muted">Support: {{ loco.operator.business_hours | default('Mo–Fr 09:00–17:00') }}</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>System</h2>
+      <div class="contact-info">
+        <p class="muted">Self-Healing: {{ 'Aktiv' if customer_panel_self_healing_enabled else 'Deaktiviert' }}</p>
+        <p class="muted">Monitoring: Automatische Restarts bei Container-Ausfällen</p>
+        <p class="muted">Backups: Verschlüsselt (Restic AES-256), automatisch alle 6h</p>
+        <p class="muted">Updates: Manuell via Ansible (kein Auto-Update)</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Fetch container status from host (requires status-api endpoint)
+    async function loadStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        const grid = document.getElementById('services');
+        grid.innerHTML = data.containers.map(c =>
+          `<div class="status-item">
+            <span class="dot ${c.status === 'running' ? 'ok' : c.status === 'restarting' ? 'warn' : 'fail'}"></span>
+            <span>${c.name}</span>
+          </div>`
+        ).join('');
+      } catch(e) {
+        document.getElementById('services').innerHTML = '<p class="muted">Status nicht verfügbar</p>';
+      }
+    }
+    loadStatus();
+    setInterval(loadStatus, 30000);
+  </script>
+</body>
+</html>

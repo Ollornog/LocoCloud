@@ -17,8 +17,6 @@ services:
     depends_on:
       invoiceninja-db:
         condition: service_healthy
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   invoiceninja-nginx:
     image: {{ invoiceninja_nginx_image }}
@@ -31,8 +29,6 @@ services:
       - {{ invoiceninja_data_path }}/public:/var/www/app/public:ro
     depends_on:
       - invoiceninja
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   invoiceninja-db:
     image: {{ invoiceninja_db_image }}

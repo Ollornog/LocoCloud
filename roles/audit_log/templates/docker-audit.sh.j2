@@ -1,0 +1,21 @@
+#!/bin/bash
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Docker Container Event Audit Logger
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+#
+# Logs Docker lifecycle events (start, stop, restart, die, create, destroy)
+# to a structured JSON log file. Picked up by Alloy → Loki.
+
+LOG_FILE="{{ audit_log_path }}/docker-events.log"
+
+docker events --format '{"time":"{{ '{{' }}.Time{{ '}}' }}","action":"{{ '{{' }}.Action{{ '}}' }}","actor":"{{ '{{' }}.Actor.Attributes.name{{ '}}' }}","image":"{{ '{{' }}.Actor.Attributes.image{{ '}}' }}","type":"docker"}' \
+  --filter 'type=container' \
+  --filter 'event=start' \
+  --filter 'event=stop' \
+  --filter 'event=restart' \
+  --filter 'event=die' \
+  --filter 'event=create' \
+  --filter 'event=destroy' \
+  >> "$LOG_FILE" 2>&1

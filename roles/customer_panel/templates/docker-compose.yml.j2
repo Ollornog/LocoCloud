@@ -1,0 +1,16 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Customer Panel (Status + Admin Dashboard)
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  customer-panel:
+    image: caddy:2-alpine
+    container_name: customer-panel
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ customer_panel_port }}:80"
+    volumes:
+      - {{ customer_panel_data_path }}/html:/usr/share/caddy:ro
+      - {{ customer_panel_stack_path }}/Caddyfile:/etc/caddy/Caddyfile:ro

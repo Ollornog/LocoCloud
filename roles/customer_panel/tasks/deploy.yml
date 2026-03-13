@@ -1,0 +1,79 @@
+---
+# roles/customer_panel/tasks/deploy.yml
+# Deploys a status page + self-healing script for customer environments.
+
+- name: Create customer panel directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ customer_panel_stack_path }}"
+    - "{{ customer_panel_data_path }}"
+    - "{{ customer_panel_data_path }}/html"
+
+- name: Deploy customer panel status page
+  ansible.builtin.template:
+    src: index.html.j2
+    dest: "{{ customer_panel_data_path }}/html/index.html"
+    mode: "0644"
+
+- name: Deploy status API script
+  ansible.builtin.template:
+    src: status-api.sh.j2
+    dest: "{{ customer_panel_stack_path }}/status-api.sh"
+    mode: "0755"
+
+- name: Deploy self-healing script
+  ansible.builtin.template:
+    src: self-healing.sh.j2
+    dest: "/opt/scripts/self-healing.sh"
+    mode: "0755"
+  when: customer_panel_self_healing_enabled
+
+- name: Deploy self-healing systemd service
+  ansible.builtin.template:
+    src: self-healing.service.j2
+    dest: "/etc/systemd/system/lococloudd-self-healing.service"
+    mode: "0644"
+  notify: restart self-healing
+  when: customer_panel_self_healing_enabled
+
+- name: Deploy self-healing systemd timer
+  ansible.builtin.template:
+    src: self-healing.timer.j2
+    dest: "/etc/systemd/system/lococloudd-self-healing.timer"
+    mode: "0644"
+  notify: restart self-healing timer
+  when: customer_panel_self_healing_enabled
+
+- name: Enable self-healing timer
+  ansible.builtin.systemd:
+    name: lococloudd-self-healing.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  when: customer_panel_self_healing_enabled
+
+- name: Create API output directory
+  ansible.builtin.file:
+    path: "{{ customer_panel_data_path }}/html/api"
+    state: directory
+    mode: "0755"
+
+- name: Configure status API cron (every minute)
+  ansible.builtin.cron:
+    name: "lococloudd-status-api"
+    job: "{{ customer_panel_stack_path }}/status-api.sh"
+    minute: "*"
+
+- name: Deploy status page docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ customer_panel_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Start customer panel
+  community.docker.docker_compose_v2:
+    project_src: "{{ customer_panel_stack_path }}"
+    state: present

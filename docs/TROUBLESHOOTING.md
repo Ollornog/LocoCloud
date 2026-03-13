@@ -187,15 +187,14 @@ lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
 
 ---
 
-### Watchtower: Infrastruktur-Container aktualisiert
+### Docker-Updates: Watchtower entfernt
 
-**Problem:** Netbird, Caddy oder andere Infrastruktur-Container werden unerwartet aktualisiert → Ausfall.
+**Problem:** Watchtower hat Silent Breaking Changes verursacht (Netbird v0.65 Vorfall → VPN-Ausfall).
 
-**Ursache:** Watchtower aktualisiert alle Container mit dem Label `com.centurylinklabs.watchtower.enable=true`.
-
-**Lösung:**
-- **Kunden-Apps** (Nextcloud, Paperless, Vaultwarden, Uptime Kuma): Watchtower-Label setzen
-- **Infrastruktur** (Caddy, Netbird, PocketID, Tinyauth, Semaphore, Grafana, Alloy, NocoDB): KEIN Watchtower-Label. Updates nur über Ansible.
+**Lösung:** Watchtower wurde komplett entfernt. Die `watchtower`-Rolle entfernt bestehende Installationen.
+- Alle Docker-Updates über `playbooks/update-customer.yml` via Semaphore (manuell getriggert)
+- OS-Sicherheitspatches weiterhin via `unattended-upgrades`
+- Image-Tags auf Major-Version pinnen (`nextcloud:29`, nicht `:latest`)
 
 ---
 
@@ -632,7 +631,7 @@ Gesammelte Erkenntnisse aus Debugging und Betrieb:
 - **HTTP/2 vs HTTP/1.1 bei VPN-Tunnel-Backends:** HTTP/2 Binary Framing verträgt sich nicht mit der reduzierten MTU (~1420) von WireGuard-Tunneln. Die TLS-in-WireGuard-Encapsulation führt zu Frame-Fragmentierung und Stream-State-Desynchronisation — Caddy liefert leere 200-Responses ohne Body. **Regel:** Bei `reverse_proxy https://` über Netbird VPN immer `versions 1.1` im `transport http` Block erzwingen.
 - **Caddy TLS-SNI bei Netbird-IPs:** `reverse_proxy https://100.x.x.x` sendet die IP als SNI. Backend-Caddy hat kein Zertifikat für IPs → 502 oder TLS Alert. Immer `tls_server_name` und `header_up Host` explizit setzen.
 - **Tinyauth als Performance-Bottleneck:** Jeder Sub-Request (JS, CSS, Bilder) geht durch einen Tinyauth-Roundtrip über Netbird. Bei 184 Requests × 150ms = über 1 Minute Ladezeit. Apps mit eigener Auth (Nextcloud OIDC) brauchen kein `import auth` im Caddy-Block.
-- **Watchtower und Infrastruktur:** Watchtower darf NIE Infrastruktur-Container aktualisieren. Ein automatisches Netbird-Update hat den Relay-Endpoint geändert und das gesamte VPN lahmgelegt.
+- **Watchtower entfernt:** Watchtower wurde komplett entfernt nach Netbird v0.65 Vorfall (Silent Breaking Change → VPN-Ausfall). Alle Docker-Updates über `update-customer.yml` via Semaphore.
 - **Vaultwarden Admin-Invite blockiert Registration:** `POST /admin/invite` erstellt einen User-Record in der DB. Anschließende Registration schlägt fehl mit "user already exists". Lösung: Direkt-Registration OHNE Invite bei `SIGNUPS_ALLOWED=true` (via Ansible Toggle).
 - **Vaultwarden Admin-API gibt HTML:** `GET /admin/users/overview` gibt HTML zurück, NICHT JSON. Für JSON-User-Liste: `GET /admin/users` verwenden.
 - **Vaultwarden SIGNUPS_ALLOWED:** `SIGNUPS_ALLOWED=false` blockiert Registration. Loesung: Ansible `store.yml` toggelt `.env` + `docker compose down/up` (NICHT restart — restart liest env_file nicht neu ein).

@@ -37,3 +37,12 @@
     group: root
     mode: "0640"
   become: true
+
+- name: Generate AVV document (Auftragsverarbeitungsvertrag)
+  ansible.builtin.template:
+    src: avv.md.j2
+    dest: "{{ compliance_output_path }}/{{ compliance_kunde_id }}/AVV.md"
+    owner: root
+    group: root
+    mode: "0640"
+  become: true
