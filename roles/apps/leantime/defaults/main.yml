@@ -1,0 +1,46 @@
+---
+# roles/apps/leantime/defaults/main.yml
+# Leantime — Open-source project management
+# Native OIDC via PocketID
+
+leantime_stack_path: "/opt/stacks/leantime"
+leantime_data_path: "/mnt/data/leantime"
+leantime_image: "leantime/leantime:3"
+leantime_port: 8235
+
+# Domain
+leantime_domain: ""  # e.g. "pm.firma-abc.de"
+
+# Database (MariaDB)
+leantime_db_image: "mariadb:11"
+leantime_db_name: "leantime"
+leantime_db_user: "leantime"
+leantime_db_password: ""  # Generated if empty
+
+# Session secret (generated if empty)
+leantime_session_password: ""
+
+# OIDC via PocketID
+leantime_oidc_enabled: false
+leantime_oidc_client_id: ""
+leantime_oidc_client_secret: ""
+leantime_oidc_provider_url: ""  # e.g. "https://id.firma-abc.de"
+leantime_oidc_create_user: true
+leantime_oidc_default_role: "20"  # 20 = editor
+
+# Caddy
+leantime_blocked_paths:
+  - "/register*"
+leantime_public_paths: []
+
+# Backup
+leantime_backup_paths:
+  - "/opt/stacks/leantime"
+  - "/mnt/data/leantime"
+
+leantime_pre_backup_cmd: >-
+  docker exec leantime-db
+  mariadb-dump -u root -p{{ leantime_db_password }}
+  --all-databases --single-transaction
+
+leantime_health_path: "/"

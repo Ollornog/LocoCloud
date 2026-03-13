@@ -1,0 +1,36 @@
+---
+# roles/apps/rocketchat/defaults/main.yml
+# Rocket.Chat — Team communication platform
+# Native OIDC (configured via admin UI after deployment)
+# Requires MongoDB
+
+rocketchat_stack_path: "/opt/stacks/rocketchat"
+rocketchat_data_path: "/mnt/data/rocketchat"
+rocketchat_image: "rocket.chat:7"
+rocketchat_port: 8239
+
+# Domain
+rocketchat_domain: ""  # e.g. "msg.firma-abc.de"
+
+# Database (MongoDB)
+rocketchat_db_image: "mongo:7"
+rocketchat_db_oplog_user: "oploguser"
+rocketchat_db_oplog_password: ""  # Generated if empty
+
+# OIDC configured via admin UI:
+# Administration > Workspace > Settings > OAuth > Custom OAuth
+# PocketID callback URL: https://<domain>/_oauth/pocketid
+rocketchat_oidc_enabled: false
+
+# Caddy
+rocketchat_blocked_paths: []
+rocketchat_public_paths: []
+
+# Backup
+rocketchat_backup_paths:
+  - "/opt/stacks/rocketchat"
+  - "/mnt/data/rocketchat"
+
+rocketchat_pre_backup_cmd: "docker exec rocketchat-db mongodump --archive=/tmp/rocketchat.archive && docker cp rocketchat-db:/tmp/rocketchat.archive /opt/backups/dumps/rocketchat_mongo.archive"
+
+rocketchat_health_path: "/api/info"

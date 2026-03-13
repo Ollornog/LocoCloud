@@ -1,0 +1,28 @@
+---
+# roles/apps/backrest/defaults/main.yml
+# Backrest — Web UI for Restic backup management
+# No native auth — behind Tinyauth
+# Complements the existing backup role (Restic CLI + cron)
+
+backrest_stack_path: "/opt/stacks/backrest"
+backrest_data_path: "/mnt/data/backrest"
+backrest_image: "garethgeorge/backrest:latest"
+backrest_port: 9100
+
+# Domain
+backrest_domain: ""  # e.g. "backup.firma-abc.de"
+
+# Auth: Tinyauth forward-auth (no native auth)
+backrest_tinyauth: true
+
+# Caddy
+backrest_blocked_paths: []
+backrest_public_paths: []
+
+# Backup paths this instance manages (read-only access to app data)
+backrest_managed_paths:
+  - "/mnt/data"
+  - "/opt/stacks"
+  - "/opt/backups"
+
+backrest_health_path: "/"

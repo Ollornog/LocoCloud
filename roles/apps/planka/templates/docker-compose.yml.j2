@@ -1,0 +1,40 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Planka
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  planka:
+    image: {{ planka_image }}
+    container_name: planka
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ planka_port }}:1337"
+    volumes:
+      - {{ planka_data_path }}/avatars:/app/public/user-avatars
+      - {{ planka_data_path }}/backgrounds:/app/public/project-background-images
+      - {{ planka_data_path }}/attachments:/app/private/attachments
+    env_file:
+      - .env
+    depends_on:
+      planka-db:
+        condition: service_healthy
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  planka-db:
+    image: {{ planka_db_image }}
+    container_name: planka-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: {{ planka_db_name }}
+      POSTGRES_USER: {{ planka_db_user }}
+      POSTGRES_PASSWORD: {{ planka_db_password }}
+    volumes:
+      - {{ planka_data_path }}/db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ planka_db_user }} -d {{ planka_db_name }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

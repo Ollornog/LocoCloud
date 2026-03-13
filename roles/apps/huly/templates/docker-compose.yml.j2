@@ -1,0 +1,57 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Huly
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  huly:
+    image: {{ huly_image }}
+    container_name: huly
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ huly_port }}:8080"
+    environment:
+      SERVER_SECRET: "{{ huly_secret }}"
+      MONGO_URL: "mongodb://huly-mongo:27017/huly"
+      MINIO_ENDPOINT: huly-minio
+      MINIO_ACCESS_KEY: "{{ huly_minio_access_key }}"
+      MINIO_SECRET_KEY: "{{ huly_minio_secret_key }}"
+      ELASTIC_URL: "http://huly-elastic:9200"
+      ACCOUNTS_URL: "https://{{ huly_domain }}"
+      UPLOAD_URL: "https://{{ huly_domain }}/files"
+    depends_on:
+      - huly-mongo
+      - huly-minio
+      - huly-elastic
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  huly-mongo:
+    image: {{ huly_mongo_image }}
+    container_name: huly-mongo
+    restart: unless-stopped
+    volumes:
+      - {{ huly_data_path }}/mongo:/data/db
+
+  huly-minio:
+    image: {{ huly_minio_image }}
+    container_name: huly-minio
+    restart: unless-stopped
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: "{{ huly_minio_access_key }}"
+      MINIO_ROOT_PASSWORD: "{{ huly_minio_secret_key }}"
+    volumes:
+      - {{ huly_data_path }}/minio:/data
+
+  huly-elastic:
+    image: {{ huly_elastic_image }}
+    container_name: huly-elastic
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+      xpack.security.enabled: "false"
+    volumes:
+      - {{ huly_data_path }}/elastic:/usr/share/elasticsearch/data

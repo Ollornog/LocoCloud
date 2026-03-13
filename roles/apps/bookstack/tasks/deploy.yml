@@ -1,0 +1,62 @@
+---
+- name: Generate BookStack DB password if empty
+  ansible.builtin.set_fact:
+    bookstack_db_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: bookstack_db_password | length == 0
+
+- name: Generate BookStack APP_KEY if empty
+  ansible.builtin.set_fact:
+    bookstack_app_key: "base64:{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') | b64encode }}"
+  when: bookstack_app_key | length == 0
+
+- name: Create BookStack directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ bookstack_stack_path }}"
+    - "{{ bookstack_data_path }}"
+    - "{{ bookstack_data_path }}/config"
+    - "{{ bookstack_data_path }}/db"
+
+- name: Deploy BookStack docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ bookstack_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Start BookStack
+  community.docker.docker_compose_v2:
+    project_src: "{{ bookstack_stack_path }}"
+    state: present
+
+- name: Wait for BookStack to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ bookstack_port }}{{ bookstack_health_path }}"
+    method: GET
+    status_code: [200, 301, 302]
+  register: _bookstack_health
+  until: _bookstack_health.status in [200, 301, 302]
+  retries: 30
+  delay: 5
+
+- name: Store BookStack credentials in Vaultwarden
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — BookStack"
+    credential_username: "admin@admin.com"
+    credential_password: "password"
+    credential_uri: "https://{{ bookstack_domain }}"
+    credential_notes: |
+      BookStack — change default admin credentials immediately!
+      Default: admin@admin.com / password
+      APP_KEY: {{ bookstack_app_key }}
+      DB: {{ bookstack_db_password }}
+      Deployed: {{ ansible_facts.date_time.iso8601 }}
+  when:
+    - loco is defined
+    - loco.vaultwarden is defined

@@ -1,0 +1,65 @@
+---
+# roles/apps/vikunja/tasks/oidc.yml
+# Register OIDC client in PocketID for Vikunja
+
+- name: Create OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ vikunja_oidc_issuer_url | regex_replace('^https?://', '') }}/api/oidc/clients"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    body_format: json
+    body:
+      name: "Vikunja ({{ kunde_name }})"
+      callbackURLs:
+        - "https://{{ vikunja_domain }}/auth/openid/{{ vikunja_oidc_provider_name }}"
+    status_code: [200, 201]
+  register: _vikunja_oidc_client
+  when:
+    - vikunja_oidc_client_id | length == 0
+    - loco.pocketid.api_token | default('') | length > 0
+
+- name: Set OIDC client ID from API response
+  ansible.builtin.set_fact:
+    vikunja_oidc_client_id: "{{ _vikunja_oidc_client.json.id }}"
+  when: _vikunja_oidc_client is not skipped and _vikunja_oidc_client is changed
+
+- name: Generate OIDC client secret
+  ansible.builtin.uri:
+    url: "https://{{ vikunja_oidc_issuer_url | regex_replace('^https?://', '') }}/api/oidc/clients/{{ vikunja_oidc_client_id }}/secret"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    status_code: 200
+  register: _vikunja_secret_result
+  when: vikunja_oidc_client_id | default('') | length > 0
+
+- name: Set OIDC client secret
+  ansible.builtin.set_fact:
+    vikunja_oidc_client_secret: "{{ _vikunja_secret_result.json.secret }}"
+  when: _vikunja_secret_result is defined and _vikunja_secret_result is not skipped
+
+- name: Store Vikunja OIDC credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — Vikunja OIDC Client"
+    credential_username: "{{ vikunja_oidc_client_id }}"
+    credential_password: "{{ vikunja_oidc_client_secret }}"
+    credential_uri: "https://{{ vikunja_domain }}"
+    credential_notes: "PocketID OIDC client for Vikunja. Deployed: {{ ansible_facts.date_time.iso8601 }}"
+  when:
+    - loco is defined
+    - vikunja_oidc_client_id | length > 0
+
+- name: Redeploy Vikunja .env with OIDC credentials
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ vikunja_stack_path }}/.env"
+    mode: "0600"
+  notify: restart vikunja
+
+- name: Apply OIDC config immediately
+  ansible.builtin.meta: flush_handlers

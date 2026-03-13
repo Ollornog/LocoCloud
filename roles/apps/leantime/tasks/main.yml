@@ -1,0 +1,9 @@
+---
+- name: Deploy Leantime
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [leantime, deploy]
+
+- name: Configure OIDC for Leantime
+  ansible.builtin.import_tasks: oidc.yml
+  tags: [leantime, oidc]
+  when: leantime_oidc_enabled | default(false)

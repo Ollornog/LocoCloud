@@ -1,0 +1,48 @@
+---
+# roles/apps/zulip/defaults/main.yml
+# Zulip — Team chat (Slack alternative)
+# Native OIDC via PocketID. Heavy: includes PG, RabbitMQ, Memcached, Redis
+# WARNING: Minimum 2 GB RAM, 4 GB recommended for 100+ users
+
+zulip_stack_path: "/opt/stacks/zulip"
+zulip_data_path: "/mnt/data/zulip"
+zulip_image: "ghcr.io/zulip/zulip-server:11"
+zulip_port: 8238
+
+# Domain
+zulip_domain: ""  # e.g. "chat.firma-abc.de"
+
+# Database (bundled PostgreSQL)
+zulip_db_image: "zulip/zulip-postgresql:14"
+zulip_db_password: ""  # Generated if empty
+
+# Secrets
+zulip_secret_key: ""  # Generated if empty
+zulip_rabbitmq_password: ""  # Generated if empty
+
+# OIDC via PocketID
+zulip_oidc_enabled: false
+zulip_oidc_client_id: ""
+zulip_oidc_client_secret: ""
+zulip_oidc_url: ""  # e.g. "https://id.firma-abc.de"
+
+# LDAP via lldap (optional, can be used together with OIDC)
+zulip_ldap_enabled: false
+
+# SMTP
+zulip_smtp_host: ""
+zulip_smtp_user: ""
+zulip_smtp_password: ""
+
+# Caddy
+zulip_blocked_paths: []
+zulip_public_paths: []
+
+# Backup
+zulip_backup_paths:
+  - "/opt/stacks/zulip"
+  - "/mnt/data/zulip"
+
+zulip_pre_backup_cmd: "docker exec zulip-db pg_dumpall -U zulip > /opt/backups/dumps/zulip_pg.sql"
+
+zulip_health_path: "/api/v1/server_settings"

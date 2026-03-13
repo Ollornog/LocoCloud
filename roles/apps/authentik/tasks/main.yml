@@ -1,0 +1,4 @@
+---
+- name: Deploy authentik
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [authentik, deploy]

@@ -1,0 +1,38 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# n8n
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  n8n:
+    image: {{ n8n_image }}
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ n8n_port }}:5678"
+    volumes:
+      - {{ n8n_data_path }}/data:/home/node/.n8n
+    env_file:
+      - .env
+    depends_on:
+      n8n-db:
+        condition: service_healthy
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  n8n-db:
+    image: {{ n8n_db_image }}
+    container_name: n8n-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: {{ n8n_db_name }}
+      POSTGRES_USER: {{ n8n_db_user }}
+      POSTGRES_PASSWORD: {{ n8n_db_password }}
+    volumes:
+      - {{ n8n_data_path }}/db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ n8n_db_user }} -d {{ n8n_db_name }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

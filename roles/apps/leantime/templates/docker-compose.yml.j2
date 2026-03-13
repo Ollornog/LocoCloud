@@ -1,0 +1,41 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Leantime
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  leantime:
+    image: {{ leantime_image }}
+    container_name: leantime
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ leantime_port }}:8080"
+    volumes:
+      - {{ leantime_data_path }}/userfiles:/var/www/html/userfiles
+      - {{ leantime_data_path }}/public-userfiles:/var/www/html/public/userfiles
+      - {{ leantime_data_path }}/plugins:/var/www/html/app/Plugins
+    env_file:
+      - .env
+    depends_on:
+      leantime-db:
+        condition: service_healthy
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  leantime-db:
+    image: {{ leantime_db_image }}
+    container_name: leantime-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: {{ leantime_db_name }}
+      MYSQL_USER: {{ leantime_db_user }}
+      MYSQL_PASSWORD: {{ leantime_db_password }}
+      MYSQL_ROOT_PASSWORD: {{ leantime_db_password }}
+    volumes:
+      - {{ leantime_data_path }}/db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u root -p{{ leantime_db_password }} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

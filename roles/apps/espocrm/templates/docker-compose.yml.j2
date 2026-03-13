@@ -1,0 +1,59 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# EspoCRM
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  espocrm:
+    image: {{ espocrm_image }}
+    container_name: espocrm
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ espocrm_port }}:80"
+    volumes:
+      - {{ espocrm_data_path }}/data:/var/www/html/data
+      - {{ espocrm_data_path }}/custom:/var/www/html/custom
+      - {{ espocrm_data_path }}/client-custom:/var/www/html/client/custom
+    environment:
+      ESPOCRM_DATABASE_HOST: espocrm-db
+      ESPOCRM_DATABASE_USER: {{ espocrm_db_user }}
+      ESPOCRM_DATABASE_PASSWORD: {{ espocrm_db_password }}
+      ESPOCRM_DATABASE_NAME: {{ espocrm_db_name }}
+      ESPOCRM_ADMIN_USERNAME: {{ espocrm_admin_username }}
+      ESPOCRM_ADMIN_PASSWORD: {{ espocrm_admin_password }}
+      ESPOCRM_SITE_URL: "https://{{ espocrm_domain }}"
+    depends_on:
+      espocrm-db:
+        condition: service_healthy
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  espocrm-daemon:
+    image: {{ espocrm_daemon_image }}
+    container_name: espocrm-daemon
+    restart: unless-stopped
+    volumes:
+      - {{ espocrm_data_path }}/data:/var/www/html/data
+      - {{ espocrm_data_path }}/custom:/var/www/html/custom
+      - {{ espocrm_data_path }}/client-custom:/var/www/html/client/custom
+    entrypoint: docker-daemon.sh
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  espocrm-db:
+    image: {{ espocrm_db_image }}
+    container_name: espocrm-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: {{ espocrm_db_name }}
+      MYSQL_USER: {{ espocrm_db_user }}
+      MYSQL_PASSWORD: {{ espocrm_db_password }}
+      MYSQL_ROOT_PASSWORD: {{ espocrm_db_root_password }}
+    volumes:
+      - {{ espocrm_data_path }}/db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u root -p{{ espocrm_db_root_password }} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

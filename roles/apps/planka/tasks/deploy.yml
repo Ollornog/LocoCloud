@@ -1,0 +1,70 @@
+---
+# roles/apps/planka/tasks/deploy.yml
+
+- name: Generate Planka DB password if empty
+  ansible.builtin.set_fact:
+    planka_db_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: planka_db_password | length == 0
+
+- name: Generate Planka secret key if empty
+  ansible.builtin.set_fact:
+    planka_secret_key: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=64') }}"
+  when: planka_secret_key | length == 0
+
+- name: Create Planka directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ planka_stack_path }}"
+    - "{{ planka_data_path }}"
+    - "{{ planka_data_path }}/db"
+    - "{{ planka_data_path }}/avatars"
+    - "{{ planka_data_path }}/backgrounds"
+    - "{{ planka_data_path }}/attachments"
+
+- name: Deploy Planka docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ planka_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Deploy Planka .env
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ planka_stack_path }}/.env"
+    mode: "0600"
+
+- name: Start Planka
+  community.docker.docker_compose_v2:
+    project_src: "{{ planka_stack_path }}"
+    state: present
+
+- name: Wait for Planka to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ planka_port }}{{ planka_health_path }}"
+    method: GET
+    status_code: [200, 301, 302]
+  register: _planka_health
+  until: _planka_health.status in [200, 301, 302]
+  retries: 30
+  delay: 5
+
+- name: Store Planka credentials in Vaultwarden
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — Planka"
+    credential_username: "{{ planka_admin_email | default('admin') }}"
+    credential_password: "{{ planka_admin_password | default(planka_db_password) }}"
+    credential_uri: "https://{{ planka_domain }}"
+    credential_notes: |
+      Planka DB: {{ planka_db_password }}
+      Secret Key: {{ planka_secret_key }}
+      Deployed: {{ ansible_facts.date_time.iso8601 }}
+  when:
+    - loco is defined
+    - loco.vaultwarden is defined

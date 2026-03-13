@@ -3107,9 +3107,26 @@ Microsoft 365 / Google Workspace.
 | 8229 | Uptime Kuma |
 | 8230 | Listmonk |
 | 8231 | Invoice Ninja |
+| 8232 | EspoCRM |
+| 8233 | Planka |
+| 8234 | Vikunja |
+| 8235 | Leantime |
+| 8236 | Kimai |
+| 8237 | Solidtime |
+| 8238 | Zulip |
+| 8239 | Rocket.Chat |
+| 8240 | n8n |
+| 8241 | OrangeHRM |
+| 8242 | Easy!Appointments |
+| 8243 | BookStack |
+| 8244 | Directus |
+| 8245 | Huly |
+| 8246 | LimeSurvey |
 | 8085 | NocoDB (nur Master) |
+| 9000 | authentik HTTP (Kundenserver, optional) |
 | 9090 | Tinyauth |
 | 9091 | Prometheus (nur Master, intern) |
+| 9100 | Backrest (Restic Web UI) |
 | 12345 | Grafana Alloy (Kundenserver, intern) |
 
 ---

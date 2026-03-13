@@ -1,0 +1,44 @@
+---
+# roles/apps/bookstack/defaults/main.yml
+# BookStack — Wiki/documentation platform
+# Native OIDC via PocketID (env vars)
+
+bookstack_stack_path: "/opt/stacks/bookstack"
+bookstack_data_path: "/mnt/data/bookstack"
+bookstack_image: "lscr.io/linuxserver/bookstack:latest"
+bookstack_port: 8243
+
+# Domain
+bookstack_domain: ""  # e.g. "wiki.firma-abc.de"
+
+# Database (MariaDB)
+bookstack_db_image: "mariadb:11"
+bookstack_db_name: "bookstack"
+bookstack_db_user: "bookstack"
+bookstack_db_password: ""  # Generated if empty
+
+# APP_KEY (base64, generated if empty)
+bookstack_app_key: ""
+
+# OIDC via PocketID
+bookstack_oidc_enabled: false
+bookstack_oidc_client_id: ""
+bookstack_oidc_client_secret: ""
+bookstack_oidc_issuer: ""  # e.g. "https://id.firma-abc.de"
+bookstack_oidc_auto_initiate: true  # Auto-redirect to IdP
+
+# Caddy
+bookstack_blocked_paths: []
+bookstack_public_paths: []
+
+# Backup
+bookstack_backup_paths:
+  - "/opt/stacks/bookstack"
+  - "/mnt/data/bookstack"
+
+bookstack_pre_backup_cmd: >-
+  docker exec bookstack-db
+  mariadb-dump -u root -p{{ bookstack_db_password }}
+  --all-databases --single-transaction
+
+bookstack_health_path: "/"

@@ -1,0 +1,74 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Zulip
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  zulip:
+    image: {{ zulip_image }}
+    container_name: zulip
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ zulip_port }}:80"
+    volumes:
+      - {{ zulip_data_path }}/data:/data
+    environment:
+      DISABLE_HTTPS: "true"
+      SSL_CERTIFICATE_GENERATION: "self-signed"
+      SETTING_EXTERNAL_HOST: "{{ zulip_domain }}"
+      SETTING_ZULIP_ADMINISTRATOR: "{{ loco.operator.email | default('admin@example.com') }}"
+      DB_HOST: zulip-db
+      DB_HOST_PORT: "5432"
+      DB_USER: zulip
+      SECRETS_postgres_password: "{{ zulip_db_password }}"
+      SECRETS_secret_key: "{{ zulip_secret_key }}"
+      SECRETS_rabbitmq_password: "{{ zulip_rabbitmq_password }}"
+      SETTING_RABBITMQ_HOST: zulip-rabbitmq
+{% if zulip_oidc_enabled %}
+      ZULIP_AUTH_BACKENDS: "GenericOpenIdConnectBackend"
+      SETTING_SOCIAL_AUTH_OIDC_OIDC_URL: "{{ zulip_oidc_url }}"
+      SETTING_SOCIAL_AUTH_OIDC_ENABLED_IDPS: '{"pocketid": {"display_name": "PocketID", "display_icon": null}}'
+      SECRETS_social_auth_oidc_secret: "{{ zulip_oidc_client_secret }}"
+{% endif %}
+    depends_on:
+      - zulip-db
+      - zulip-rabbitmq
+      - zulip-memcached
+      - zulip-redis
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  zulip-db:
+    image: {{ zulip_db_image }}
+    container_name: zulip-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: zulip
+      POSTGRES_USER: zulip
+      POSTGRES_PASSWORD: {{ zulip_db_password }}
+    volumes:
+      - {{ zulip_data_path }}/db:/var/lib/postgresql/data
+
+  zulip-rabbitmq:
+    image: rabbitmq:3-alpine
+    container_name: zulip-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: zulip
+      RABBITMQ_DEFAULT_PASS: {{ zulip_rabbitmq_password }}
+    volumes:
+      - {{ zulip_data_path }}/rabbitmq:/var/lib/rabbitmq
+
+  zulip-memcached:
+    image: memcached:1-alpine
+    container_name: zulip-memcached
+    restart: unless-stopped
+    command: memcached -m 256
+
+  zulip-redis:
+    image: redis:7-alpine
+    container_name: zulip-redis
+    restart: unless-stopped
+    volumes:
+      - {{ zulip_data_path }}/redis:/data

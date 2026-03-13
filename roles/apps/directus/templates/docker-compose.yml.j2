@@ -1,0 +1,39 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Directus
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  directus:
+    image: {{ directus_image }}
+    container_name: directus
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ directus_port }}:8055"
+    volumes:
+      - {{ directus_data_path }}/uploads:/directus/uploads
+      - {{ directus_data_path }}/extensions:/directus/extensions
+    env_file:
+      - .env
+    depends_on:
+      directus-db:
+        condition: service_healthy
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  directus-db:
+    image: {{ directus_db_image }}
+    container_name: directus-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: {{ directus_db_name }}
+      POSTGRES_USER: {{ directus_db_user }}
+      POSTGRES_PASSWORD: {{ directus_db_password }}
+    volumes:
+      - {{ directus_data_path }}/db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ directus_db_user }} -d {{ directus_db_name }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

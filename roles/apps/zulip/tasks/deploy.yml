@@ -1,0 +1,69 @@
+---
+- name: Generate Zulip DB password if empty
+  ansible.builtin.set_fact:
+    zulip_db_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: zulip_db_password | length == 0
+
+- name: Generate Zulip secret key if empty
+  ansible.builtin.set_fact:
+    zulip_secret_key: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=64') }}"
+  when: zulip_secret_key | length == 0
+
+- name: Generate Zulip RabbitMQ password if empty
+  ansible.builtin.set_fact:
+    zulip_rabbitmq_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: zulip_rabbitmq_password | length == 0
+
+- name: Create Zulip directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ zulip_stack_path }}"
+    - "{{ zulip_data_path }}"
+    - "{{ zulip_data_path }}/data"
+    - "{{ zulip_data_path }}/db"
+    - "{{ zulip_data_path }}/rabbitmq"
+    - "{{ zulip_data_path }}/redis"
+
+- name: Deploy Zulip docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ zulip_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Start Zulip
+  community.docker.docker_compose_v2:
+    project_src: "{{ zulip_stack_path }}"
+    state: present
+
+- name: Wait for Zulip to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ zulip_port }}{{ zulip_health_path }}"
+    method: GET
+    status_code: [200, 301, 302]
+  register: _zulip_health
+  until: _zulip_health.status in [200, 301, 302]
+  retries: 60
+  delay: 10
+
+- name: Store Zulip credentials in Vaultwarden
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — Zulip"
+    credential_username: "zulip"
+    credential_password: "{{ zulip_db_password }}"
+    credential_uri: "https://{{ zulip_domain }}"
+    credential_notes: |
+      Zulip infrastructure credentials.
+      DB: {{ zulip_db_password }}
+      Secret Key: {{ zulip_secret_key }}
+      RabbitMQ: {{ zulip_rabbitmq_password }}
+      Deployed: {{ ansible_facts.date_time.iso8601 }}
+  when:
+    - loco is defined
+    - loco.vaultwarden is defined

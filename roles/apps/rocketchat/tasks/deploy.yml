@@ -1,0 +1,57 @@
+---
+- name: Create Rocket.Chat directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ rocketchat_stack_path }}"
+    - "{{ rocketchat_data_path }}"
+    - "{{ rocketchat_data_path }}/db"
+    - "{{ rocketchat_data_path }}/uploads"
+
+- name: Deploy Rocket.Chat docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ rocketchat_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Start Rocket.Chat
+  community.docker.docker_compose_v2:
+    project_src: "{{ rocketchat_stack_path }}"
+    state: present
+
+- name: Initialize MongoDB replica set
+  ansible.builtin.command: >
+    docker exec rocketchat-db mongosh --eval "try { rs.status() } catch(e) { rs.initiate() }"
+  register: _rc_rs_init
+  changed_when: "'initiated' in _rc_rs_init.stdout | lower"
+  failed_when: false
+
+- name: Wait for Rocket.Chat to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ rocketchat_port }}{{ rocketchat_health_path }}"
+    method: GET
+    status_code: [200, 301, 302]
+  register: _rc_health
+  until: _rc_health.status in [200, 301, 302]
+  retries: 60
+  delay: 10
+
+- name: Store Rocket.Chat info in Vaultwarden
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — Rocket.Chat"
+    credential_username: "admin"
+    credential_password: "configure-via-setup-wizard"
+    credential_uri: "https://{{ rocketchat_domain }}"
+    credential_notes: |
+      Rocket.Chat — configure admin + OIDC via web UI.
+      OIDC: Administration > Settings > OAuth > Custom OAuth
+      Deployed: {{ ansible_facts.date_time.iso8601 }}
+  when:
+    - loco is defined
+    - loco.vaultwarden is defined

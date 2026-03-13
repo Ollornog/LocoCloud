@@ -1,0 +1,43 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Easy!Appointments
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  easy-appointments:
+    image: {{ easy_appointments_image }}
+    container_name: easy-appointments
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ easy_appointments_port }}:80"
+    volumes:
+      - {{ easy_appointments_data_path }}/data:/var/www/html
+    environment:
+      BASE_URL: "https://{{ easy_appointments_domain }}"
+      DB_HOST: easy-appointments-db
+      DB_NAME: {{ easy_appointments_db_name }}
+      DB_USERNAME: {{ easy_appointments_db_user }}
+      DB_PASSWORD: {{ easy_appointments_db_password }}
+    depends_on:
+      easy-appointments-db:
+        condition: service_healthy
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  easy-appointments-db:
+    image: {{ easy_appointments_db_image }}
+    container_name: easy-appointments-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: {{ easy_appointments_db_name }}
+      MYSQL_USER: {{ easy_appointments_db_user }}
+      MYSQL_PASSWORD: {{ easy_appointments_db_password }}
+      MYSQL_ROOT_PASSWORD: {{ easy_appointments_db_root_password }}
+    volumes:
+      - {{ easy_appointments_data_path }}/db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p{{ easy_appointments_db_root_password }} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

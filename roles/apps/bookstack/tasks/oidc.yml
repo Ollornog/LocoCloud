@@ -1,0 +1,64 @@
+---
+# Register OIDC client in PocketID for BookStack
+
+- name: Create OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ bookstack_oidc_issuer | regex_replace('^https?://', '') }}/api/oidc/clients"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    body_format: json
+    body:
+      name: "BookStack ({{ kunde_name }})"
+      callbackURLs:
+        - "https://{{ bookstack_domain }}/oidc/callback"
+    status_code: [200, 201]
+  register: _bookstack_oidc_client
+  when:
+    - bookstack_oidc_client_id | length == 0
+    - loco.pocketid.api_token | default('') | length > 0
+
+- name: Set OIDC client ID from API response
+  ansible.builtin.set_fact:
+    bookstack_oidc_client_id: "{{ _bookstack_oidc_client.json.id }}"
+  when: _bookstack_oidc_client is not skipped and _bookstack_oidc_client is changed
+
+- name: Generate OIDC client secret
+  ansible.builtin.uri:
+    url: "https://{{ bookstack_oidc_issuer | regex_replace('^https?://', '') }}/api/oidc/clients/{{ bookstack_oidc_client_id }}/secret"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    status_code: 200
+  register: _bookstack_secret_result
+  when: bookstack_oidc_client_id | default('') | length > 0
+
+- name: Set OIDC client secret
+  ansible.builtin.set_fact:
+    bookstack_oidc_client_secret: "{{ _bookstack_secret_result.json.secret }}"
+  when: _bookstack_secret_result is defined and _bookstack_secret_result is not skipped
+
+- name: Store BookStack OIDC credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — BookStack OIDC Client"
+    credential_username: "{{ bookstack_oidc_client_id }}"
+    credential_password: "{{ bookstack_oidc_client_secret }}"
+    credential_uri: "https://{{ bookstack_domain }}"
+    credential_notes: "PocketID OIDC client for BookStack. Deployed: {{ ansible_facts.date_time.iso8601 }}"
+  when:
+    - loco is defined
+    - bookstack_oidc_client_id | length > 0
+
+- name: Redeploy BookStack with OIDC credentials
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ bookstack_stack_path }}/docker-compose.yml"
+    mode: "0644"
+  notify: restart bookstack
+
+- name: Apply OIDC config immediately
+  ansible.builtin.meta: flush_handlers

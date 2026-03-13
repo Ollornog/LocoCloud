@@ -1,0 +1,32 @@
+---
+- name: Create Backrest directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ backrest_stack_path }}"
+    - "{{ backrest_data_path }}"
+    - "{{ backrest_data_path }}/config"
+    - "{{ backrest_data_path }}/cache"
+
+- name: Deploy Backrest docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ backrest_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Start Backrest
+  community.docker.docker_compose_v2:
+    project_src: "{{ backrest_stack_path }}"
+    state: present
+
+- name: Wait for Backrest to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ backrest_port }}{{ backrest_health_path }}"
+    method: GET
+    status_code: [200, 301, 302]
+  register: _backrest_health
+  until: _backrest_health.status in [200, 301, 302]
+  retries: 30
+  delay: 5

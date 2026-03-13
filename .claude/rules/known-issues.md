@@ -69,6 +69,28 @@
 | Invoice Ninja PHP-FPM + Nginx | Sidecar-Pattern: PHP-FPM Container (`invoiceninja:5`) exponiert Port 9000 intern, Nginx leitet HTTP an FPM weiter. Shared Volume für `/var/www/app/public`. Kein Octane-Mode (experimentell). |
 | Invoice Ninja ZUGFeRD Validierung | ZUGFeRD-PDFs erzeugen ≠ validieren. Validierung mit `mustangproject` CLI separat prüfen. E-Rechnungs-Pflicht ab 2025 (DE) / teilweise AT. |
 | Invoice Ninja Client-Registrierung | `/client/register*` per Caddy auf 403 blocken. Sonst können sich beliebige Kunden selbst registrieren. |
+| EspoCRM OIDC nur via UI | OIDC-Config wird in `data/config.php` gespeichert, nicht via Env-Vars. Muss nach Deployment manuell in der Web-UI konfiguriert werden (Administration > Authentication > OIDC). |
+| EspoCRM braucht Daemon-Container | Cron-Jobs laufen in separatem Container (`docker-daemon.sh` Entrypoint). Ohne Daemon: keine Benachrichtigungen, kein Workflow. |
+| Planka DEFAULT_ADMIN bei jedem Start | `DEFAULT_ADMIN_*` Env-Vars setzen Admin bei JEDEM Container-Start zurück. Nach erstem Login aus `.env` entfernen! |
+| Planka WebSocket-Proxy nötig | Reverse-Proxy muss WebSockets weiterleiten, sonst hängt UI nach Login. Caddy macht das automatisch. |
+| Vikunja Scratch-Image | Container basiert auf Scratch — kein Shell, kein `docker exec`. Debugging nur via Logs. |
+| Vikunja PUBLICURL Pflicht | `VIKUNJA_SERVICE_PUBLICURL` muss gesetzt sein, sonst CORS-Fehler bei API-Calls. |
+| Kimai kein OIDC | Nur SAML 2.0. Für PocketID (OIDC): Tinyauth forward-auth + optional LDAP via lldap. |
+| Kimai LDAP via local.yaml | LDAP-Config per Bind-Mount auf `/opt/kimai/config/packages/local.yaml`. Nicht via Env-Vars konfigurierbar. |
+| n8n OIDC nur paid | Native OIDC/SAML braucht Business-Lizenz ($400+/Monat). Community-Workaround: `n8n-oidc` Hooks oder Tinyauth. |
+| n8n Encryption Key | `N8N_ENCRYPTION_KEY` NIEMALS verlieren — alle gespeicherten Credentials werden unwiederherstellbar! |
+| n8n DB_TYPE Wert | `DB_TYPE=postgresdb` (NICHT `postgres`). Häufiger Fehler. |
+| Zulip eigener nginx | Zulip bündelt eigenen nginx im Container. Hinter Caddy: `DISABLE_HTTPS=true` setzen, Port 80 mappen. |
+| Zulip Resource-Heavy | Minimum 2 GB RAM (PG + RabbitMQ + Memcached + Redis + App). 4 GB für 100+ User. |
+| Rocket.Chat MongoDB ReplicaSet | MongoDB muss als ReplicaSet laufen (`--replSet rs0`). Ohne ReplicaSet: Startup-Fehler. |
+| OrangeHRM Web-Installer | Erster Start erfordert Browser-basiertes Setup-Wizard. Nicht vollständig über Env-Vars automatisierbar. |
+| BookStack APP_KEY Pflicht | Seit v23.6.2+: APP_KEY wird NICHT mehr automatisch generiert. Muss manuell gesetzt werden. |
+| BookStack AUTH_METHOD exklusiv | Nur EIN Auth-Methode gleichzeitig (standard/oidc/ldap/saml2). Wechsel von standard auf oidc verlinkt bestehende Accounts NICHT automatisch. |
+| Directus SECRET Pflicht | Ohne `SECRET` Env-Var: Startup-Fehler. Langer Random-String für JWT-Signierung. |
+| Directus kein SemVer | Jedes Release kann Breaking Changes enthalten. Image-Tags pinnen, NICHT `:latest` verwenden. |
+| Huly Resource-Heavy | MongoDB + MinIO + Elasticsearch. Minimum 4 GB RAM empfohlen. |
+| LimeSurvey kein natives OIDC | Nur via Third-Party Plugin (Utrecht University). Tinyauth + LDAP ist stabiler. |
+| authentik nur für Kunden | Ersetzt PocketID + LLDAP + Tinyauth als All-in-One Alternative. NICHT für Master-Server (Master nutzt modularen Stack). ~1 GB RAM minimum. |
 
 ## Caddy
 

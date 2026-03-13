@@ -1,0 +1,62 @@
+---
+- name: Create OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ directus_oidc_issuer_url | regex_replace('^https?://', '') | regex_replace('/\\.well-known.*', '') }}/api/oidc/clients"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    body_format: json
+    body:
+      name: "Directus ({{ kunde_name }})"
+      callbackURLs:
+        - "https://{{ directus_domain }}/auth/login/pocketid/callback"
+    status_code: [200, 201]
+  register: _directus_oidc_client
+  when:
+    - directus_oidc_client_id | length == 0
+    - loco.pocketid.api_token | default('') | length > 0
+
+- name: Set OIDC client ID from API response
+  ansible.builtin.set_fact:
+    directus_oidc_client_id: "{{ _directus_oidc_client.json.id }}"
+  when: _directus_oidc_client is not skipped and _directus_oidc_client is changed
+
+- name: Generate OIDC client secret
+  ansible.builtin.uri:
+    url: "https://{{ directus_oidc_issuer_url | regex_replace('^https?://', '') | regex_replace('/\\.well-known.*', '') }}/api/oidc/clients/{{ directus_oidc_client_id }}/secret"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    status_code: 200
+  register: _directus_secret_result
+  when: directus_oidc_client_id | default('') | length > 0
+
+- name: Set OIDC client secret
+  ansible.builtin.set_fact:
+    directus_oidc_client_secret: "{{ _directus_secret_result.json.secret }}"
+  when: _directus_secret_result is defined and _directus_secret_result is not skipped
+
+- name: Store Directus OIDC credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — Directus OIDC Client"
+    credential_username: "{{ directus_oidc_client_id }}"
+    credential_password: "{{ directus_oidc_client_secret }}"
+    credential_uri: "https://{{ directus_domain }}"
+    credential_notes: "PocketID OIDC client for Directus. Deployed: {{ ansible_facts.date_time.iso8601 }}"
+  when:
+    - loco is defined
+    - directus_oidc_client_id | length > 0
+
+- name: Redeploy Directus .env with OIDC credentials
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ directus_stack_path }}/.env"
+    mode: "0600"
+  notify: restart directus
+
+- name: Apply OIDC config immediately
+  ansible.builtin.meta: flush_handlers

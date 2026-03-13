@@ -1,0 +1,4 @@
+---
+- name: Deploy Backrest
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [backrest, deploy]

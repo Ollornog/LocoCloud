@@ -1,0 +1,9 @@
+---
+- name: Deploy BookStack
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [bookstack, deploy]
+
+- name: Configure OIDC for BookStack
+  ansible.builtin.import_tasks: oidc.yml
+  tags: [bookstack, oidc]
+  when: bookstack_oidc_enabled | default(false)

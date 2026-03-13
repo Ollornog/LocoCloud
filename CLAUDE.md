@@ -65,6 +65,23 @@ roles/
     listmonk/            # PostgreSQL
     uptime_kuma/         # SQLite
     invoiceninja/        # MariaDB, Tinyauth (no native OIDC)
+    espocrm/             # MariaDB, OIDC via PocketID (UI config)
+    planka/              # PostgreSQL, OIDC via PocketID
+    vikunja/             # PostgreSQL, OIDC via PocketID
+    leantime/            # MariaDB, OIDC via PocketID
+    kimai/               # MariaDB, Tinyauth + LDAP (SAML only)
+    solidtime/           # PostgreSQL, Tinyauth
+    zulip/               # PG + RabbitMQ + Memcached + Redis, OIDC
+    rocketchat/          # MongoDB, OIDC via admin UI
+    n8n/                 # PostgreSQL, Tinyauth (OIDC = paid)
+    orangehrm/           # MariaDB, OIDC via admin UI
+    easy_appointments/   # MySQL, Tinyauth + LDAP
+    bookstack/           # MariaDB, OIDC via PocketID
+    directus/            # PostgreSQL, OIDC via PocketID (BSL 1.1)
+    huly/                # MongoDB + MinIO + Elasticsearch, Tinyauth
+    limesurvey/          # PostgreSQL, Tinyauth + LDAP
+    authentik/           # PostgreSQL + Redis, all-in-one IdP (customer alt)
+    backrest/            # No DB, Tinyauth (Restic Web UI)
 playbooks/
   setup-master.yml       # Master setup (run first)
   onboard-customer.yml   # New customer

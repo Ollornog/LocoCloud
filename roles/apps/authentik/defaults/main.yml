@@ -1,0 +1,50 @@
+---
+# roles/apps/authentik/defaults/main.yml
+# authentik — All-in-one identity provider
+# Replaces PocketID + LLDAP + Tinyauth for customer servers
+# NOT for master server (master uses PocketID + LLDAP + Tinyauth)
+#
+# authentik provides: OIDC, SAML, LDAP outbound, forward-auth, user management
+# Resource-heavy: ~1 GB RAM minimum (server + worker + PostgreSQL + Redis)
+
+authentik_stack_path: "/opt/stacks/authentik"
+authentik_data_path: "/mnt/data/authentik"
+authentik_image: "ghcr.io/goauthentik/server:2025.2"
+authentik_port: 9000
+authentik_port_https: 9443
+
+# Domain
+authentik_domain: ""  # e.g. "auth.firma-abc.de"
+
+# Database (PostgreSQL)
+authentik_db_image: "postgres:18"
+authentik_db_name: "authentik"
+authentik_db_user: "authentik"
+authentik_db_password: ""  # Generated if empty
+
+# Redis
+authentik_redis_image: "redis:7-alpine"
+
+# Secret key (generated if empty, persist forever)
+authentik_secret_key: ""
+
+# Bootstrap admin
+authentik_bootstrap_email: ""
+authentik_bootstrap_password: ""  # Generated if empty
+
+# LDAP outbound (optional — authentik can act as LDAP server)
+authentik_ldap_enabled: false
+authentik_ldap_port: 3389
+
+# Caddy
+authentik_blocked_paths: []
+authentik_public_paths: []
+
+# Backup
+authentik_backup_paths:
+  - "/opt/stacks/authentik"
+  - "/mnt/data/authentik"
+
+authentik_pre_backup_cmd: "docker exec authentik-db pg_dumpall -U postgres > /opt/backups/dumps/authentik_pg.sql"
+
+authentik_health_path: "/-/health/live/"

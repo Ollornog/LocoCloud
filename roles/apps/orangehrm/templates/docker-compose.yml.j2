@@ -1,0 +1,42 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# OrangeHRM
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  orangehrm:
+    image: {{ orangehrm_image }}
+    container_name: orangehrm
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ orangehrm_port }}:80"
+    volumes:
+      - {{ orangehrm_data_path }}/data:/var/www/html
+    environment:
+      ORANGEHRM_DATABASE_HOST: orangehrm-db
+      ORANGEHRM_DATABASE_USER: {{ orangehrm_db_user }}
+      ORANGEHRM_DATABASE_PASSWORD: {{ orangehrm_db_password }}
+      ORANGEHRM_DATABASE_NAME: {{ orangehrm_db_name }}
+    depends_on:
+      orangehrm-db:
+        condition: service_healthy
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  orangehrm-db:
+    image: {{ orangehrm_db_image }}
+    container_name: orangehrm-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: {{ orangehrm_db_name }}
+      MYSQL_USER: {{ orangehrm_db_user }}
+      MYSQL_PASSWORD: {{ orangehrm_db_password }}
+      MYSQL_ROOT_PASSWORD: {{ orangehrm_db_password }}
+    volumes:
+      - {{ orangehrm_data_path }}/db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u root -p{{ orangehrm_db_password }} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

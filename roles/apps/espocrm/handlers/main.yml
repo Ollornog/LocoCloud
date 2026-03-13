@@ -1,0 +1,11 @@
+---
+# roles/apps/espocrm/handlers/main.yml
+
+- name: restart caddy
+  ansible.builtin.command: docker restart caddy
+  changed_when: true
+
+- name: restart espocrm
+  community.docker.docker_compose_v2:
+    project_src: "{{ espocrm_stack_path }}"
+    state: restarted

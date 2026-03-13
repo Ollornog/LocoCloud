@@ -1,0 +1,4 @@
+---
+- name: Deploy Rocket.Chat
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [rocketchat, deploy]

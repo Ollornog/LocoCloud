@@ -1,0 +1,73 @@
+---
+- name: Generate Directus DB password if empty
+  ansible.builtin.set_fact:
+    directus_db_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: directus_db_password | length == 0
+
+- name: Generate Directus secret if empty
+  ansible.builtin.set_fact:
+    directus_secret: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=64') }}"
+  when: directus_secret | length == 0
+
+- name: Generate Directus admin password if empty
+  ansible.builtin.set_fact:
+    directus_admin_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=24') }}"
+  when: directus_admin_password | default('') | length == 0
+
+- name: Create Directus directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ directus_stack_path }}"
+    - "{{ directus_data_path }}"
+    - "{{ directus_data_path }}/db"
+    - "{{ directus_data_path }}/uploads"
+    - "{{ directus_data_path }}/extensions"
+
+- name: Deploy Directus docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ directus_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Deploy Directus .env
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ directus_stack_path }}/.env"
+    mode: "0600"
+
+- name: Start Directus
+  community.docker.docker_compose_v2:
+    project_src: "{{ directus_stack_path }}"
+    state: present
+
+- name: Wait for Directus to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ directus_port }}{{ directus_health_path }}"
+    method: GET
+    status_code: [200, 301, 302]
+  register: _directus_health
+  until: _directus_health.status in [200, 301, 302]
+  retries: 30
+  delay: 5
+
+- name: Store Directus credentials in Vaultwarden
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — Directus"
+    credential_username: "{{ directus_admin_email | default(directus_db_user) }}"
+    credential_password: "{{ directus_admin_password | default(directus_db_password) }}"
+    credential_uri: "https://{{ directus_domain }}"
+    credential_notes: |
+      Directus admin + DB credentials.
+      DB: {{ directus_db_password }}
+      Secret: {{ directus_secret }}
+      Deployed: {{ ansible_facts.date_time.iso8601 }}
+  when:
+    - loco is defined
+    - loco.vaultwarden is defined

@@ -1,0 +1,9 @@
+---
+- name: Deploy Directus
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [directus, deploy]
+
+- name: Configure OIDC for Directus
+  ansible.builtin.import_tasks: oidc.yml
+  tags: [directus, oidc]
+  when: directus_oidc_enabled | default(false)

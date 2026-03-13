@@ -1,0 +1,4 @@
+---
+- name: Deploy LimeSurvey
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [limesurvey, deploy]
