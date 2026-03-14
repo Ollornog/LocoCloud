@@ -1,0 +1,64 @@
+---
+# Register OIDC client in PocketID for Zulip
+
+- name: Create OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ zulip_oidc_url | regex_replace('^https?://', '') }}/api/oidc/clients"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    body_format: json
+    body:
+      name: "Zulip ({{ kunde_name }})"
+      callbackURLs:
+        - "https://{{ zulip_domain }}/complete/oidc/"
+    status_code: [200, 201]
+  register: _zulip_oidc_client
+  when:
+    - zulip_oidc_client_id | length == 0
+    - loco.pocketid.api_token | default('') | length > 0
+
+- name: Set OIDC client ID from API response
+  ansible.builtin.set_fact:
+    zulip_oidc_client_id: "{{ _zulip_oidc_client.json.id }}"
+  when: _zulip_oidc_client is not skipped and _zulip_oidc_client is changed
+
+- name: Generate OIDC client secret
+  ansible.builtin.uri:
+    url: "https://{{ zulip_oidc_url | regex_replace('^https?://', '') }}/api/oidc/clients/{{ zulip_oidc_client_id }}/secret"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    status_code: 200
+  register: _zulip_secret_result
+  when: zulip_oidc_client_id | default('') | length > 0
+
+- name: Set OIDC client secret
+  ansible.builtin.set_fact:
+    zulip_oidc_client_secret: "{{ _zulip_secret_result.json.secret }}"
+  when: _zulip_secret_result is defined and _zulip_secret_result is not skipped
+
+- name: Store Zulip OIDC credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — Zulip OIDC Client"
+    credential_username: "{{ zulip_oidc_client_id }}"
+    credential_password: "{{ zulip_oidc_client_secret }}"
+    credential_uri: "https://{{ zulip_domain }}"
+    credential_notes: "PocketID OIDC client for Zulip. Deployed: {{ ansible_facts.date_time.iso8601 }}"
+  when:
+    - loco is defined
+    - zulip_oidc_client_id | length > 0
+
+- name: Redeploy Zulip docker-compose.yml with OIDC
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ zulip_stack_path }}/docker-compose.yml"
+    mode: "0644"
+  notify: restart zulip
+
+- name: Apply OIDC config immediately
+  ansible.builtin.meta: flush_handlers

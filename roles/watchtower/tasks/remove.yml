@@ -1,0 +1,20 @@
+---
+# roles/watchtower/tasks/remove.yml
+# Idempotent removal of Watchtower from customer servers.
+# Watchtower has been replaced by manual Ansible updates via Semaphore.
+
+- name: Check if Watchtower stack exists
+  ansible.builtin.stat:
+    path: "{{ watchtower_stack_path }}/docker-compose.yml"
+  register: _watchtower_compose
+
+- name: Stop and remove Watchtower
+  community.docker.docker_compose_v2:
+    project_src: "{{ watchtower_stack_path }}"
+    state: absent
+  when: _watchtower_compose.stat.exists
+
+- name: Remove Watchtower stack directory
+  ansible.builtin.file:
+    path: "{{ watchtower_stack_path }}"
+    state: absent

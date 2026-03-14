@@ -13,8 +13,7 @@
 | Tinyauth deaktiviert per Default | Alle Apps haben eigene OIDC-Auth via PocketID (SSO-only, Signup disabled). Tinyauth ist optional (`loco.tinyauth.enabled: false`) für Apps ohne eigene Auth. Verursachte CSS/JS-Ladeprobleme bei öffentlichen Signing-Links (Documenso `/d/*`). |
 | LXC Bootstrap Chicken-and-Egg | Frische LXCs haben kein SSH/Netbird. Lösung: `pct exec` via Proxmox-Host (delegiert). |
 | Netbird-IP erst nach Join bekannt | Bootstrap via `pct exec`, Netbird-IP aus `netbird status --json` lesen, dann `hosts.yml` updaten. |
-| Watchtower + `:latest` = Breaking Changes | Image-Tags auf Major-Version pinnen (`nextcloud:29`). Watchtower nur Label-basiert. Major-Updates manuell. |
-| Watchtower darf KEINE Infra-Container updaten | Netbird, Caddy, PocketID, Tinyauth, Semaphore, Grafana, Alloy, NocoDB: KEIN Watchtower-Label. Updates NUR über Ansible. Vorfall: Watchtower hat Netbird-Server aktualisiert → Relay-Endpoint geändert → Tunnel kaputt. |
+| Watchtower ENTFERNT | Watchtower wurde komplett entfernt wegen Silent Breaking Changes (Netbird v0.65 Vorfall). `watchtower`-Rolle entfernt bestehende Installationen. Updates NUR über `playbooks/update-customer.yml` via Semaphore. Image-Tags auf Major-Version pinnen (`nextcloud:29`). |
 | Netbird 502 nach Watchtower-Update (v0.65.3) | Ab v0.65.0 hat Netbird den Relay-Endpoint von `/relay/*` auf `/relay*` geändert. Caddy-Pfad-Matcher greift nicht mehr + TLS-SNI-Mismatch. Fix: `handle /relay*` (ohne Slash) und `tls_server_name` pro Domain im `transport http` Block. |
 | Netbird P2P statt Relay (Server ↔ LXC) | Wenn Netbird-Server und Peer auf demselben Host laufen: Eingebetteter STUN-Server kann sich nicht selbst vermitteln → STUN bleibt auf "Checking..." hängen → Relay statt P2P. Fix: Externe STUN-Server (Cloudflare + Google) in `/opt/stacks/netbird/config.yaml` eintragen. |
 | Netbird v0.66.0 JSON-Format geändert | `netbird status --json` hat kein top-level `.status`/`.ip` mehr. Stattdessen: `.management.connected` (bool) und `.netbirdIp` (string mit CIDR). `netbird_client`-Rolle wurde angepasst. |
@@ -42,11 +41,55 @@
 | Nextcloud HSTS-Warning | Apache im Container setzt Header selbst via Volume-Mount `security.conf` |
 | Nextcloud Single Logout | `--send-id-token-hint=0` in user_oidc setzen |
 | Nextcloud extrem langsam (1+ Min Ladezeit) | Tinyauth Forward-Auth als Bottleneck: Jeder Sub-Request (JS, CSS, Fonts, Bilder — 184 Stück) geht durch Tinyauth-Roundtrip über Netbird. 184 × 150ms + Queuing = über 1 Minute. Fix: `import auth` aus dem Nextcloud Caddy-Block entfernen — NC hat eigene OIDC-Auth über PocketID. |
+| Nextcloud Chunked Upload + inotifywait | NC schreibt `.ocTransferId*.part` → dann rename. Watcher braucht `moved_to` Event (fängt rename ab) + `.part`-Filter (ignoriert Temp-Datei). |
+| Nextcloud `occ files_external:delete` Bestätigung | Erwartet interaktive Bestätigung. Fix: `echo "y" \| docker exec -i -u www-data nextcloud php occ files_external:delete <ID>` |
+| Paperless Consume-Ordner Permissions | `chmod 777` + kein Sticky Bit (`chmod -t`). Watcher (root) kopiert rein, Paperless (UID 1000) muss nach Verarbeitung löschen können. Sticky Bit verhindert cross-user Delete → Paperless bleibt hängen. |
+| Paperless kein Archiv für non-PDF | `.txt`, `.jpg` etc. landen nur in `originals/`, nicht in `archive/`. Archiv enthält nur OCR'd PDFs. Nextcloud-Mount deshalb auf `documents/` (Elternordner mit allen 3 Unterordnern). |
+| Paperless `trash/` erst nach erstem Löschen | Unterordner `trash/` existiert erst nach dem ersten Dokument-Löschen in Paperless. Normales Verhalten. |
+| NC-Paperless Watcher 1 statt 3 Tasks | `systemctl status` zeigt nur 1 Task statt 3 (bash + inotifywait + bash). Ursache: Script-Syntaxfehler. Fix: `bash -n /opt/scripts/nc-consume-watcher.sh` prüfen, dann `systemctl restart`. |
 | Paperless ESC-Registrierung | `PAPERLESS_ACCOUNT_ALLOW_SIGNUPS: false` explizit setzen! |
+| Paperless OIDC Callback-URL | Provider-ID muss im Pfad stehen: `/accounts/oidc/pocketid/login/callback/` (NICHT `/accounts/oidc/callback/`). |
+| Paperless API /api/ gibt 302 bei SSO | Root-Endpoint `/api/` leitet bei aktivem SSO um. Für Health-Checks `/api/tags/` verwenden. |
+| Paperless SOCIALACCOUNT_PROVIDERS | `PAPERLESS_APPS=allauth.socialaccount.providers.openid_connect` muss gesetzt sein, sonst wird der OIDC-Provider ignoriert. |
+| Paperless Consumption-Trigger braucht Filter | Workflow mit `type: 1` (Consumption Started) braucht mindestens einen Filter (`filter_filename: "*"` für alle). Ohne Filter wird der Trigger nie ausgelöst. |
+| Paperless Default Permissions pro User | Settings → Permissions gilt nur für den eingeloggten User, nicht global. Für automatische Zuweisung bei Mail/Consume: Workflow mit `assign_view_groups`/`assign_change_groups`. |
+| Paperless IMAP-Ordner bei Dovecot | Alle Ordner haben `INBOX.` Prefix. In Mail-Regeln: `INBOX.Archiv`, nicht `Archiv`. |
+| Paperless API Trailing Slash | Alle API-Endpoints enden mit `/`. Ohne Slash gibt es 301 Redirects. |
 | PocketID /register | Per Caddy auf 403 blocken. PocketID kann Registrierung nicht nativ deaktivieren. |
+| PocketID + LDAP: lokale Accounts kollidieren | Lokaler PocketID-Account mit gleicher E-Mail wie LDAP-Account → LDAP-Account wird ignoriert. Fix: Lokale Accounts ERST löschen, dann LDAP aktivieren. |
+| PocketID LDAP-Sync max 1h | User/Gruppen werden beim Start + stündlich gesynct. Kein Sofort-Trigger. Für sofortige Sperrung: App muss direkt LDAP sprechen (Nextcloud, Pingvin Share). |
+| lldap Web-UI NICHT öffentlich exponieren | Port 17170 nur auf 127.0.0.1 binden. Zugriff nur via Netbird. Keine Caddy-Route erstellen! |
+| lldap Admin-User ist fix "admin" | Kann nicht umbenannt werden. Service-Account für App-Bindings erstellen (uid=readonly). |
 | Netbird Dashboard lokaler Login | Combined Setup: `localAuthDisabled: true` in `config.yaml` unter `auth:` setzen, dann `docker restart netbird-server`. Embedded IdP (Dex) muss auch `enabled: false` sein. Vorher PocketID als externen IdP konfigurieren, sonst Aussperrung! |
 | Semaphore DB env var | `SEMAPHORE_DB` (NICHT `SEMAPHORE_DB_NAME`). Falscher Name → Semaphore kann keine DB-Verbindung herstellen → Crash beim Start → Connection refused auf Port 3000. |
 | Semaphore PG Passwort-Mismatch | PostgreSQL liest `POSTGRES_PASSWORD` nur bei erster DB-Init. Bei erneutem Run mit neuem Passwort → `password authentication failed`. `deploy.yml` hat zweistufigen Schutz: 1) Passwort-Persistenz aus bestehender `.env`, 2) Auto-Recovery bei Mismatch (Logs prüfen → DB-Reset → Neustart). |
+| Invoice Ninja kein OIDC | Kein nativer OIDC-Support. Auth via Tinyauth forward-auth (`import auth` in Caddy). `invoiceninja_tinyauth: true` in Inventar. |
+| Invoice Ninja APP_KEY | Muss `base64:...`-Format haben. Wird beim ersten Deploy via `php artisan key:generate --show` generiert. Bei Key-Verlust: alle verschlüsselten Daten (Tokens, API-Keys) unlesbar. |
+| Invoice Ninja PHP-FPM + Nginx | Sidecar-Pattern: PHP-FPM Container (`invoiceninja:5`) exponiert Port 9000 intern, Nginx leitet HTTP an FPM weiter. Shared Volume für `/var/www/app/public`. Kein Octane-Mode (experimentell). |
+| Invoice Ninja ZUGFeRD Validierung | ZUGFeRD-PDFs erzeugen ≠ validieren. Validierung mit `mustangproject` CLI separat prüfen. E-Rechnungs-Pflicht ab 2025 (DE) / teilweise AT. |
+| Invoice Ninja Client-Registrierung | `/client/register*` per Caddy auf 403 blocken. Sonst können sich beliebige Kunden selbst registrieren. |
+| EspoCRM OIDC nur via UI | OIDC-Config wird in `data/config.php` gespeichert, nicht via Env-Vars. Muss nach Deployment manuell in der Web-UI konfiguriert werden (Administration > Authentication > OIDC). |
+| EspoCRM braucht Daemon-Container | Cron-Jobs laufen in separatem Container (`docker-daemon.sh` Entrypoint). Ohne Daemon: keine Benachrichtigungen, kein Workflow. |
+| Planka DEFAULT_ADMIN bei jedem Start | `DEFAULT_ADMIN_*` Env-Vars setzen Admin bei JEDEM Container-Start zurück. Nach erstem Login aus `.env` entfernen! |
+| Planka WebSocket-Proxy nötig | Reverse-Proxy muss WebSockets weiterleiten, sonst hängt UI nach Login. Caddy macht das automatisch. |
+| Vikunja Scratch-Image | Container basiert auf Scratch — kein Shell, kein `docker exec`. Debugging nur via Logs. |
+| Vikunja PUBLICURL Pflicht | `VIKUNJA_SERVICE_PUBLICURL` muss gesetzt sein, sonst CORS-Fehler bei API-Calls. |
+| Kimai kein OIDC | Nur SAML 2.0. Für PocketID (OIDC): Tinyauth forward-auth + optional LDAP via lldap. |
+| Kimai LDAP via local.yaml | LDAP-Config per Bind-Mount auf `/opt/kimai/config/packages/local.yaml`. Nicht via Env-Vars konfigurierbar. |
+| n8n OIDC nur paid | Native OIDC/SAML braucht Business-Lizenz ($400+/Monat). Community-Workaround: `n8n-oidc` Hooks oder Tinyauth. |
+| n8n Encryption Key | `N8N_ENCRYPTION_KEY` NIEMALS verlieren — alle gespeicherten Credentials werden unwiederherstellbar! |
+| n8n DB_TYPE Wert | `DB_TYPE=postgresdb` (NICHT `postgres`). Häufiger Fehler. |
+| Zulip eigener nginx | Zulip bündelt eigenen nginx im Container. Hinter Caddy: `DISABLE_HTTPS=true` setzen, Port 80 mappen. |
+| Zulip Resource-Heavy | Minimum 2 GB RAM (PG + RabbitMQ + Memcached + Redis + App). 4 GB für 100+ User. |
+| Rocket.Chat MongoDB ReplicaSet | MongoDB muss als ReplicaSet laufen (`--replSet rs0`). Ohne ReplicaSet: Startup-Fehler. |
+| OrangeHRM Web-Installer | Erster Start erfordert Browser-basiertes Setup-Wizard. Nicht vollständig über Env-Vars automatisierbar. |
+| BookStack APP_KEY Pflicht | Seit v23.6.2+: APP_KEY wird NICHT mehr automatisch generiert. Muss manuell gesetzt werden. |
+| BookStack AUTH_METHOD exklusiv | Nur EIN Auth-Methode gleichzeitig (standard/oidc/ldap/saml2). Wechsel von standard auf oidc verlinkt bestehende Accounts NICHT automatisch. |
+| Directus SECRET Pflicht | Ohne `SECRET` Env-Var: Startup-Fehler. Langer Random-String für JWT-Signierung. |
+| Directus kein SemVer | Jedes Release kann Breaking Changes enthalten. Image-Tags pinnen, NICHT `:latest` verwenden. |
+| Huly Resource-Heavy | MongoDB + MinIO + Elasticsearch. Minimum 4 GB RAM empfohlen. |
+| LimeSurvey kein natives OIDC | Nur via Third-Party Plugin (Utrecht University). Tinyauth + LDAP ist stabiler. |
+| authentik nur für Kunden | Ersetzt PocketID + LLDAP + Tinyauth als All-in-One Alternative. NICHT für Master-Server (Master nutzt modularen Stack). ~1 GB RAM minimum. |
 
 ## Caddy
 

@@ -1,0 +1,36 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Solidtime
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  solidtime:
+    image: {{ solidtime_image }}
+    container_name: solidtime
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ solidtime_port }}:8000"
+    volumes:
+      - {{ solidtime_data_path }}/storage:/var/www/html/storage
+    env_file:
+      - .env
+    depends_on:
+      solidtime-db:
+        condition: service_healthy
+
+  solidtime-db:
+    image: {{ solidtime_db_image }}
+    container_name: solidtime-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: {{ solidtime_db_name }}
+      POSTGRES_USER: {{ solidtime_db_user }}
+      POSTGRES_PASSWORD: {{ solidtime_db_password }}
+    volumes:
+      - {{ solidtime_data_path }}/db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ solidtime_db_user }} -d {{ solidtime_db_name }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

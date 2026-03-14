@@ -1,0 +1,44 @@
+---
+# roles/apps/easy_appointments/defaults/main.yml
+# Easy!Appointments — Appointment scheduling
+# No native OIDC — uses Tinyauth + LDAP via lldap
+# Public booking page is intentionally unauthenticated
+
+easy_appointments_stack_path: "/opt/stacks/easy-appointments"
+easy_appointments_data_path: "/mnt/data/easy-appointments"
+easy_appointments_image: "alextselegidis/easyappointments:latest"
+easy_appointments_port: 8242
+
+# Domain
+easy_appointments_domain: ""  # e.g. "termin.firma-abc.de"
+
+# Database (MySQL)
+easy_appointments_db_image: "mysql:8"
+easy_appointments_db_name: "easyappointments"
+easy_appointments_db_user: "easyappointments"
+easy_appointments_db_password: ""  # Generated if empty
+easy_appointments_db_root_password: ""  # Generated if empty
+
+# Auth: Tinyauth for admin backend, public booking page open
+easy_appointments_tinyauth: true
+
+# LDAP via lldap (staff authentication)
+easy_appointments_ldap_enabled: false
+
+# Caddy: admin paths behind Tinyauth, public booking open
+easy_appointments_blocked_paths: []
+easy_appointments_public_paths:
+  - "/index.php/booking*"
+  - "/index.php/appointments*"
+
+# Backup
+easy_appointments_backup_paths:
+  - "/opt/stacks/easy-appointments"
+  - "/mnt/data/easy-appointments"
+
+easy_appointments_pre_backup_cmd: >-
+  docker exec easy-appointments-db
+  mysqldump -u root -p{{ easy_appointments_db_root_password }}
+  --all-databases --single-transaction
+
+easy_appointments_health_path: "/"

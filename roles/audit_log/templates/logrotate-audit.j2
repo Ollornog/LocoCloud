@@ -1,0 +1,10 @@
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+{{ audit_log_path }}/*.log {
+    daily
+    rotate {{ audit_log_local_retention_days }}
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

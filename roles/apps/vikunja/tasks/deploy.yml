@@ -1,0 +1,68 @@
+---
+# roles/apps/vikunja/tasks/deploy.yml
+
+- name: Generate Vikunja DB password if empty
+  ansible.builtin.set_fact:
+    vikunja_db_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: vikunja_db_password | length == 0
+
+- name: Generate Vikunja JWT secret if empty
+  ansible.builtin.set_fact:
+    vikunja_jwt_secret: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=64') }}"
+  when: vikunja_jwt_secret | length == 0
+
+- name: Create Vikunja directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ vikunja_stack_path }}"
+    - "{{ vikunja_data_path }}"
+    - "{{ vikunja_data_path }}/db"
+    - "{{ vikunja_data_path }}/files"
+
+- name: Deploy Vikunja docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ vikunja_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Deploy Vikunja .env
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ vikunja_stack_path }}/.env"
+    mode: "0600"
+
+- name: Start Vikunja
+  community.docker.docker_compose_v2:
+    project_src: "{{ vikunja_stack_path }}"
+    state: present
+
+- name: Wait for Vikunja to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ vikunja_port }}{{ vikunja_health_path }}"
+    method: GET
+    status_code: [200, 301, 302]
+  register: _vikunja_health
+  until: _vikunja_health.status in [200, 301, 302]
+  retries: 30
+  delay: 5
+
+- name: Store Vikunja credentials in Vaultwarden
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — Vikunja"
+    credential_username: "{{ vikunja_db_user }}"
+    credential_password: "{{ vikunja_db_password }}"
+    credential_uri: "https://{{ vikunja_domain }}"
+    credential_notes: |
+      Vikunja DB + JWT credentials.
+      JWT Secret: {{ vikunja_jwt_secret }}
+      Deployed: {{ ansible_facts.date_time.iso8601 }}
+  when:
+    - loco is defined
+    - loco.vaultwarden is defined

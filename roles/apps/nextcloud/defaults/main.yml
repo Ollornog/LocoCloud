@@ -56,6 +56,16 @@ nextcloud_preview_providers:
 nextcloud_admin_user: "admin"
 nextcloud_admin_password: ""  # Generated if empty
 
+# LDAP via lldap (user directory — real-time user status check)
+# Recommended: LDAP for user provisioning, OIDC for login (passkeys).
+# Or: LDAP only (username+password login, simpler setup).
+nextcloud_ldap_enabled: false
+nextcloud_ldap_host: "127.0.0.1"
+nextcloud_ldap_port: 3890
+nextcloud_ldap_bind_dn: ""       # e.g. "uid=readonly,ou=people,dc=firma,dc=at"
+nextcloud_ldap_bind_password: ""
+nextcloud_ldap_base_dn: ""       # e.g. "dc=firma,dc=at"
+
 # OIDC via PocketID
 nextcloud_oidc_enabled: false
 nextcloud_oidc_client_id: ""

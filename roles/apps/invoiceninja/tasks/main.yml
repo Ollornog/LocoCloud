@@ -1,0 +1,11 @@
+---
+# roles/apps/invoiceninja/tasks/main.yml
+
+- name: Deploy Invoice Ninja
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [invoiceninja, deploy]
+
+- name: Provision Invoice Ninja
+  ansible.builtin.import_tasks: provision.yml
+  tags: [invoiceninja, provision]
+  when: invoiceninja_provision | default(false)

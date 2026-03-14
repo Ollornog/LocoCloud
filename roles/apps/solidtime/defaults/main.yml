@@ -1,0 +1,38 @@
+---
+# roles/apps/solidtime/defaults/main.yml
+# Solidtime — Open-source time tracking (Toggl alternative)
+# No native OIDC — behind Tinyauth per user request
+
+solidtime_stack_path: "/opt/stacks/solidtime"
+solidtime_data_path: "/mnt/data/solidtime"
+solidtime_image: "docker.solidtime.io/solidtime/solidtime:latest"
+solidtime_port: 8237
+
+# Domain
+solidtime_domain: ""  # e.g. "track.firma-abc.de"
+
+# Database (PostgreSQL)
+solidtime_db_image: "postgres:18"
+solidtime_db_name: "solidtime"
+solidtime_db_user: "solidtime"
+solidtime_db_password: ""  # Generated if empty
+
+# APP_KEY (base64 format, generated on first deploy)
+solidtime_app_key: ""
+
+# Auth: Tinyauth forward-auth
+solidtime_tinyauth: true
+
+# Caddy
+solidtime_blocked_paths:
+  - "/register*"
+solidtime_public_paths: []
+
+# Backup
+solidtime_backup_paths:
+  - "/opt/stacks/solidtime"
+  - "/mnt/data/solidtime"
+
+solidtime_pre_backup_cmd: "docker exec solidtime-db pg_dumpall -U postgres > /opt/backups/dumps/solidtime_pg.sql"
+
+solidtime_health_path: "/"

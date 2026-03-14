@@ -1,0 +1,11 @@
+---
+# roles/apps/vikunja/tasks/main.yml
+
+- name: Deploy Vikunja
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [vikunja, deploy]
+
+- name: Configure OIDC for Vikunja
+  ansible.builtin.import_tasks: oidc.yml
+  tags: [vikunja, oidc]
+  when: vikunja_oidc_enabled | default(false)

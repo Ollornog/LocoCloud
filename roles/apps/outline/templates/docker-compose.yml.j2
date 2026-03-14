@@ -18,8 +18,6 @@ services:
     depends_on:
       - outline-db
       - outline-redis
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   outline-db:
     image: {{ outline_db_image }}

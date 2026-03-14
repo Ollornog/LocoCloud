@@ -1,0 +1,75 @@
+---
+- name: Generate authentik DB password if empty
+  ansible.builtin.set_fact:
+    authentik_db_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: authentik_db_password | length == 0
+
+- name: Generate authentik secret key if empty
+  ansible.builtin.set_fact:
+    authentik_secret_key: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=64') }}"
+  when: authentik_secret_key | length == 0
+
+- name: Generate authentik bootstrap password if empty
+  ansible.builtin.set_fact:
+    authentik_bootstrap_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=24') }}"
+  when: authentik_bootstrap_password | default('') | length == 0
+
+- name: Create authentik directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ authentik_stack_path }}"
+    - "{{ authentik_data_path }}"
+    - "{{ authentik_data_path }}/db"
+    - "{{ authentik_data_path }}/media"
+    - "{{ authentik_data_path }}/templates"
+    - "{{ authentik_data_path }}/certs"
+    - "{{ authentik_data_path }}/redis"
+
+- name: Deploy authentik docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ authentik_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Deploy authentik .env
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ authentik_stack_path }}/.env"
+    mode: "0600"
+
+- name: Start authentik
+  community.docker.docker_compose_v2:
+    project_src: "{{ authentik_stack_path }}"
+    state: present
+
+- name: Wait for authentik to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ authentik_port }}{{ authentik_health_path }}"
+    method: GET
+    status_code: [200, 301, 302]
+  register: _authentik_health
+  until: _authentik_health.status in [200, 301, 302]
+  retries: 60
+  delay: 10
+
+- name: Store authentik credentials in Vaultwarden
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — authentik"
+    credential_username: "{{ authentik_bootstrap_email | default('akadmin') }}"
+    credential_password: "{{ authentik_bootstrap_password }}"
+    credential_uri: "https://{{ authentik_domain }}"
+    credential_notes: |
+      authentik identity provider credentials.
+      DB: {{ authentik_db_password }}
+      Secret Key: {{ authentik_secret_key }}
+      Deployed: {{ ansible_facts.date_time.iso8601 }}
+  when:
+    - loco is defined
+    - loco.vaultwarden is defined

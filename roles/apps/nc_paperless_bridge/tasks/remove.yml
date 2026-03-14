@@ -1,0 +1,20 @@
+---
+# roles/apps/nc_paperless_bridge/tasks/remove.yml
+
+- name: Stop and disable watcher service
+  ansible.builtin.systemd:
+    name: nc-consume-watcher.service
+    enabled: false
+    state: stopped
+  failed_when: false
+
+- name: Remove watcher systemd service file
+  ansible.builtin.file:
+    path: /etc/systemd/system/nc-consume-watcher.service
+    state: absent
+  notify: reload systemd
+
+- name: Remove watcher script
+  ansible.builtin.file:
+    path: "{{ nc_paperless_watcher_script }}"
+    state: absent

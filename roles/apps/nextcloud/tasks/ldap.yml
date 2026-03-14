@@ -1,0 +1,61 @@
+---
+# roles/apps/nextcloud/tasks/ldap.yml
+# Configure LDAP (user_ldap) for Nextcloud against lldap.
+# Checks user status on every request — instant lockout when disabled in lldap.
+
+- name: Enable user_ldap app
+  ansible.builtin.command: >
+    docker exec -u www-data nextcloud
+    php occ app:enable user_ldap
+  register: nc_ldap_enable
+  changed_when: "'enabled' in nc_ldap_enable.stdout"
+  failed_when: false
+
+- name: Check if LDAP config s01 exists
+  ansible.builtin.command: >
+    docker exec -u www-data nextcloud
+    php occ ldap:show-config s01
+  register: nc_ldap_check
+  changed_when: false
+  failed_when: false
+
+- name: Create empty LDAP config
+  ansible.builtin.command: >
+    docker exec -u www-data nextcloud
+    php occ ldap:create-empty-config
+  when: nc_ldap_check.rc != 0
+
+- name: Configure LDAP server connection
+  ansible.builtin.command: >
+    docker exec -u www-data nextcloud
+    php occ ldap:set-config s01 {{ item.key }} "{{ item.value }}"
+  loop:
+    # Server connection
+    - { key: "ldapHost", value: "{{ nextcloud_ldap_host }}" }
+    - { key: "ldapPort", value: "{{ nextcloud_ldap_port }}" }
+    - { key: "ldapAgentName", value: "{{ nextcloud_ldap_bind_dn }}" }
+    - { key: "ldapAgentPassword", value: "{{ nextcloud_ldap_bind_password }}" }
+    - { key: "ldapBase", value: "{{ nextcloud_ldap_base_dn }}" }
+    # User search
+    - { key: "ldapBaseUsers", value: "ou=people,{{ nextcloud_ldap_base_dn }}" }
+    - { key: "ldapUserFilter", value: "(objectClass=person)" }
+    - { key: "ldapUserDisplayName", value: "displayName" }
+    - { key: "ldapLoginFilter", value: "(&(objectClass=person)(uid=%uid))" }
+    - { key: "ldapEmailAttribute", value: "mail" }
+    # Group search
+    - { key: "ldapBaseGroups", value: "ou=groups,{{ nextcloud_ldap_base_dn }}" }
+    - { key: "ldapGroupFilter", value: "(objectClass=groupOfUniqueNames)" }
+    - { key: "ldapGroupMemberAssocAttr", value: "member" }
+    # Activate
+    - { key: "ldapConfigurationActive", value: "1" }
+  loop_control:
+    label: "{{ item.key }}"
+  changed_when: true
+
+- name: Test LDAP configuration
+  ansible.builtin.command: >
+    docker exec -u www-data nextcloud
+    php occ ldap:test-config s01
+  register: nc_ldap_test
+  changed_when: false
+  failed_when: "'succeeded' not in nc_ldap_test.stdout"

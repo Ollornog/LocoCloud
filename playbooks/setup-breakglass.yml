@@ -1,0 +1,142 @@
+---
+# playbooks/setup-breakglass.yml
+# Creates a break-glass emergency admin account for a customer.
+# The password is stored in the customer's Vaultwarden (not the master).
+# This account is independent of the service provider — the customer
+# can use it if the provider is unavailable.
+#
+# Usage: ansible-playbook playbooks/setup-breakglass.yml -i inventories/kunde-abc/
+#
+# What it creates:
+# 1. An LLDAP admin user "notfall-admin" in the customer's LLDAP
+# 2. Stores the password in the customer's Vaultwarden
+# 3. Documents the account in compliance output
+#
+# The customer should print and seal the password in an envelope.
+
+- name: "Break-Glass — Emergency Admin Account"
+  hosts: all:!localhost:!*proxmox*
+  become: true
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+      tags: [always]
+
+  vars:
+    breakglass_username: "notfall-admin"
+    breakglass_email: "notfall@{{ kunde_domain }}"
+    breakglass_display_name: "Notfall-Administrator"
+
+  tasks:
+    - name: Only run on customer_master hosts
+      ansible.builtin.meta: end_play
+      when: "'customer_master' not in (server_roles | default([]))"
+
+    - name: Generate break-glass password
+      ansible.builtin.set_fact:
+        breakglass_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=24') }}"
+
+    - name: Create break-glass user in LLDAP
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:17170/api/graphql"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ lldap_jwt_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          query: |
+            mutation {
+              createUser(user: {
+                id: "{{ breakglass_username }}"
+                email: "{{ breakglass_email }}"
+                displayName: "{{ breakglass_display_name }}"
+              }) {
+                id
+              }
+            }
+        status_code: [200]
+      register: _bg_create
+      failed_when: >
+        _bg_create.status != 200 and
+        'already exists' not in (_bg_create.json | default({}) | string)
+      when: lldap_jwt_token is defined
+
+    - name: Set break-glass user password
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:17170/api/graphql"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ lldap_jwt_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          query: |
+            mutation {
+              updateUser(user: {
+                id: "{{ breakglass_username }}"
+                password: "{{ breakglass_password }}"
+              }) {
+                ok
+              }
+            }
+        status_code: [200]
+      when: lldap_jwt_token is defined
+
+    - name: Add break-glass user to admin group
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:17170/api/graphql"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ lldap_jwt_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          query: |
+            mutation {
+              addUserToGroup(userId: "{{ breakglass_username }}", groupId: 1) {
+                ok
+              }
+            }
+        status_code: [200]
+      failed_when: false
+      when: lldap_jwt_token is defined
+
+    - name: Store break-glass credentials in Vaultwarden
+      ansible.builtin.include_role:
+        name: credentials
+        tasks_from: store.yml
+      vars:
+        vw_api_url: "{{ loco.vaultwarden.url }}"
+        credential_name: "{{ kunde_name }} — NOTFALL Break-Glass Admin"
+        credential_username: "{{ breakglass_username }}"
+        credential_password: "{{ breakglass_password }}"
+        credential_uri: "https://id.{{ kunde_domain }}"
+        credential_notes: |
+          NOTFALL-ZUGANG (Break-Glass)
+          ============================
+          Dieser Account ist unabhängig vom IT-Dienstleister nutzbar.
+          Bitte Passwort ausdrucken und versiegelt aufbewahren.
+
+          Login: {{ breakglass_username }}
+          PocketID: https://id.{{ kunde_domain }}
+          E-Mail: {{ breakglass_email }}
+
+          Erstellt: {{ ansible_facts.date_time.iso8601 }}
+      when:
+        - loco is defined
+        - loco.vaultwarden is defined
+
+    - name: Break-glass account created
+      ansible.builtin.debug:
+        msg: |
+          Break-Glass Notfallzugang erstellt.
+          User: {{ breakglass_username }}
+          E-Mail: {{ breakglass_email }}
+          Password: {{ breakglass_password }}
+
+          WICHTIG: Passwort dem Kunden übergeben und versiegelt aufbewahren lassen!
+          Der Kunde muss dieses Passwort UNABHÄNGIG von Ihnen kennen.

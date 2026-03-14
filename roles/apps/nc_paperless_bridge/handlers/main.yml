@@ -1,0 +1,11 @@
+---
+# roles/apps/nc_paperless_bridge/handlers/main.yml
+
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: restart nc-consume-watcher
+  ansible.builtin.systemd:
+    name: nc-consume-watcher.service
+    state: restarted

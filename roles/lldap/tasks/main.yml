@@ -1,0 +1,10 @@
+---
+# roles/lldap/tasks/main.yml
+
+- name: Deploy lldap
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [lldap, deploy]
+
+- name: Setup lldap groups and service account
+  ansible.builtin.import_tasks: setup.yml
+  tags: [lldap, setup]

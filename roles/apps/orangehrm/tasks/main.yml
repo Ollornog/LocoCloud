@@ -1,0 +1,4 @@
+---
+- name: Deploy OrangeHRM
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [orangehrm, deploy]

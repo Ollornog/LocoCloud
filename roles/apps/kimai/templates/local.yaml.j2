@@ -1,0 +1,22 @@
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Kimai LDAP configuration via lldap
+kimai:
+  ldap:
+    activate: true
+    connection:
+      host: "{{ kimai_ldap_host }}"
+      port: {{ kimai_ldap_port }}
+      bindRequiresDn: true
+    user:
+      baseDn: "{{ kimai_ldap_base_dn }}"
+      filter: "{{ kimai_ldap_user_filter }}"
+      usernameAttribute: "uid"
+      attributes:
+        - { ldap_attr: "mail", user_attribute: "email" }
+        - { ldap_attr: "givenName", user_attribute: "alias" }
+    role:
+      baseDn: "{{ kimai_ldap_base_dn | regex_replace('^ou=people', 'ou=groups') }}"
+      usernameAttribute: "cn"
+      groups:
+        - { ldap_value: "admins", role: "ROLE_SUPER_ADMIN" }
+        - { ldap_value: "users", role: "ROLE_USER" }

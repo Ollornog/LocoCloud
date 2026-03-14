@@ -1,0 +1,38 @@
+---
+# roles/apps/nc_paperless_bridge/defaults/main.yml
+# Nextcloud-Paperless Integration — inotifywait-based file bridge
+#
+# Architecture:
+#   Nextcloud "INBOX" → /mnt/data/paperless-sort/ (rw, files STAY)
+#     ↓ inotifywait (instant)
+#   Paperless consume → /mnt/data/paperless/consume/ (not visible in NC)
+#     ↓ Paperless processes
+#   Nextcloud "Paperless Dokumente" → /mnt/data/paperless/media/documents/ (ro)
+#
+# The INBOX is a "dump" folder — files stay there permanently.
+# The user can organize/delete there without affecting Paperless.
+
+# Sort folder where Nextcloud writes (user drops files here)
+nc_paperless_sort_path: "/mnt/data/paperless-sort"
+
+# Paperless paths (must match paperless role)
+nc_paperless_consume_path: "/mnt/data/paperless/consume"
+nc_paperless_documents_path: "/mnt/data/paperless/media/documents"
+
+# Nextcloud container name
+nc_paperless_nc_container: "nextcloud"
+
+# Nextcloud External Storage mount points
+nc_paperless_inbox_mount: "/INBOX"
+nc_paperless_docs_mount: "/Paperless Dokumente"
+
+# Container paths for volume mounts (in Nextcloud container)
+nc_paperless_inbox_container_path: "/opt/paperless-sort"
+nc_paperless_docs_container_path: "/opt/paperless-docs"
+
+# Watcher script path
+nc_paperless_watcher_script: "/opt/scripts/nc-consume-watcher.sh"
+
+# UIDs — Nextcloud www-data=33, Paperless=1000
+nc_paperless_nc_uid: 33
+nc_paperless_pl_uid: 1000

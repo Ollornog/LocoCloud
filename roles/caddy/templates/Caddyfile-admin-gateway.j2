@@ -1,0 +1,94 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Admin-Gateway: *.{{ loco.admin.full_domain }} → Master via Netbird
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+(public) {
+	header -Server
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+	header X-Content-Type-Options "nosniff"
+	header X-Frame-Options "SAMEORIGIN"
+	header Referrer-Policy "strict-origin-when-cross-origin"
+	header Permissions-Policy "camera=(), microphone=(), geolocation=()"
+}
+
+# --- PocketID ---
+{{ loco.urls.pocketid }} {
+	import public
+	reverse_proxy https://{{ admin_gateway_master_ip }}:443 {
+		header_up Host {{ loco.urls.pocketid }}
+		transport http {
+			tls_server_name {{ loco.urls.pocketid }}
+			versions 1.1
+		}
+	}
+}
+
+# --- Vaultwarden ---
+{{ loco.urls.vaultwarden }} {
+	import public
+	reverse_proxy https://{{ admin_gateway_master_ip }}:443 {
+		header_up Host {{ loco.urls.vaultwarden }}
+		transport http {
+			tls_server_name {{ loco.urls.vaultwarden }}
+			versions 1.1
+		}
+	}
+}
+
+# --- Semaphore ---
+{{ loco.urls.semaphore }} {
+	import public
+	reverse_proxy https://{{ admin_gateway_master_ip }}:443 {
+		header_up Host {{ loco.urls.semaphore }}
+		transport http {
+			tls_server_name {{ loco.urls.semaphore }}
+			versions 1.1
+		}
+	}
+}
+
+# --- Grafana ---
+{{ loco.urls.grafana }} {
+	import public
+	reverse_proxy https://{{ admin_gateway_master_ip }}:443 {
+		header_up Host {{ loco.urls.grafana }}
+		transport http {
+			tls_server_name {{ loco.urls.grafana }}
+			versions 1.1
+		}
+	}
+}
+
+# --- NocoDB ---
+{{ loco.urls.nocodb }} {
+	import public
+	reverse_proxy https://{{ admin_gateway_master_ip }}:443 {
+		header_up Host {{ loco.urls.nocodb }}
+		transport http {
+			tls_server_name {{ loco.urls.nocodb }}
+			versions 1.1
+		}
+	}
+}
+
+{% if loco.tinyauth.enabled | default(false) %}
+# --- Tinyauth ---
+auth.{{ loco.admin.full_domain }} {
+	import public
+	reverse_proxy https://{{ admin_gateway_master_ip }}:443 {
+		header_up Host auth.{{ loco.admin.full_domain }}
+		transport http {
+			tls_server_name auth.{{ loco.admin.full_domain }}
+			versions 1.1
+		}
+	}
+}
+{% endif %}
+
+# --- Catch-All ---
+:80, :443 {
+	respond "Access Denied" 403
+	header -Server
+}

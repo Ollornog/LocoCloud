@@ -1,0 +1,68 @@
+---
+- name: Generate LimeSurvey DB password if empty
+  ansible.builtin.set_fact:
+    limesurvey_db_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: limesurvey_db_password | length == 0
+
+- name: Generate LimeSurvey admin password if empty
+  ansible.builtin.set_fact:
+    limesurvey_admin_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=24') }}"
+  when: limesurvey_admin_password | length == 0
+
+- name: Create LimeSurvey directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ limesurvey_stack_path }}"
+    - "{{ limesurvey_data_path }}"
+    - "{{ limesurvey_data_path }}/db"
+    - "{{ limesurvey_data_path }}/upload"
+
+- name: Set upload directory ownership
+  ansible.builtin.file:
+    path: "{{ limesurvey_data_path }}/upload"
+    owner: "33"
+    group: "33"
+    mode: "0755"
+
+- name: Deploy LimeSurvey docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ limesurvey_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Start LimeSurvey
+  community.docker.docker_compose_v2:
+    project_src: "{{ limesurvey_stack_path }}"
+    state: present
+
+- name: Wait for LimeSurvey to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ limesurvey_port }}{{ limesurvey_health_path }}"
+    method: GET
+    status_code: [200, 301, 302]
+  register: _limesurvey_health
+  until: _limesurvey_health.status in [200, 301, 302]
+  retries: 30
+  delay: 5
+
+- name: Store LimeSurvey credentials in Vaultwarden
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — LimeSurvey"
+    credential_username: "{{ limesurvey_admin_user }}"
+    credential_password: "{{ limesurvey_admin_password }}"
+    credential_uri: "https://{{ limesurvey_domain }}"
+    credential_notes: |
+      LimeSurvey admin + DB credentials.
+      DB: {{ limesurvey_db_password }}
+      Auth via Tinyauth + optional LDAP.
+      Deployed: {{ ansible_facts.date_time.iso8601 }}
+  when:
+    - loco is defined
+    - loco.vaultwarden is defined

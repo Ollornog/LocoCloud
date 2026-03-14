@@ -1,0 +1,4 @@
+---
+- name: Deploy Kimai
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [kimai, deploy]

@@ -1,0 +1,36 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Rocket.Chat
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  rocketchat:
+    image: {{ rocketchat_image }}
+    container_name: rocketchat
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ rocketchat_port }}:3000"
+    volumes:
+      - {{ rocketchat_data_path }}/uploads:/app/uploads
+    environment:
+      ROOT_URL: "https://{{ rocketchat_domain }}"
+      MONGO_URL: "mongodb://rocketchat-db:27017/rocketchat?replicaSet=rs0"
+      MONGO_OPLOG_URL: "mongodb://rocketchat-db:27017/local?replicaSet=rs0"
+      DEPLOY_METHOD: docker
+      OVERWRITE_SETTING_Show_Setup_Wizard: "completed"
+    depends_on:
+      - rocketchat-db
+
+  rocketchat-db:
+    image: {{ rocketchat_db_image }}
+    container_name: rocketchat-db
+    restart: unless-stopped
+    command: mongod --oplogSize 128 --replSet rs0
+    volumes:
+      - {{ rocketchat_data_path }}/db:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "rs.status().ok || rs.initiate().ok"]
+      interval: 30s
+      timeout: 10s
+      retries: 5

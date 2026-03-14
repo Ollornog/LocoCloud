@@ -1,0 +1,78 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# authentik
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  authentik-server:
+    image: {{ authentik_image }}
+    container_name: authentik-server
+    restart: unless-stopped
+    command: server
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ authentik_port }}:9000"
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ authentik_port_https }}:9443"
+    volumes:
+      - {{ authentik_data_path }}/media:/media
+      - {{ authentik_data_path }}/templates:/templates
+    env_file:
+      - .env
+    depends_on:
+      authentik-db:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_started
+
+  authentik-worker:
+    image: {{ authentik_image }}
+    container_name: authentik-worker
+    restart: unless-stopped
+    command: worker
+    volumes:
+      - {{ authentik_data_path }}/media:/media
+      - {{ authentik_data_path }}/templates:/templates
+      - {{ authentik_data_path }}/certs:/certs
+    env_file:
+      - .env
+    depends_on:
+      authentik-db:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_started
+
+{% if authentik_ldap_enabled %}
+  authentik-ldap:
+    image: ghcr.io/goauthentik/ldap:2025.2
+    container_name: authentik-ldap
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ authentik_ldap_port }}:3389"
+    environment:
+      AUTHENTIK_HOST: "https://authentik-server:9443"
+      AUTHENTIK_INSECURE: "true"
+      AUTHENTIK_TOKEN: "{{ authentik_ldap_token | default('') }}"
+{% endif %}
+
+  authentik-db:
+    image: {{ authentik_db_image }}
+    container_name: authentik-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: {{ authentik_db_name }}
+      POSTGRES_USER: {{ authentik_db_user }}
+      POSTGRES_PASSWORD: {{ authentik_db_password }}
+    volumes:
+      - {{ authentik_data_path }}/db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ authentik_db_user }} -d {{ authentik_db_name }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  authentik-redis:
+    image: {{ authentik_redis_image }}
+    container_name: authentik-redis
+    restart: unless-stopped
+    volumes:
+      - {{ authentik_data_path }}/redis:/data

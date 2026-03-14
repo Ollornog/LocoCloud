@@ -1,0 +1,44 @@
+#!/bin/bash
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# LocoCloud Self-Healing Service
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+#
+# Checks all running Docker containers for unhealthy status.
+# Automatically restarts unhealthy containers (soft restart).
+# Logs all actions to audit log.
+
+set -euo pipefail
+
+AUDIT_LOG="/var/log/audit/self-healing.log"
+MAX_RESTARTS={{ customer_panel_self_healing_max_restarts }}
+
+log() {
+    echo "$(date -Iseconds) [self-healing] $1" | tee -a "$AUDIT_LOG"
+}
+
+# Get all containers with health checks
+unhealthy=$(docker ps --filter "health=unhealthy" --format '{{ '{{' }}.Names{{ '}}' }}' 2>/dev/null || true)
+
+if [ -z "$unhealthy" ]; then
+    exit 0
+fi
+
+for container in $unhealthy; do
+    # Count recent restarts (last hour)
+    restart_count=$(docker inspect --format='{{ '{{' }}.RestartCount{{ '}}' }}' "$container" 2>/dev/null || echo "0")
+
+    if [ "$restart_count" -ge "$MAX_RESTARTS" ]; then
+        log "ALERT: $container unhealthy but already restarted $restart_count times — skipping (manual intervention needed)"
+        continue
+    fi
+
+    log "Restarting unhealthy container: $container (restart #$((restart_count + 1)))"
+    docker restart "$container" 2>&1 | tee -a "$AUDIT_LOG"
+
+    # Wait and verify
+    sleep 10
+    new_status=$(docker inspect --format='{{ '{{' }}.State.Health.Status{{ '}}' }}' "$container" 2>/dev/null || echo "unknown")
+    log "Container $container status after restart: $new_status"
+done

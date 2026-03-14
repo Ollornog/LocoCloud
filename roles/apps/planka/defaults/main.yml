@@ -1,0 +1,49 @@
+---
+# roles/apps/planka/defaults/main.yml
+# Planka — Kanban board (Trello alternative)
+# Native OIDC via PocketID
+
+planka_stack_path: "/opt/stacks/planka"
+planka_data_path: "/mnt/data/planka"
+planka_image: "ghcr.io/plankanban/planka:2"
+planka_port: 8233
+
+# Domain
+planka_domain: ""  # e.g. "board.firma-abc.de"
+
+# Database (PostgreSQL)
+planka_db_image: "postgres:18"
+planka_db_name: "planka"
+planka_db_user: "planka"
+planka_db_password: ""  # Generated if empty
+
+# Secret key for JWT signing (generated if empty, persist forever)
+planka_secret_key: ""
+
+# Admin (first-run only, remove after setup)
+planka_admin_email: ""
+planka_admin_password: ""
+planka_admin_name: "Admin"
+planka_admin_username: "admin"
+
+# OIDC via PocketID
+planka_oidc_enabled: false
+planka_oidc_client_id: ""
+planka_oidc_client_secret: ""
+planka_oidc_issuer: ""  # e.g. "https://id.firma-abc.de"
+planka_oidc_enforced: true  # Disable local login (SSO-only)
+planka_oidc_admin_roles: "admin"
+planka_oidc_roles_attribute: "groups"
+
+# Caddy
+planka_blocked_paths: []
+planka_public_paths: []
+
+# Backup
+planka_backup_paths:
+  - "/opt/stacks/planka"
+  - "/mnt/data/planka"
+
+planka_pre_backup_cmd: "docker exec planka-db pg_dumpall -U postgres > /opt/backups/dumps/planka_pg.sql"
+
+planka_health_path: "/"

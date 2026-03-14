@@ -1,0 +1,27 @@
+---
+# roles/customer_panel/defaults/main.yml
+# Customer admin panel — lightweight web dashboard for customers
+# Provides: service status, recent logs, LLDAP user link, emergency contact
+# Secured via PocketID OIDC (same SSO as other apps)
+
+customer_panel_stack_path: "/opt/stacks/customer-panel"
+customer_panel_data_path: "/mnt/data/customer-panel"
+customer_panel_port: 8250
+
+# Domain
+customer_panel_domain: ""  # e.g. "admin.firma-abc.de"
+
+# LLDAP Web-UI link (internal, via Netbird)
+customer_panel_lldap_url: ""  # e.g. "http://100.x.x.x:17170" (Netbird only)
+
+# Emergency contact
+customer_panel_emergency_name: ""
+customer_panel_emergency_email: ""
+customer_panel_emergency_phone: ""
+
+# Self-healing: automatic soft restart on health failure
+customer_panel_self_healing_enabled: true
+customer_panel_self_healing_max_restarts: 3
+
+# Docker status check interval (seconds)
+customer_panel_health_interval: 60

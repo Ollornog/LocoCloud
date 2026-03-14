@@ -1,0 +1,47 @@
+---
+# roles/apps/limesurvey/defaults/main.yml
+# LimeSurvey — Online survey platform
+# No native OIDC — uses Tinyauth + LDAP via lldap
+# Native LDAP for admin authentication
+
+limesurvey_stack_path: "/opt/stacks/limesurvey"
+limesurvey_data_path: "/mnt/data/limesurvey"
+limesurvey_image: "martialblog/limesurvey:6-apache"
+limesurvey_port: 8246
+
+# Domain
+limesurvey_domain: ""  # e.g. "survey.firma-abc.de"
+
+# Database (PostgreSQL)
+limesurvey_db_image: "postgres:18"
+limesurvey_db_name: "limesurvey"
+limesurvey_db_user: "limesurvey"
+limesurvey_db_password: ""  # Generated if empty
+
+# Admin (initial setup)
+limesurvey_admin_user: "admin"
+limesurvey_admin_password: ""  # Generated if empty
+limesurvey_admin_email: ""
+
+# Auth: Tinyauth forward-auth for admin
+limesurvey_tinyauth: true
+
+# LDAP via lldap (optional, for admin login)
+limesurvey_ldap_enabled: false
+
+# Public paths: survey participation pages are public
+limesurvey_public_paths:
+  - "/index.php/survey/*"
+  - "/index.php/statistics_user*"
+
+# Caddy
+limesurvey_blocked_paths: []
+
+# Backup
+limesurvey_backup_paths:
+  - "/opt/stacks/limesurvey"
+  - "/mnt/data/limesurvey"
+
+limesurvey_pre_backup_cmd: "docker exec limesurvey-db pg_dumpall -U postgres > /opt/backups/dumps/limesurvey_pg.sql"
+
+limesurvey_health_path: "/"

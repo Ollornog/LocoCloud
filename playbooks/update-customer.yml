@@ -1,0 +1,74 @@
+---
+# playbooks/update-customer.yml
+# Pull and recreate all Docker containers for a customer (Watchtower replacement).
+# Designed for manual trigger via Semaphore Web-UI.
+# Usage: ansible-playbook playbooks/update-customer.yml -i inventories/kunde-abc/
+#
+# This is the replacement for Watchtower — no more silent auto-updates.
+# OS security updates remain via unattended-upgrades.
+
+- name: "Docker Image Update — All Customer Apps"
+  hosts: all:!localhost:!*proxmox*
+  become: true
+  serial: 1  # One server at a time
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+      tags: [always]
+
+  tasks:
+    - name: Find all docker-compose stacks
+      ansible.builtin.find:
+        paths: /opt/stacks
+        file_type: directory
+        recurse: false
+      register: _stacks
+
+    - name: Check which stacks have docker-compose.yml
+      ansible.builtin.stat:
+        path: "{{ item.path }}/docker-compose.yml"
+      loop: "{{ _stacks.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+      register: _stack_checks
+
+    - name: Build list of active stacks
+      ansible.builtin.set_fact:
+        active_stacks: "{{ _stack_checks.results | selectattr('stat.exists') | map(attribute='item.path') | list }}"
+
+    - name: Pull latest images for each stack
+      ansible.builtin.command:
+        cmd: "docker compose pull"
+        chdir: "{{ item }}"
+      loop: "{{ active_stacks }}"
+      loop_control:
+        label: "{{ item | basename }}"
+      register: _pull_results
+      changed_when: "'Pull complete' in _pull_results.stdout or 'Downloaded newer image' in _pull_results.stdout"
+      failed_when: false
+
+    - name: Recreate containers with new images
+      ansible.builtin.command:
+        cmd: "docker compose up -d --remove-orphans"
+        chdir: "{{ item }}"
+      loop: "{{ active_stacks }}"
+      loop_control:
+        label: "{{ item | basename }}"
+      register: _up_results
+      changed_when: "'Started' in _up_results.stderr or 'Recreated' in _up_results.stderr"
+
+    - name: Prune unused Docker images
+      ansible.builtin.command:
+        cmd: "docker image prune -f"
+      register: _prune_result
+      changed_when: "'Total reclaimed space' in _prune_result.stdout"
+
+    - name: Update summary
+      ansible.builtin.debug:
+        msg: |
+          Update complete on {{ inventory_hostname }}.
+          Stacks updated: {{ active_stacks | map('basename') | join(', ') }}
+          Date: {{ ansible_facts.date_time.iso8601 }}

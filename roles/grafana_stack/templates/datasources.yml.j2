@@ -7,12 +7,21 @@
 apiVersion: 1
 
 datasources:
+{% if metrics_backend == 'victoriametrics' %}
+  - name: VictoriaMetrics
+    type: prometheus
+    access: proxy
+    url: http://victoriametrics:8428
+    isDefault: true
+    editable: false
+{% else %}
   - name: Prometheus
     type: prometheus
     access: proxy
     url: http://prometheus:9090
     isDefault: true
     editable: false
+{% endif %}
 
   - name: Loki
     type: loki

@@ -18,6 +18,10 @@ services:
 {% if nextcloud_security_conf is defined %}
       - {{ nextcloud_stack_path }}/security.conf:/etc/apache2/conf-enabled/security.conf:ro
 {% endif %}
+{% if nc_paperless_bridge_enabled | default(false) %}
+      - {{ nc_paperless_sort_path | default('/mnt/data/paperless-sort') }}:{{ nc_paperless_inbox_container_path | default('/opt/paperless-sort') }}
+      - {{ nc_paperless_documents_path | default('/mnt/data/paperless/media/documents') }}:{{ nc_paperless_docs_container_path | default('/opt/paperless-docs') }}:ro
+{% endif %}
     env_file:
       - .env
     depends_on:
@@ -27,8 +31,6 @@ services:
         condition: service_started
       nextcloud-imaginary:
         condition: service_started
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   nextcloud-db:
     image: {{ nextcloud_db_image }}
@@ -46,8 +48,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   nextcloud-redis:
     image: {{ nextcloud_redis_image }}
@@ -56,8 +56,6 @@ services:
     command: redis-server --save 60 1
     volumes:
       - {{ nextcloud_stack_path }}/redis:/data
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   nextcloud-imaginary:
     image: {{ nextcloud_imaginary_image }}
@@ -65,5 +63,3 @@ services:
     restart: unless-stopped
     cap_add:
       - SYS_NICE
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"

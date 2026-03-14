@@ -1,0 +1,126 @@
+# Auftragsverarbeitungsvertrag (AVV)
+
+<!--
+============================================
+GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+Kunde: {{ compliance_kunde_name }} ({{ compliance_kunde_domain }})
+Generiert: {{ ansible_facts.date_time.iso8601 }}
+============================================
+-->
+
+gemäß Art. 28 DSGVO
+
+---
+
+**Auftraggeber (Verantwortlicher):**
+{{ compliance_kunde_name }}
+{{ compliance_kunde_domain }}
+
+**Auftragnehmer (Auftragsverarbeiter):**
+{{ compliance_operator_name }}
+{{ compliance_operator_email }}
+
+**Stand:** {{ ansible_facts.date_time.date }}
+
+---
+
+## 1. Gegenstand und Dauer der Verarbeitung
+
+Der Auftragnehmer betreibt im Auftrag des Auftraggebers eine selbst-gehostete IT-Infrastruktur bestehend aus:
+
+{% for app in apps_enabled | default([]) %}
+- {{ app.name }}{% if app.description is defined %} ({{ app.description }}){% endif %}
+
+{% endfor %}
+
+Die Verarbeitung erfolgt für die Dauer des Dienstleistungsvertrags.
+
+## 2. Art und Zweck der Verarbeitung
+
+- Hosting und Betrieb der genannten Anwendungen
+- Administration, Wartung und Sicherheitsupdates
+- Backup-Erstellung und -Verwaltung
+- Monitoring und Überwachung der Verfügbarkeit
+- Benutzerverwaltung über zentrales Identity Management
+
+## 3. Art der personenbezogenen Daten
+
+Abhängig von den eingesetzten Anwendungen können folgende Datenkategorien verarbeitet werden:
+
+- Stammdaten (Name, E-Mail, Telefon)
+- Zugangsdaten (Benutzername, Passwort-Hashes)
+- Inhaltsdaten (Dokumente, Nachrichten, Dateien)
+- Nutzungsdaten (Login-Zeiten, Aktivitätsprotokolle)
+- Kommunikationsdaten (E-Mails, Chat-Nachrichten)
+
+## 4. Kategorien betroffener Personen
+
+- Mitarbeiter des Auftraggebers
+- Geschäftspartner und Kunden des Auftraggebers (soweit deren Daten in den Anwendungen verarbeitet werden)
+
+## 5. Ort der Verarbeitung
+
+Die Datenverarbeitung erfolgt ausschließlich auf Servern in:
+- {{ compliance_datacenter_location | default('EU (Hetzner Online GmbH, Deutschland)') }}
+
+Es findet **keine Übermittlung in Drittländer** statt. Alle Dienste sind selbst gehostet.
+
+## 6. Technisch-Organisatorische Maßnahmen (TOM)
+
+Die TOMs sind in einem separaten Dokument beschrieben und Bestandteil dieses Vertrags.
+Siehe: `TOM.md` (wird bei jeder Infrastrukturänderung automatisch aktualisiert).
+
+Wesentliche Maßnahmen:
+- Verschlüsselung at rest (gocryptfs/LUKS) und in transit (TLS/WireGuard)
+- Zentrales Identity Management (SSO, RBAC)
+- Automatisierte verschlüsselte Backups (Restic AES-256)
+- Monitoring mit automatischen Restarts (Self-Healing)
+- Audit-Logging aller administrativen Aktionen
+
+## 7. Weisungsbefugnis
+
+Der Auftragnehmer verarbeitet Daten nur auf Weisung des Auftraggebers.
+Administrative Zugriffe erfolgen ausschließlich zur Erfüllung der vertraglichen Pflichten (Wartung, Updates, Fehlerbehebung).
+
+Der Auftragnehmer hat denselben technischen Zugang wie ein angestellter IT-Administrator — mit dem Unterschied, dass dieser Zugang vertraglich durch diesen AVV geregelt ist.
+
+## 8. Kontrollrechte
+
+Der Auftraggeber hat das Recht, die Einhaltung der technisch-organisatorischen Maßnahmen zu überprüfen:
+
+- Einsicht in automatisch generierte Compliance-Dokumente (TOM, VVT, Löschkonzept)
+- Einsicht in Audit-Logs über das Kunden-Admin-Panel
+- Vor-Ort-Prüfung nach Terminvereinbarung
+
+## 9. Unterauftragsverarbeiter
+
+| Unterauftragsverarbeiter | Leistung | Standort |
+|--------------------------|----------|----------|
+| {{ compliance_datacenter_provider | default('Hetzner Online GmbH') }} | Server-Hosting (IaaS) | {{ compliance_datacenter_location | default('Deutschland') }} |
+
+Der Auftragnehmer betreibt **keine eigene Cloud**. Die Serverinfrastruktur wird bei einem europäischen Hosting-Anbieter angemietet. Der Auftragnehmer hat die alleinige administrative Kontrolle.
+
+## 10. Notfallzugang (Break-Glass)
+
+Der Auftraggeber verfügt über einen versiegelten Notfallzugang (Break-Glass Account), der unabhängig vom Auftragnehmer nutzbar ist. Dieser ermöglicht im Notfall den Zugriff auf die eigene Infrastruktur.
+
+## 11. Beendigung / Offboarding
+
+Bei Beendigung des Vertrags:
+
+1. Finale verschlüsselte Backup-Übergabe an den Auftraggeber
+2. Dokumentation aller Zugangsdaten und Konfigurationen
+3. Löschung aller Daten auf der Infrastruktur nach Bestätigung
+4. Keine proprietären Datenformate — Export jederzeit möglich:
+   - Nextcloud: WebDAV-Export
+   - Paperless-NGX: PDF-Export aller Dokumente
+   - Vaultwarden: Bitwarden-kompatibeler Export
+   - Alle Datenbanken: SQL/JSON-Dumps
+
+## 12. Haftung
+
+Es gelten die gesetzlichen Bestimmungen gemäß Art. 82 DSGVO.
+
+---
+
+*Dieses Dokument wird bei Infrastrukturänderungen automatisch aktualisiert und ist jederzeit im Kunden-Admin-Panel einsehbar.*

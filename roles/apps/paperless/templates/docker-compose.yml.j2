@@ -27,8 +27,6 @@ services:
         condition: service_started
       paperless-tika:
         condition: service_started
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   paperless-db:
     image: {{ paperless_db_image }}

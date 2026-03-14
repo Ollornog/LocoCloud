@@ -1,0 +1,4 @@
+---
+- name: Deploy Easy!Appointments
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [easy_appointments, deploy]

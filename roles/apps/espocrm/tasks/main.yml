@@ -1,0 +1,6 @@
+---
+# roles/apps/espocrm/tasks/main.yml
+
+- name: Deploy EspoCRM
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [espocrm, deploy]

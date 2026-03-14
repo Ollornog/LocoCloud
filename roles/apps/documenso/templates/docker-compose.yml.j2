@@ -18,8 +18,6 @@ services:
     depends_on:
       documenso-db:
         condition: service_healthy
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   documenso-db:
     image: {{ documenso_db_image }}

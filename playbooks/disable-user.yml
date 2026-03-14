@@ -1,0 +1,111 @@
+---
+# playbooks/disable-user.yml
+# Deactivates a user across all non-LDAP apps.
+# LDAP-based apps (Nextcloud, Pingvin Share, PocketID) are handled
+# automatically by lldap — deactivate the user there first.
+#
+# Usage:
+#   ansible-playbook playbooks/disable-user.yml \
+#     -i inventories/kunde-abc/hosts.yml \
+#     -e "user_email=m.mueller@firma.at"
+
+- name: Disable user across non-LDAP apps
+  hosts: primary
+  become: true
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+
+    - name: Validate user_email parameter
+      ansible.builtin.fail:
+        msg: "user_email muss angegeben werden: -e 'user_email=name@firma.at'"
+      when: user_email is not defined or user_email | length == 0
+
+  tasks:
+    # --- Paperless-NGX ---
+    - name: "Paperless: Find user by email"
+      ansible.builtin.command: >
+        docker exec paperless python3 manage.py shell -c
+        "from django.contrib.auth.models import User;
+        u = User.objects.filter(email='{{ user_email }}').first();
+        print(u.username if u else 'NOT_FOUND')"
+      register: _pl_user
+      changed_when: false
+      failed_when: false
+      tags: [paperless]
+
+    - name: "Paperless: Deactivate user"
+      ansible.builtin.command: >
+        docker exec paperless python3 manage.py shell -c
+        "from django.contrib.auth.models import User;
+        u = User.objects.get(email='{{ user_email }}');
+        u.is_active = False; u.save();
+        print('DISABLED')"
+      when: _pl_user.stdout | default('NOT_FOUND') != 'NOT_FOUND'
+      register: _pl_disable
+      tags: [paperless]
+
+    - name: "Paperless: Invalidate all sessions"
+      ansible.builtin.command: >
+        docker exec paperless python3 manage.py shell -c
+        "from django.contrib.sessions.models import Session;
+        from django.contrib.auth.models import User;
+        from django.utils import timezone;
+        u = User.objects.get(email='{{ user_email }}');
+        count = 0;
+        for s in Session.objects.filter(expire_date__gte=timezone.now()):
+            data = s.get_decoded();
+            if str(data.get('_auth_user_id')) == str(u.id):
+                s.delete(); count += 1;
+        print(f'CLEARED {count} sessions')"
+      when: _pl_user.stdout | default('NOT_FOUND') != 'NOT_FOUND'
+      tags: [paperless]
+
+    # --- Vaultwarden ---
+    # Vaultwarden uses SQLite by default. Disable via direct DB update.
+    - name: "Vaultwarden: Check if user exists"
+      ansible.builtin.command: >
+        docker exec vaultwarden
+        /bin/sh -c "sqlite3 /data/db.sqlite3 \"SELECT email FROM users WHERE email='{{ user_email }}'\""
+      register: _vw_user
+      changed_when: false
+      failed_when: false
+      tags: [vaultwarden]
+
+    - name: "Vaultwarden: Deactivate user"
+      ansible.builtin.command: >
+        docker exec vaultwarden
+        /bin/sh -c "sqlite3 /data/db.sqlite3 \"UPDATE users SET enabled = 0 WHERE email='{{ user_email }}'\""
+      when: _vw_user.stdout | default('') | length > 0
+      tags: [vaultwarden]
+
+    # --- Documenso ---
+    - name: "Documenso: Deactivate user via DB"
+      ansible.builtin.command: >
+        docker exec documenso-db psql -U documenso -d documenso -c
+        "UPDATE \"User\" SET \"disabled\" = true WHERE \"email\" = '{{ user_email }}';"
+      register: _doc_disable
+      failed_when: false
+      tags: [documenso]
+
+    # --- Summary ---
+    - name: "Summary"
+      ansible.builtin.debug:
+        msg: |
+          User {{ user_email }} deaktiviert:
+
+          Manuell (dieses Playbook):
+          - Paperless: {{ 'OK' if (_pl_user.stdout | default('NOT_FOUND')) != 'NOT_FOUND' else 'User nicht gefunden' }}
+          - Vaultwarden: {{ 'OK' if (_vw_user.stdout | default('')) | length > 0 else 'User nicht gefunden' }}
+          - Documenso: {{ _doc_disable.stdout | default('Nicht vorhanden') }}
+
+          LDAP-basiert (automatisch gesperrt):
+          - Nextcloud: sofort (LDAP-Check bei jedem Request)
+          - Pingvin Share: sofort (LDAP-Check bei Login)
+          - PocketID: max 1h (nächster LDAP-Sync)
+
+          Tinyauth-basiert (gesperrt via PocketID/LDAP):
+          - Invoice Ninja: sofort nach PocketID-Sync (max 1h)

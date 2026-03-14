@@ -15,8 +15,6 @@ services:
       - .env
     depends_on:
       - calcom-db
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
   calcom-db:
     image: {{ calcom_db_image }}

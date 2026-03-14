@@ -1,0 +1,65 @@
+---
+# roles/apps/planka/tasks/oidc.yml
+# Register OIDC client in PocketID for Planka
+
+- name: Create OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ planka_oidc_issuer | regex_replace('^https?://', '') }}/api/oidc/clients"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    body_format: json
+    body:
+      name: "Planka ({{ kunde_name }})"
+      callbackURLs:
+        - "https://{{ planka_domain }}/oidc-callback"
+    status_code: [200, 201]
+  register: _planka_oidc_client
+  when:
+    - planka_oidc_client_id | length == 0
+    - loco.pocketid.api_token | default('') | length > 0
+
+- name: Set OIDC client ID from API response
+  ansible.builtin.set_fact:
+    planka_oidc_client_id: "{{ _planka_oidc_client.json.id }}"
+  when: _planka_oidc_client is not skipped and _planka_oidc_client is changed
+
+- name: Generate OIDC client secret
+  ansible.builtin.uri:
+    url: "https://{{ planka_oidc_issuer | regex_replace('^https?://', '') }}/api/oidc/clients/{{ planka_oidc_client_id }}/secret"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    status_code: 200
+  register: _planka_secret_result
+  when: planka_oidc_client_id | default('') | length > 0
+
+- name: Set OIDC client secret
+  ansible.builtin.set_fact:
+    planka_oidc_client_secret: "{{ _planka_secret_result.json.secret }}"
+  when: _planka_secret_result is defined and _planka_secret_result is not skipped
+
+- name: Store Planka OIDC credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — Planka OIDC Client"
+    credential_username: "{{ planka_oidc_client_id }}"
+    credential_password: "{{ planka_oidc_client_secret }}"
+    credential_uri: "https://{{ planka_domain }}"
+    credential_notes: "PocketID OIDC client for Planka. Deployed: {{ ansible_facts.date_time.iso8601 }}"
+  when:
+    - loco is defined
+    - planka_oidc_client_id | length > 0
+
+- name: Redeploy Planka .env with OIDC credentials
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ planka_stack_path }}/.env"
+    mode: "0600"
+  notify: restart planka
+
+- name: Apply OIDC config immediately
+  ansible.builtin.meta: flush_handlers

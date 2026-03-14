@@ -80,6 +80,7 @@ bitwarden_cli:
 admin_gateway:
   # Server der *.admin.example.com via Caddy (+ optional Netbird) an den Master weiterleitet
   public_ip: ""                                    # z.B. "203.0.113.10"
+  master_netbird_ip: ""                            # Netbird-IP des Masters (z.B. "100.64.0.1")
   # DNS: *.admin.example.com -> A-Record auf diese IP
 
 # --- gocryptfs (Verschluesselung) ---
@@ -97,7 +98,8 @@ gocryptfs:
 # --- Grafana Stack (Monitoring, Logging, Alerting) ---
 grafana:
   admin_password_path: "/root/.grafana-admin-pass" # Pfad zum Grafana-Admin-Passwort auf dem Master
-  prometheus_retention: "30d"                       # Metriken-Aufbewahrung
+  metrics_backend: "victoriametrics"               # victoriametrics (leichtgewichtig) | prometheus (fallback)
+  metrics_retention: "30d"                         # Metriken-Aufbewahrung
   loki_retention: "4320h"                          # Log-Aufbewahrung (6 Monate = 4320h)
   alerting:
     email_to: "admin@example.com"                  # Alert-Empfaenger

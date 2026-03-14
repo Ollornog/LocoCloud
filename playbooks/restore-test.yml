@@ -55,6 +55,47 @@
         fail_msg: "Restore test FAILED — no files restored!"
         success_msg: "Restore test PASSED — {{ restored_files.matched }} files restored."
 
+    - name: Check for DB dumps in restored data
+      ansible.builtin.find:
+        paths: "/tmp/restore-test-{{ ansible_facts.date_time.date }}"
+        patterns: "*.sql,*.archive"
+        recurse: true
+      register: restored_dumps
+
+    - name: Verify DB dumps are non-empty
+      ansible.builtin.stat:
+        path: "{{ item.path }}"
+      loop: "{{ restored_dumps.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+      register: dump_stats
+
+    - name: Assert DB dumps have content
+      ansible.builtin.assert:
+        that:
+          - item.stat.size > 0
+        fail_msg: "DB dump {{ item.item.path | basename }} is empty!"
+        success_msg: "DB dump {{ item.item.path | basename }} OK ({{ item.stat.size }} bytes)"
+      loop: "{{ dump_stats.results }}"
+      loop_control:
+        label: "{{ item.item.path | basename }}"
+      when: dump_stats.results | length > 0
+
+    - name: Check for docker-compose files in restored stacks
+      ansible.builtin.find:
+        paths: "/tmp/restore-test-{{ ansible_facts.date_time.date }}"
+        patterns: "docker-compose.yml"
+        recurse: true
+      register: restored_stacks
+
+    - name: Assert stack configs were restored
+      ansible.builtin.assert:
+        that:
+          - restored_stacks.matched > 0
+        fail_msg: "No docker-compose configs found in restore!"
+        success_msg: "{{ restored_stacks.matched }} stack configs restored."
+      when: apps_enabled | default([]) | length > 0
+
     - name: Cleanup temp restore directory
       ansible.builtin.file:
         path: "/tmp/restore-test-{{ ansible_facts.date_time.date }}"
@@ -67,3 +108,5 @@
           Customer: {{ kunde_name | default('unknown') }}
           Date: {{ ansible_facts.date_time.iso8601 }}
           Files restored: {{ restored_files.matched }}
+          DB dumps found: {{ restored_dumps.matched }}
+          Stack configs found: {{ restored_stacks.matched | default(0) }}

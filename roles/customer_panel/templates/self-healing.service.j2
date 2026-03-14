@@ -1,0 +1,8 @@
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+[Unit]
+Description=LocoCloud Self-Healing Service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/scripts/self-healing.sh

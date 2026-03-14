@@ -1,0 +1,19 @@
+---
+# roles/audit_log/defaults/main.yml
+# Centralized audit logging for customer environments.
+# Collects: Docker events, SSH logins, Ansible runs, app-level audit trails.
+# Data is shipped to Loki via Alloy and displayed in Grafana.
+
+audit_log_path: "/var/log/audit"
+audit_log_docker_events_enabled: true
+audit_log_ssh_enabled: true
+audit_log_ansible_enabled: true
+
+# Docker event tracking (container lifecycle: start, stop, restart, die)
+audit_log_docker_events_service: "lococloudd-docker-audit"
+
+# Retention (local, before shipping to Loki)
+audit_log_local_retention_days: 30
+
+# Admin action log (written by Ansible callback plugin)
+audit_log_admin_log: "/var/log/audit/admin-actions.log"

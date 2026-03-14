@@ -1,0 +1,56 @@
+---
+- name: Generate OrangeHRM DB password if empty
+  ansible.builtin.set_fact:
+    orangehrm_db_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: orangehrm_db_password | length == 0
+
+- name: Create OrangeHRM directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ orangehrm_stack_path }}"
+    - "{{ orangehrm_data_path }}"
+    - "{{ orangehrm_data_path }}/data"
+    - "{{ orangehrm_data_path }}/db"
+
+- name: Deploy OrangeHRM docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ orangehrm_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Start OrangeHRM
+  community.docker.docker_compose_v2:
+    project_src: "{{ orangehrm_stack_path }}"
+    state: present
+
+- name: Wait for OrangeHRM to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ orangehrm_port }}{{ orangehrm_health_path }}"
+    method: GET
+    status_code: [200, 301, 302]
+  register: _orangehrm_health
+  until: _orangehrm_health.status in [200, 301, 302]
+  retries: 60
+  delay: 10
+
+- name: Store OrangeHRM credentials in Vaultwarden
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — OrangeHRM"
+    credential_username: "{{ orangehrm_db_user }}"
+    credential_password: "{{ orangehrm_db_password }}"
+    credential_uri: "https://{{ orangehrm_domain }}"
+    credential_notes: |
+      OrangeHRM DB credentials.
+      OIDC: Configure via Admin > Authentication > OpenID Connect
+      Web installer required on first run.
+      Deployed: {{ ansible_facts.date_time.iso8601 }}
+  when:
+    - loco is defined
+    - loco.vaultwarden is defined

@@ -49,11 +49,13 @@
 - **CSP:** Nur für Apps OHNE eigenen CSP setzen. Vaultwarden, Nextcloud, PocketID, Paperless setzen ihren eigenen.
 - **Nach Änderungen:** `docker restart caddy` (NICHT `caddy reload` — Inode-Problem bei Bind-Mounts)
 
-## Docker Compose — Watchtower-Labels
+## Docker Compose — Updates (KEIN Watchtower)
 
-- **Kunden-Apps** (Nextcloud, Paperless, Vaultwarden-Kunde, Uptime Kuma): `com.centurylinklabs.watchtower.enable=true`
-- **Infrastruktur-Container** (Caddy, Netbird, PocketID, Tinyauth, Semaphore, Grafana, Alloy, NocoDB): **KEIN Watchtower-Label**. Updates nur über Ansible.
-- Grund: Watchtower hat Netbird-Server aktualisiert → Relay-Endpoint geändert → VPN-Ausfall.
+- **Watchtower wurde entfernt.** Zu riskant für Silent Breaking Changes (Netbird v0.65 Vorfall).
+- **Alle Updates über Ansible:** `playbooks/update-customer.yml` via Semaphore, manuell getriggert.
+- **OS-Sicherheitsupdates:** `unattended-upgrades` bleibt aktiv.
+- **Docker Major-Updates:** Manuell nach Test. Image-Tags auf Major-Version pinnen (`nextcloud:29`).
+- **KEINE Watchtower-Labels** in docker-compose Templates. Die `watchtower`-Rolle entfernt bestehende Installationen.
 
 ## Secrets
 

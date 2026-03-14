@@ -1,0 +1,42 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Kimai
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  kimai:
+    image: {{ kimai_image }}
+    container_name: kimai
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ kimai_port }}:8001"
+    volumes:
+      - {{ kimai_data_path }}/data:/opt/kimai/var/data
+{% if kimai_ldap_enabled %}
+      - {{ kimai_stack_path }}/local.yaml:/opt/kimai/config/packages/local.yaml:ro
+{% endif %}
+    environment:
+      DATABASE_URL: "mysql://{{ kimai_db_user }}:{{ kimai_db_password }}@kimai-db:3306/{{ kimai_db_name }}?charset=utf8mb4&serverVersion=10.11.0-MariaDB"
+      TRUSTED_PROXIES: "0.0.0.0/0"
+      APP_SECRET: "{{ kimai_app_secret | default(kimai_db_password) }}"
+    depends_on:
+      kimai-db:
+        condition: service_healthy
+
+  kimai-db:
+    image: {{ kimai_db_image }}
+    container_name: kimai-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: {{ kimai_db_name }}
+      MYSQL_USER: {{ kimai_db_user }}
+      MYSQL_PASSWORD: {{ kimai_db_password }}
+      MYSQL_ROOT_PASSWORD: {{ kimai_db_password }}
+    volumes:
+      - {{ kimai_data_path }}/db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u root -p{{ kimai_db_password }} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

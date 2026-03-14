@@ -1,0 +1,11 @@
+---
+# roles/apps/planka/tasks/main.yml
+
+- name: Deploy Planka
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [planka, deploy]
+
+- name: Configure OIDC for Planka
+  ansible.builtin.import_tasks: oidc.yml
+  tags: [planka, oidc]
+  when: planka_oidc_enabled | default(false)

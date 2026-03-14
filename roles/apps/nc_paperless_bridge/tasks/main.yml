@@ -1,0 +1,12 @@
+---
+# roles/apps/nc_paperless_bridge/tasks/main.yml
+# Nextcloud-Paperless integration via inotifywait watcher
+
+- name: Deploy Nextcloud-Paperless bridge
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [nc_paperless_bridge, deploy]
+
+- name: Remove Nextcloud-Paperless bridge
+  ansible.builtin.import_tasks: remove.yml
+  tags: [nc_paperless_bridge, remove]
+  when: nc_paperless_bridge_remove | default(false)

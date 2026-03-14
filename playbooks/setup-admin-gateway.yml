@@ -1,0 +1,71 @@
+---
+# playbooks/setup-admin-gateway.yml
+# Setup the Admin-Gateway server that proxies *.admin.example.com to the Master.
+#
+# The admin gateway is a public-facing server with a real IP. It receives
+# HTTPS traffic for admin subdomains and reverse-proxies everything via
+# Netbird (or direct IP) to the master server.
+#
+# Prerequisites:
+#   - DNS: *.admin.example.com → A record to this server's public IP
+#   - Netbird connectivity to the master (or direct IP)
+#
+# Usage:
+#   ansible-playbook playbooks/setup-admin-gateway.yml -i inventories/master/
+#
+# Required variables (in inventories/master/group_vars/all.yml or extra-vars):
+#   admin_gateway_master_ip: "100.x.x.x"  # Master's Netbird IP
+
+- name: Setup Admin-Gateway
+  hosts: admin_gateway
+  become: true
+  vars:
+    admin_gateway_master_ip: "{{ hostvars[groups['master'][0]]['netbird_ip'] | default(loco.admin_gateway.master_netbird_ip | default('')) }}"
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+      tags: [always]
+
+    - name: Validate master IP is set
+      ansible.builtin.assert:
+        that:
+          - admin_gateway_master_ip | length > 0
+        fail_msg: >
+          admin_gateway_master_ip is not set. Either add the master to a
+          [master] group with netbird_ip, or set loco.admin_gateway.master_netbird_ip
+          in config/lococloudd.yml.
+      tags: [always]
+
+  roles:
+    - role: base
+      tags: [base]
+
+    - role: netbird_client
+      vars:
+        netbird_setup_key: "{{ vault_admin_gateway_netbird_setup_key | default('') }}"
+        netbird_management_url: "{{ loco.netbird.manager_url | default('') }}"
+      tags: [netbird]
+      when: loco.netbird.enabled | default(false)
+
+    - role: netbird_mtu
+      tags: [netbird, mtu]
+      when: loco.netbird.enabled | default(false)
+
+    - role: caddy
+      vars:
+        caddy_mode: "admin_gateway"
+      tags: [caddy]
+
+  post_tasks:
+    - name: Admin-Gateway setup complete
+      ansible.builtin.debug:
+        msg: |
+          Admin-Gateway setup complete!
+
+          All *.{{ loco.admin.full_domain }} traffic is now proxied
+          to the master at {{ admin_gateway_master_ip }}.
+
+          Verify DNS: *.{{ loco.admin.full_domain }} → {{ loco.admin_gateway.public_ip | default('this server') }}

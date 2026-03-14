@@ -1,0 +1,39 @@
+---
+# roles/apps/orangehrm/defaults/main.yml
+# OrangeHRM — Human Resource Management
+# Native OIDC since v5.6 (configured via web UI)
+
+orangehrm_stack_path: "/opt/stacks/orangehrm"
+orangehrm_data_path: "/mnt/data/orangehrm"
+orangehrm_image: "orangehrm/orangehrm:latest"
+orangehrm_port: 8241
+
+# Domain
+orangehrm_domain: ""  # e.g. "hr.firma-abc.de"
+
+# Database (MariaDB)
+orangehrm_db_image: "mariadb:11"
+orangehrm_db_name: "orangehrm"
+orangehrm_db_user: "orangehrm"
+orangehrm_db_password: ""  # Generated if empty
+
+# OIDC configured via web UI after deployment:
+# Admin > Authentication > OpenID Connect
+# Callback URL: https://<domain>/openidauth/openIdCredentials
+orangehrm_oidc_enabled: false
+
+# Caddy
+orangehrm_blocked_paths: []
+orangehrm_public_paths: []
+
+# Backup
+orangehrm_backup_paths:
+  - "/opt/stacks/orangehrm"
+  - "/mnt/data/orangehrm"
+
+orangehrm_pre_backup_cmd: >-
+  docker exec orangehrm-db
+  mariadb-dump -u root -p{{ orangehrm_db_password }}
+  --all-databases --single-transaction
+
+orangehrm_health_path: "/"

@@ -1,6 +1,6 @@
 # ============================================
 # GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
-# Grafana Stack (Grafana + Prometheus + Loki)
+# Grafana Stack (Grafana + {{ 'VictoriaMetrics' if metrics_backend == 'victoriametrics' else 'Prometheus' }} + Loki)
 # Generiert: {{ ansible_facts.date_time.iso8601 }}
 # ============================================
 
@@ -35,20 +35,38 @@ services:
 {% endif %}
     # NO watchtower label — infrastructure container
 
+{% if metrics_backend == 'victoriametrics' %}
+  victoriametrics:
+    image: {{ victoriametrics_image }}
+    container_name: victoriametrics
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:{{ metrics_port }}:8428"
+    volumes:
+      - {{ grafana_stack_path }}/victoria-data:/victoria-metrics-data
+      - {{ grafana_stack_path }}/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - {{ grafana_stack_path }}/prometheus-targets:/etc/prometheus/targets:ro
+    command:
+      - "-promscrape.config=/etc/prometheus/prometheus.yml"
+      - "-retentionPeriod={{ metrics_retention }}"
+      - "-httpListenAddr=:8428"
+    # NO watchtower label — infrastructure container
+{% else %}
   prometheus:
     image: {{ prometheus_image }}
     container_name: prometheus
     restart: unless-stopped
     ports:
-      - "127.0.0.1:{{ prometheus_port }}:9090"
+      - "127.0.0.1:{{ metrics_port }}:9090"
     volumes:
       - {{ grafana_stack_path }}/prometheus-data:/prometheus
       - {{ grafana_stack_path }}/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - {{ grafana_stack_path }}/prometheus-targets:/etc/prometheus/targets:ro
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.retention.time={{ prometheus_retention }}"
+      - "--storage.tsdb.retention.time={{ metrics_retention }}"
     # NO watchtower label — infrastructure container
+{% endif %}
 
   loki:
     image: {{ loki_image }}

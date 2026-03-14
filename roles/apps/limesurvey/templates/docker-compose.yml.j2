@@ -1,0 +1,44 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# LimeSurvey
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  limesurvey:
+    image: {{ limesurvey_image }}
+    container_name: limesurvey
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ limesurvey_port }}:8080"
+    volumes:
+      - {{ limesurvey_data_path }}/upload:/var/www/html/upload
+    environment:
+      DB_TYPE: pgsql
+      DB_HOST: limesurvey-db
+      DB_PORT: "5432"
+      DB_NAME: {{ limesurvey_db_name }}
+      DB_USERNAME: {{ limesurvey_db_user }}
+      DB_PASSWORD: {{ limesurvey_db_password }}
+      ADMIN_USER: {{ limesurvey_admin_user }}
+      ADMIN_PASSWORD: {{ limesurvey_admin_password }}
+      ADMIN_EMAIL: {{ limesurvey_admin_email | default(loco.operator.email | default('admin@example.com')) }}
+    depends_on:
+      limesurvey-db:
+        condition: service_healthy
+
+  limesurvey-db:
+    image: {{ limesurvey_db_image }}
+    container_name: limesurvey-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: {{ limesurvey_db_name }}
+      POSTGRES_USER: {{ limesurvey_db_user }}
+      POSTGRES_PASSWORD: {{ limesurvey_db_password }}
+    volumes:
+      - {{ limesurvey_data_path }}/db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ limesurvey_db_user }} -d {{ limesurvey_db_name }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

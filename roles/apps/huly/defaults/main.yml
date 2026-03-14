@@ -1,0 +1,42 @@
+---
+# roles/apps/huly/defaults/main.yml
+# Huly — Project management (Linear alternative)
+# Complex setup: MongoDB + MinIO + Elasticsearch
+# Auth via Tinyauth (OIDC support unclear/evolving)
+# WARNING: Resource-heavy, minimum 4 GB RAM recommended
+
+huly_stack_path: "/opt/stacks/huly"
+huly_data_path: "/mnt/data/huly"
+huly_image: "hardcoreeng/huly:latest"
+huly_port: 8245
+
+# Domain
+huly_domain: ""  # e.g. "project.firma-abc.de"
+
+# Services
+huly_mongo_image: "mongo:7"
+huly_minio_image: "minio/minio:latest"
+huly_elastic_image: "elasticsearch:7.17.24"
+
+# MinIO credentials
+huly_minio_access_key: ""  # Generated if empty
+huly_minio_secret_key: ""  # Generated if empty
+
+# Auth: Tinyauth forward-auth
+huly_tinyauth: true
+
+# Secret
+huly_secret: ""  # Generated if empty
+
+# Caddy
+huly_blocked_paths: []
+huly_public_paths: []
+
+# Backup
+huly_backup_paths:
+  - "/opt/stacks/huly"
+  - "/mnt/data/huly"
+
+huly_pre_backup_cmd: "docker exec huly-mongo mongodump --archive=/tmp/huly.archive && docker cp huly-mongo:/tmp/huly.archive /opt/backups/dumps/huly_mongo.archive"
+
+huly_health_path: "/"

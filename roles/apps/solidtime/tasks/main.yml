@@ -1,0 +1,4 @@
+---
+- name: Deploy Solidtime
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [solidtime, deploy]

@@ -1,0 +1,70 @@
+---
+# roles/apps/espocrm/tasks/deploy.yml
+
+- name: Generate EspoCRM DB password if empty
+  ansible.builtin.set_fact:
+    espocrm_db_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: espocrm_db_password | length == 0
+
+- name: Generate EspoCRM DB root password if empty
+  ansible.builtin.set_fact:
+    espocrm_db_root_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: espocrm_db_root_password | length == 0
+
+- name: Generate EspoCRM admin password if empty
+  ansible.builtin.set_fact:
+    espocrm_admin_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=24') }}"
+  when: espocrm_admin_password | length == 0
+
+- name: Create EspoCRM directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ espocrm_stack_path }}"
+    - "{{ espocrm_data_path }}"
+    - "{{ espocrm_data_path }}/data"
+    - "{{ espocrm_data_path }}/custom"
+    - "{{ espocrm_data_path }}/client-custom"
+    - "{{ espocrm_data_path }}/db"
+
+- name: Deploy EspoCRM docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ espocrm_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Start EspoCRM
+  community.docker.docker_compose_v2:
+    project_src: "{{ espocrm_stack_path }}"
+    state: present
+
+- name: Wait for EspoCRM to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ espocrm_port }}{{ espocrm_health_path }}"
+    method: GET
+    status_code: [200, 301, 302]
+  register: _espocrm_health
+  until: _espocrm_health.status in [200, 301, 302]
+  retries: 30
+  delay: 5
+
+- name: Store EspoCRM credentials in Vaultwarden
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — EspoCRM"
+    credential_username: "{{ espocrm_admin_username }}"
+    credential_password: "{{ espocrm_admin_password }}"
+    credential_uri: "https://{{ espocrm_domain }}"
+    credential_notes: |
+      EspoCRM admin + DB credentials.
+      DB Root: {{ espocrm_db_root_password }}
+      OIDC: Configure via Administration > Authentication > OIDC
+      Deployed: {{ ansible_facts.date_time.iso8601 }}
+  when:
+    - loco is defined
+    - loco.vaultwarden is defined

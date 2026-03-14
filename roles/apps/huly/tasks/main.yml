@@ -1,0 +1,4 @@
+---
+- name: Deploy Huly
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [huly, deploy]

@@ -1,0 +1,56 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# BookStack
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  bookstack:
+    image: {{ bookstack_image }}
+    container_name: bookstack
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ bookstack_port }}:80"
+    volumes:
+      - {{ bookstack_data_path }}/config:/config
+    environment:
+      PUID: 1000
+      PGID: 1000
+      APP_URL: "https://{{ bookstack_domain }}"
+      APP_KEY: "{{ bookstack_app_key }}"
+      DB_HOST: bookstack-db
+      DB_USER: {{ bookstack_db_user }}
+      DB_PASS: {{ bookstack_db_password }}
+      DB_DATABASE: {{ bookstack_db_name }}
+{% if bookstack_oidc_enabled %}
+      AUTH_METHOD: oidc
+      OIDC_NAME: PocketID
+      OIDC_CLIENT_ID: {{ bookstack_oidc_client_id }}
+      OIDC_CLIENT_SECRET: {{ bookstack_oidc_client_secret }}
+      OIDC_ISSUER: {{ bookstack_oidc_issuer }}
+      OIDC_ISSUER_DISCOVER: "true"
+      AUTH_AUTO_INITIATE: "{{ bookstack_oidc_auto_initiate | string | lower }}"
+      OIDC_USER_TO_GROUPS: "true"
+      OIDC_GROUPS_CLAIM: groups
+      OIDC_REMOVE_FROM_GROUPS: "true"
+{% endif %}
+    depends_on:
+      bookstack-db:
+        condition: service_healthy
+
+  bookstack-db:
+    image: {{ bookstack_db_image }}
+    container_name: bookstack-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: {{ bookstack_db_name }}
+      MYSQL_USER: {{ bookstack_db_user }}
+      MYSQL_PASSWORD: {{ bookstack_db_password }}
+      MYSQL_ROOT_PASSWORD: {{ bookstack_db_password }}
+    volumes:
+      - {{ bookstack_data_path }}/db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u root -p{{ bookstack_db_password }} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

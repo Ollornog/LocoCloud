@@ -79,13 +79,15 @@
       vars:
         semaphore_domain: "{{ loco.urls.semaphore }}"
         semaphore_admin_email: "{{ loco.operator.email }}"
+        pocketid_domain: "{{ loco.urls.pocketid }}"
       tags: [semaphore]
 
     - role: grafana_stack
       vars:
         grafana_domain: "{{ loco.urls.grafana }}"
         grafana_admin_password: "{{ loco.grafana.admin_password | default('') }}"
-        prometheus_retention: "{{ loco.grafana.prometheus_retention | default('30d') }}"
+        metrics_backend: "{{ loco.grafana.metrics_backend | default('victoriametrics') }}"
+        metrics_retention: "{{ loco.grafana.metrics_retention | default('30d') }}"
         loki_retention_period: "{{ loco.grafana.loki_retention | default('4320h') }}"
         grafana_smtp_enabled: "{{ loco.smtp.host | default('') | length > 0 }}"
         grafana_smtp_host: "{{ loco.smtp.host | default('') }}"

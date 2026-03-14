@@ -1,0 +1,150 @@
+---
+# roles/apps/semaphore/tasks/setup-templates.yml
+# Auto-configure Semaphore with repository, key store, and master project.
+# Runs after deploy — uses local API on 127.0.0.1.
+#
+# Creates:
+#   - SSH key store entry (for git access)
+#   - Vault password key store entry
+#   - Git repository entry
+#   - Master project with setup-master template
+
+- name: Authenticate with Semaphore API
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ semaphore_port }}/api/auth/login"
+    method: POST
+    body_format: json
+    body:
+      auth: "{{ semaphore_admin_user }}"
+      password: "{{ semaphore_admin_password }}"
+    status_code: [200, 204]
+    return_content: true
+  register: _semaphore_login
+  no_log: true
+
+- name: Extract Semaphore session cookie
+  ansible.builtin.set_fact:
+    _semaphore_cookie: "{{ _semaphore_login.cookies_string }}"
+
+# --- Key Store ---
+
+- name: List existing key store entries
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ semaphore_port }}/api/project/1/keys"
+    method: GET
+    headers:
+      Cookie: "{{ _semaphore_cookie }}"
+    status_code: [200]
+  register: _semaphore_keys
+  failed_when: false
+
+- name: Create empty key for Git repo (none type)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ semaphore_port }}/api/project/1/keys"
+    method: POST
+    headers:
+      Cookie: "{{ _semaphore_cookie }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      name: "Git Access (None)"
+      type: "none"
+      project_id: 1
+    status_code: [200, 201, 204]
+  register: _semaphore_git_key
+  when: >
+    _semaphore_keys.status != 200 or
+    (_semaphore_keys.json | default([]) | selectattr('name', 'equalto', 'Git Access (None)') | list | length == 0)
+
+# --- Project ---
+
+- name: List existing projects
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ semaphore_port }}/api/projects"
+    method: GET
+    headers:
+      Cookie: "{{ _semaphore_cookie }}"
+    status_code: [200]
+  register: _semaphore_projects
+
+- name: Create Master project
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ semaphore_port }}/api/projects"
+    method: POST
+    headers:
+      Cookie: "{{ _semaphore_cookie }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      name: "Master"
+      alert: false
+    status_code: [200, 201]
+  register: _semaphore_master_project
+  when: (_semaphore_projects.json | default([]) | selectattr('name', 'equalto', 'Master') | list | length == 0)
+
+- name: Set master project ID
+  ansible.builtin.set_fact:
+    _semaphore_master_id: >-
+      {{ (_semaphore_master_project.json.id | default(
+          (_semaphore_projects.json | selectattr('name', 'equalto', 'Master') | list | first).id
+      )) }}
+
+# --- Repository (in Master project) ---
+
+- name: List existing repositories in Master project
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ semaphore_port }}/api/project/{{ _semaphore_master_id }}/repositories"
+    method: GET
+    headers:
+      Cookie: "{{ _semaphore_cookie }}"
+    status_code: [200]
+  register: _semaphore_repos
+
+- name: Get key store entries for Master project
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ semaphore_port }}/api/project/{{ _semaphore_master_id }}/keys"
+    method: GET
+    headers:
+      Cookie: "{{ _semaphore_cookie }}"
+    status_code: [200]
+  register: _semaphore_master_keys
+
+- name: Create key in Master project if needed
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ semaphore_port }}/api/project/{{ _semaphore_master_id }}/keys"
+    method: POST
+    headers:
+      Cookie: "{{ _semaphore_cookie }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      name: "Git Access (None)"
+      type: "none"
+      project_id: "{{ _semaphore_master_id | int }}"
+    status_code: [200, 201, 204]
+  register: _semaphore_master_git_key
+  when: (_semaphore_master_keys.json | default([]) | selectattr('name', 'equalto', 'Git Access (None)') | list | length == 0)
+
+- name: Get key ID for repository
+  ansible.builtin.set_fact:
+    _semaphore_key_id: >-
+      {{ (_semaphore_master_git_key.json.id | default(
+          (_semaphore_master_keys.json | selectattr('name', 'equalto', 'Git Access (None)') | list | first).id
+      )) }}
+
+- name: Create LocoCloud repository
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ semaphore_port }}/api/project/{{ _semaphore_master_id }}/repositories"
+    method: POST
+    headers:
+      Cookie: "{{ _semaphore_cookie }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      name: "LocoCloud"
+      project_id: "{{ _semaphore_master_id | int }}"
+      git_url: "{{ loco.repo.url | default('https://github.com/Ollornog/LocoCloud.git') }}"
+      git_branch: "{{ loco.repo.branch | default('main') }}"
+      ssh_key_id: "{{ _semaphore_key_id | int }}"
+    status_code: [200, 201]
+  when: (_semaphore_repos.json | default([]) | selectattr('name', 'equalto', 'LocoCloud') | list | length == 0)

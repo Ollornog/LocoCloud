@@ -1,0 +1,39 @@
+---
+# roles/apps/n8n/defaults/main.yml
+# n8n — Workflow automation (Zapier alternative)
+# OIDC requires paid license — use Tinyauth forward-auth instead
+
+n8n_stack_path: "/opt/stacks/n8n"
+n8n_data_path: "/mnt/data/n8n"
+n8n_image: "docker.n8n.io/n8nio/n8n:stable"
+n8n_port: 8240
+
+# Domain
+n8n_domain: ""  # e.g. "auto.firma-abc.de"
+
+# Database (PostgreSQL)
+n8n_db_image: "postgres:18"
+n8n_db_name: "n8n"
+n8n_db_user: "n8n"
+n8n_db_password: ""  # Generated if empty
+
+# Encryption key (generated if empty, NEVER lose this!)
+n8n_encryption_key: ""
+
+# Auth: Tinyauth forward-auth (native OIDC requires paid license)
+n8n_tinyauth: true
+
+# Caddy
+n8n_blocked_paths: []
+n8n_public_paths:
+  - "/webhook/*"
+  - "/webhook-test/*"
+
+# Backup
+n8n_backup_paths:
+  - "/opt/stacks/n8n"
+  - "/mnt/data/n8n"
+
+n8n_pre_backup_cmd: "docker exec n8n-db pg_dumpall -U postgres > /opt/backups/dumps/n8n_pg.sql"
+
+n8n_health_path: "/healthz"

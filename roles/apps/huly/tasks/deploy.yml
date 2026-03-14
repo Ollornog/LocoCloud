@@ -1,0 +1,75 @@
+---
+- name: Generate Huly secret if empty
+  ansible.builtin.set_fact:
+    huly_secret: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=64') }}"
+  when: huly_secret | length == 0
+
+- name: Generate Huly MinIO access key if empty
+  ansible.builtin.set_fact:
+    huly_minio_access_key: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=20') }}"
+  when: huly_minio_access_key | length == 0
+
+- name: Generate Huly MinIO secret key if empty
+  ansible.builtin.set_fact:
+    huly_minio_secret_key: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=40') }}"
+  when: huly_minio_secret_key | length == 0
+
+- name: Create Huly directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ huly_stack_path }}"
+    - "{{ huly_data_path }}"
+    - "{{ huly_data_path }}/mongo"
+    - "{{ huly_data_path }}/minio"
+    - "{{ huly_data_path }}/elastic"
+
+- name: Set Elasticsearch directory permissions
+  ansible.builtin.file:
+    path: "{{ huly_data_path }}/elastic"
+    owner: "1000"
+    group: "1000"
+    mode: "0755"
+
+- name: Deploy Huly docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ huly_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Start Huly
+  community.docker.docker_compose_v2:
+    project_src: "{{ huly_stack_path }}"
+    state: present
+
+- name: Wait for Huly to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ huly_port }}{{ huly_health_path }}"
+    method: GET
+    status_code: [200, 301, 302]
+  register: _huly_health
+  until: _huly_health.status in [200, 301, 302]
+  retries: 60
+  delay: 10
+
+- name: Store Huly credentials in Vaultwarden
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — Huly"
+    credential_username: "minio"
+    credential_password: "{{ huly_minio_secret_key }}"
+    credential_uri: "https://{{ huly_domain }}"
+    credential_notes: |
+      Huly infrastructure credentials. Auth via Tinyauth.
+      Secret: {{ huly_secret }}
+      MinIO Access: {{ huly_minio_access_key }}
+      MinIO Secret: {{ huly_minio_secret_key }}
+      Deployed: {{ ansible_facts.date_time.iso8601 }}
+  when:
+    - loco is defined
+    - loco.vaultwarden is defined

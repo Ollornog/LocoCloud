@@ -1,0 +1,24 @@
+#!/bin/bash
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Container Status API (called by customer panel)
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+#
+# Generates a JSON file with container status for the customer panel.
+# Run via cron every minute.
+
+set -euo pipefail
+
+OUTPUT="{{ customer_panel_data_path }}/html/api/status"
+
+mkdir -p "$(dirname "$OUTPUT")"
+
+docker ps -a --format '{"name":"{{ '{{' }}.Names{{ '}}' }}","status":"{{ '{{' }}.State{{ '}}' }}","image":"{{ '{{' }}.Image{{ '}}' }}"}' | \
+  python3 -c "
+import sys, json
+containers = [json.loads(line) for line in sys.stdin if line.strip()]
+# Filter out infrastructure containers the customer doesn't need to see
+hidden = {'watchtower', 'customer-panel', 'alloy', 'caddy'}
+visible = [c for c in containers if c['name'] not in hidden]
+print(json.dumps({'containers': visible, 'timestamp': '$(date -Iseconds)'}))" > "$OUTPUT"

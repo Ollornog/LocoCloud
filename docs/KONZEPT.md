@@ -1831,7 +1831,7 @@ services:
     command: run /etc/alloy/config.alloy
     network_mode: host
     pid: host
-    # KEIN Watchtower-Label — Updates nur über Ansible
+    # Watchtower entfernt — alle Updates über Ansible/Semaphore
 ```
 
 **Alloy-Konfiguration (Auszug):**
@@ -2571,7 +2571,7 @@ Identisch für alle Server (Master + Kunden):
 | Kernel-Hardening | sysctl (rp_filter, syncookies, etc.) — **LXC-kompatible Params beachten!** |
 | Fail2ban | SSH (10 Versuche, 3600s Ban) |
 | Unattended-upgrades | Automatische Sicherheitsupdates |
-| Watchtower | Docker-Image-Patches täglich 04:00 — NUR Kunden-Apps (Label-basiert, Major gepinnt). Infra-Container OHNE Label, Updates nur über Ansible |
+| Docker-Updates | Manuell via `update-customer.yml` (Semaphore). Kein Watchtower — entfernt wegen Silent Breaking Changes (Netbird v0.65 Vorfall). Image-Tags auf Major-Version pinnen |
 | USB deaktiviert | Nur auf physischen Servern (`is_lxc`-Check!) |
 | .env chmod 600 | Alle Secrets-Files |
 | Docker Port-Bind | Entry-Point: `127.0.0.1:PORT` / App-LXCs: `0.0.0.0:PORT` + UFW auf wt0 |
@@ -2608,59 +2608,33 @@ admin_user_nopasswd: true  # NOPASSWD für Ansible-Kompatibilität
 | Backup | Ja | Restic Cron |
 | Health-Checks | Ja | Grafana Alerting |
 | SSL-Erneuerung | Ja | Caddy (ACME) |
-| **Infrastruktur-Container** (Netbird, Caddy, PocketID, Tinyauth, Semaphore, Grafana, Alloy) | **NEIN** | **Nur über Ansible** (`update-all.yml` / `update-app.yml`) |
-| **Kunden-App-Container** (Nextcloud, Paperless, Vaultwarden, etc.) | Ja (Patches) | Watchtower (Label-basiert, Major-Version gepinnt) |
+| **Alle Docker-Container** (Infra + Apps) | **NEIN** | **Nur über Ansible** (`update-customer.yml` / `update-app.yml` via Semaphore) |
 
-### 19.2 Watchtower-Strategie: Nur Kunden-Apps, nie Infrastruktur
+### 19.2 Update-Strategie: Kein Watchtower, alles über Ansible
 
-**Watchtower darf NUR Kunden-App-Container updaten.** Infrastruktur-Container (alles was Netzwerk, Auth oder Routing betrifft) bekommen KEIN Watchtower-Label.
+**Watchtower wurde komplett entfernt.** Die `watchtower`-Rolle entfernt bestehende Installationen idempotent.
 
-**Container OHNE Watchtower-Label (Updates nur über Ansible):**
-- Caddy
-- Netbird (Server + Client via apt)
-- PocketID
-- Tinyauth
-- Semaphore
-- Grafana, Prometheus, Loki (Master)
-- Grafana Alloy (Kundenserver)
-- NocoDB (Master)
-- Watchtower selbst
+**Grund:** Watchtower hat den Netbird-Server automatisch aktualisiert → neuer Relay-Endpoint `/relay` (ohne Slash) → Caddy-Route `handle /relay/*` hat nicht mehr gematcht → VPN-Tunnel weg → alle Dienste unerreichbar. Selbst Label-basiert ist das Risiko für Silent Breaking Changes bei Patch-Updates zu hoch.
 
-**Container MIT Watchtower-Label (Patches automatisch):**
-- Nextcloud (gepinnt auf Major: `nextcloud:29`)
-- Paperless-NGX (gepinnt auf Major: `ghcr.io/paperless-ngx/paperless-ngx:2`)
-- Vaultwarden (Kunden-Instanz)
-- Uptime Kuma
-- Weitere Kunden-Apps
-
-```yaml
-# Docker Compose Template für Kunden-Apps:
-services:
-  app:
-    image: "nextcloud:29"          # Pinned auf Major-Version, Patches automatisch
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-```
+**Ersatz:**
+- `update-customer.yml` — Zieht alle Images und recreated Container. Manuell via Semaphore getriggert.
+- `update-app.yml` — Aktualisiert eine einzelne App gezielt.
+- OS-Sicherheitspatches bleiben automatisch via `unattended-upgrades`.
 
 **Image-Tag-Strategie:**
-- `nextcloud:29` → bekommt automatisch 29.0.1, 29.0.2, etc. (Patches)
-- `nextcloud:30` → manuell via `update-app.yml` wenn getestet (Major-Update)
-- Container ohne Label werden von Watchtower ignoriert
-
-**Major-Updates** (die was kaputt machen können) werden ausschließlich über Semaphore/`update-app.yml` gemacht:
-1. Image-Tag im Inventar ändern (z.B. `nextcloud_version: "30"`)
-2. `update-app.yml` ausführen → neues Image pullen, Container neu starten
-3. Post-Update-Checks (Health-Check, DB-Migration prüfen)
+- `nextcloud:29` → Patches (29.0.1, 29.0.2) werden beim nächsten `update-customer.yml` gezogen
+- `nextcloud:30` → Major-Update: Image-Tag im Inventar ändern, dann `update-app.yml`
 
 ### 19.3 Manuell (Semaphore)
 
 | Task | Playbook |
 |------|----------|
-| Infra-Updates (Netbird, Caddy, PocketID, etc.) | `update-all.yml` — kontrolliertes Ansible-Rollout |
-| Major App-Updates | `update-app.yml` — Image-Tag im Inventar ändern, dann ausführen |
-| Full OS-Update | `update-all.yml` |
-| Backup-Test | `backup-test.yml` |
+| Alle Docker-Updates (Pull + Recreate) | `update-customer.yml` — für ganzen Kunden |
+| Einzelne App updaten | `update-app.yml` — Image-Tag im Inventar ändern, dann ausführen |
+| OS-Updates | `update-all.yml` — kontrolliertes Rollout |
+| Backup-Test | `restore-test.yml` — monatlicher Restore-Verifikation |
 | Mitarbeiter anlegen/entfernen | `add-user.yml` / `remove-user.yml` |
+| Break-Glass Account | `setup-breakglass.yml` — Notfallzugang erstellen |
 
 ---
 
@@ -3032,23 +3006,56 @@ Microsoft 365 / Google Workspace.
 | Isolation auf Proxmox | `lxc_per_app` empfohlen, `single_lxc` als Option | Kap. 5 |
 | LXC-Bootstrap-Methode | `pct exec` via Proxmox-Host (SSH-Key + Netbird injizieren, dann direkte Verbindung) | Kap. 5.6 |
 | Netbird-Gruppen/Keys/Policies | Vollautomatisch via Netbird REST-API durch Ansible (kein manueller Eingriff) | Kap. 6.3 |
-| Watchtower-Strategie | NUR für Kunden-Apps (Label-basiert + gepinnte Major-Versionen). Infra-Container OHNE Label — Updates nur über Ansible. | Kap. 19.2 |
+| Update-Strategie | Kein Watchtower — alle Docker-Updates über `update-customer.yml` via Semaphore. OS-Patches via unattended-upgrades. | Kap. 19.2 |
 | LXC-Template auf Proxmox | Ansible lädt Template via `pveam download` automatisch herunter wenn fehlend | Kap. 5.6 |
 | Offboarding-Strategie | Gestuft: Archivieren (Standard) oder komplett löschen. Server manuell beim Provider löschen. Credentials archiviert | Kap. 17.7 |
 | Tinyauth als Forward-Auth | PocketID + Tinyauth — im Betrieb bewährt. Nur OIDC via PocketID (kein direkter Login, kein Brute-Force-Risiko) | Kap. 7.9 |
 | DynDNS (komplett lokal) | Master-Server übernimmt DNS-Updates für lokale Kunden — immer online, kennt die Netbird-IPs | Kap. 20 |
 | Admin sudo | NOPASSWD — SSH nur über Netbird (`wt0`) + Key-Only. Netbird ist die zweite Sicherheitsstufe | Kap. 18.3 |
-| Monitoring | Grafana Stack auf Master (Grafana + Prometheus + Loki). Alloy als einziger Agent. Uptime Kuma als optionale Kunden-App | Kap. 13 |
+| Monitoring | Grafana Stack auf Master: Grafana + VictoriaMetrics (Default, leichtgewichtig) + Loki. Prometheus als Fallback (`metrics_backend: prometheus`). Alloy als einziger Agent. Uptime Kuma als optionale Kunden-App | Kap. 13 |
 | Verschlüsselung at Rest | gocryptfs auf `/mnt/data` auf jedem Kundenserver. Keyfile nur auf Master + Key-Backup. Auto-Mount nach Reboot via Systemd | Kap. 12 |
 | Compliance-Dokumentation | TOM, VVT, Löschkonzept als Jinja2-Templates. Automatisch generiert pro Kunde bei Onboarding/App-Änderung | Kap. 14 |
 | Berechtigungskonzept | NocoDB auf Master-Server. Pro Kunde eine Tabelle mit Benutzern und App-Zugriff. Dokumentation, nicht automatischer Sync | Kap. 7.8, 3.7 |
 | Server-Onboarding | Frische Server mit IP/User/Passwort. Ansible bootstrappt alles (SSH-Key, base-Rolle, gocryptfs, Alloy). Netbird optional | Kap. 17.3 |
 | Backup-Pflicht | Ohne Backup-Ziel = kein Backup. Bewusste Entscheidung pro Kunde. Pre-Backup-Hooks für DB-Dumps. Monatlicher Restore-Test | Kap. 11 |
 | Logging & DSGVO | Loki mit 6 Monate Retention. journald FSS Sealing. Personenbezogene Daten minimiert. Automatische Löschung | Kap. 13.4 |
+| User-Directory | lldap als Single Source of Truth. PocketID synct aus lldap (LDAP-Backend). Apps mit LDAP (Nextcloud, Pingvin Share) binden direkt. Apps ohne LDAP via `disable-user.yml` Playbook | Kap. 7 |
+| Metrics-Backend | VictoriaMetrics als Default (leichtgewichtig, PromQL-kompatibel). Prometheus als Fallback (`metrics_backend: prometheus`) | Kap. 13 |
 
 ### Noch offene Entscheidungen
 
-Keine — alle Entscheidungen sind getroffen.
+#### OE-1: Grafana-Dashboard — Einheitliches Übersichtsdashboard
+
+**Status:** Offen
+
+**Ziel:** Ein einzelnes Grafana-Dashboard das ALLES auf einen Blick zeigt:
+- **System-Metriken:** CPU, RAM, Disk pro Server
+- **Container-Status:** Laufende Container, Restart-Count, Health
+- **Software-Versionen:** Image-Tags aller laufenden Container
+- **Health-Checks:** HTTP-Status aller Apps
+- **Logs:** Aggregierte Logs aller Dienste (journald + Docker)
+- **User-Nutzung:** Aktive User pro App (soweit die App eine API dafür bietet)
+- **App-Nutzung:** Dokumente in Paperless, Dateien in Nextcloud, etc.
+
+**Nächste Schritte:**
+1. Grafana-Dashboard als JSON-Template bauen (provisionierbar via Ansible)
+2. Container-Versionen via Docker-Labels in Alloy-Metriken abbilden
+3. App-spezifische Metriken evaluieren (Paperless API, Nextcloud OCS API)
+4. Beszel als optionale Kunden-App evaluieren (leichtgewichtiges Server-Dashboard)
+
+#### OE-2: lldap — Offene Detailfragen
+
+**Status:** Offen
+
+**Kontext:** lldap ist als User-Directory (Single Source of Truth) implementiert. PocketID nutzt lldap als LDAP-Backend, Apps mit nativem LDAP (Nextcloud, Pingvin Share) binden direkt an. Apps ohne LDAP (Paperless, Vaultwarden, Documenso) werden via `disable-user.yml` Playbook manuell gehandhabt.
+
+**Offene Fragen:**
+- [ ] Documenso: Exaktes DB-Schema für User-Deaktivierung prüfen (Feld `disabled` vs. anderer Mechanismus)
+- [ ] Vaultwarden: SQLite vs. PostgreSQL — unterschiedlicher Pfad im disable-Playbook
+- [ ] PocketID: LDAP-Sync-Intervall konfigurierbar? Manueller Trigger via API möglich?
+- [ ] Nextcloud: LDAP + OIDC parallel testen vs. nur LDAP (Empfehlung: erstmal nur LDAP)
+- [ ] lldap: PostgreSQL vs. SQLite für Produktion evaluieren (SQLite reicht für <50 User)
+- [ ] Migration bestehender PocketID-User: Lokale Accounts löschen bevor LDAP aktiviert wird (sonst werden LDAP-Accounts ignoriert)
 
 ---
 
@@ -3057,6 +3064,8 @@ Keine — alle Entscheidungen sind getroffen.
 | Port | Dienst |
 |------|--------|
 | 1411 | PocketID |
+| 3890 | lldap LDAP (Kundenserver, intern) |
+| 17170 | lldap Web-UI (Kundenserver, nur via Netbird) |
 | 3000 | Semaphore (nur Master) |
 | 3100 | Grafana (nur Master) |
 | 3110 | Loki (nur Master, intern) |
@@ -3071,9 +3080,27 @@ Keine — alle Entscheidungen sind getroffen.
 | 8228 | Cal.com |
 | 8229 | Uptime Kuma |
 | 8230 | Listmonk |
+| 8231 | Invoice Ninja |
+| 8232 | EspoCRM |
+| 8233 | Planka |
+| 8234 | Vikunja |
+| 8235 | Leantime |
+| 8236 | Kimai |
+| 8237 | Solidtime |
+| 8238 | Zulip |
+| 8239 | Rocket.Chat |
+| 8240 | n8n |
+| 8241 | OrangeHRM |
+| 8242 | Easy!Appointments |
+| 8243 | BookStack |
+| 8244 | Directus |
+| 8245 | Huly |
+| 8246 | LimeSurvey |
 | 8085 | NocoDB (nur Master) |
+| 9000 | authentik HTTP (Kundenserver, optional) |
 | 9090 | Tinyauth |
 | 9091 | Prometheus (nur Master, intern) |
+| 9100 | Backrest (Restic Web UI) |
 | 12345 | Grafana Alloy (Kundenserver, intern) |
 
 ---

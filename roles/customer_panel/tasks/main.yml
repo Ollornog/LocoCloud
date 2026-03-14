@@ -1,0 +1,6 @@
+---
+# roles/customer_panel/tasks/main.yml
+
+- name: Deploy customer panel
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [customer_panel, deploy]

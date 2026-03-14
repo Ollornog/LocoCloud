@@ -1,0 +1,62 @@
+---
+# roles/apps/invoiceninja/defaults/main.yml
+# Invoice Ninja — Self-hosted invoicing with ZUGFeRD e-invoicing
+# Auth via Tinyauth forward-auth (no native OIDC support)
+
+invoiceninja_stack_path: "/opt/stacks/invoiceninja"
+invoiceninja_data_path: "/mnt/data/invoiceninja"
+invoiceninja_image: "invoiceninja/invoiceninja:5"
+invoiceninja_nginx_image: "nginx:alpine"
+invoiceninja_port: 8231
+
+# Domain
+invoiceninja_domain: ""  # e.g. "invoice.firma-abc.de"
+
+# Database (MariaDB, dedicated)
+invoiceninja_db_image: "mariadb:11"
+invoiceninja_db_name: "invoiceninja"
+invoiceninja_db_user: "invoiceninja"
+invoiceninja_db_password: ""  # Generated if empty
+invoiceninja_db_root_password: ""  # Generated if empty
+
+# APP_KEY (base64:... format, generated on first deploy)
+invoiceninja_app_key: ""
+
+# SMTP (override per-customer, falls back to global loco.smtp)
+invoiceninja_smtp_host: ""
+invoiceninja_smtp_port: ""
+invoiceninja_smtp_user: ""
+invoiceninja_smtp_password: ""
+invoiceninja_smtp_from_name: "Invoice Ninja"
+invoiceninja_smtp_from_address: ""
+
+# ZUGFeRD e-invoicing (DACH default)
+invoiceninja_enable_e_invoice: true
+invoiceninja_e_invoice_standard: "ZUGFeRD_2p1"
+
+# Paperless BCC integration (optional)
+invoiceninja_bcc_email: ""  # e.g. "consume@paperless.firma.de"
+
+# Caddy: block client self-registration
+invoiceninja_blocked_paths:
+  - "/client/register*"
+
+# Public paths (none by default — all protected by Tinyauth)
+invoiceninja_public_paths: []
+
+# Tinyauth protection (Invoice Ninja has no native OIDC)
+invoiceninja_tinyauth: true
+
+# Backup paths
+invoiceninja_backup_paths:
+  - "/opt/stacks/invoiceninja"
+  - "/mnt/data/invoiceninja"
+
+# Pre-backup: MariaDB dump
+invoiceninja_pre_backup_cmd: >-
+  docker exec invoiceninja-db
+  mariadb-dump -u root -p{{ invoiceninja_db_root_password }}
+  --all-databases --single-transaction
+
+# Health check
+invoiceninja_health_path: "/"

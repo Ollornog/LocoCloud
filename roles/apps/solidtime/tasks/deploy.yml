@@ -1,0 +1,80 @@
+---
+- name: Generate Solidtime DB password if empty
+  ansible.builtin.set_fact:
+    solidtime_db_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: solidtime_db_password | length == 0
+
+- name: Create Solidtime directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ solidtime_stack_path }}"
+    - "{{ solidtime_data_path }}"
+    - "{{ solidtime_data_path }}/db"
+    - "{{ solidtime_data_path }}/storage"
+
+- name: Deploy Solidtime docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ solidtime_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Generate APP_KEY if empty
+  ansible.builtin.command: >
+    docker run --rm {{ solidtime_image }}
+    php artisan key:generate --show
+  register: _solidtime_app_key
+  changed_when: false
+  when: solidtime_app_key | length == 0
+
+- name: Set APP_KEY fact
+  ansible.builtin.set_fact:
+    solidtime_app_key: "{{ _solidtime_app_key.stdout | trim }}"
+  when: solidtime_app_key | length == 0
+
+- name: Deploy Solidtime .env
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ solidtime_stack_path }}/.env"
+    mode: "0600"
+
+- name: Start Solidtime
+  community.docker.docker_compose_v2:
+    project_src: "{{ solidtime_stack_path }}"
+    state: present
+
+- name: Run database migrations
+  ansible.builtin.command: >
+    docker exec solidtime php artisan migrate --force --no-interaction
+  register: _solidtime_migrate
+  changed_when: "'Migrating' in _solidtime_migrate.stdout"
+
+- name: Wait for Solidtime to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ solidtime_port }}{{ solidtime_health_path }}"
+    method: GET
+    status_code: [200, 301, 302]
+  register: _solidtime_health
+  until: _solidtime_health.status in [200, 301, 302]
+  retries: 30
+  delay: 5
+
+- name: Store Solidtime credentials in Vaultwarden
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — Solidtime"
+    credential_username: "{{ solidtime_db_user }}"
+    credential_password: "{{ solidtime_db_password }}"
+    credential_uri: "https://{{ solidtime_domain }}"
+    credential_notes: |
+      Solidtime DB credentials. Auth via Tinyauth.
+      APP_KEY: {{ solidtime_app_key }}
+      Deployed: {{ ansible_facts.date_time.iso8601 }}
+  when:
+    - loco is defined
+    - loco.vaultwarden is defined

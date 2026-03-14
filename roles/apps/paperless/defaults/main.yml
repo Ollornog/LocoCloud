@@ -32,8 +32,34 @@ paperless_admin_password: ""  # Generated if empty
 # Secret key
 paperless_secret_key: ""  # Generated if empty
 
+# Locale / DACH — optimized for Austria/Germany/Switzerland
+paperless_timezone: "Europe/Vienna"
+paperless_date_order: "DMY"
+
+# OCR settings
+paperless_ocr_language: "deu+eng"
+paperless_ocr_mode: "skip"              # skip existing text layers
+paperless_ocr_output_type: "pdfa"        # PDF/A for archiving
+paperless_ocr_clean: "clean"             # clean up scanned pages
+paperless_ocr_deskew: "true"
+paperless_ocr_rotate_pages: "true"
+
+# Filename format (Jinja2 template, processed by Paperless)
+paperless_filename_format: "{{ '{{' }} created_year {{ '}}' }}/{{ '{{' }} document_type {{ '}}' }}/{{ '{{' }} created_year {{ '}}' }}-{{ '{{' }} created_month {{ '}}' }}-{{ '{{' }} created_day {{ '}}' }}_{{ '{{' }} correspondent {{ '}}' }}_{{ '{{' }} title {{ '}}' }}"
+paperless_filename_format_remove_none: true
+
+# Consumer settings
+paperless_consumer_recursive: true
+paperless_consumer_subdirs_as_tags: true
+paperless_consumer_delete_duplicates: true
+
+# Audit & Trash
+paperless_audit_log_enabled: true
+paperless_empty_trash_delay: 3650       # ~10 years, per BAO §132
+
 # OIDC via PocketID
 paperless_oidc_enabled: false
+paperless_oidc_provider_id: "pocketid"  # used in callback URL path
 paperless_oidc_client_id: ""
 paperless_oidc_client_secret: ""
 paperless_oidc_provider_url: ""  # e.g. "https://id.firma-abc.de"
@@ -51,5 +77,5 @@ paperless_backup_paths:
   - "/mnt/data/paperless"
   - "/opt/stacks/paperless"
 
-# Health check
-paperless_health_path: "/api/"
+# Health check — /api/tags/ statt /api/ (gibt 302 bei aktivem SSO)
+paperless_health_path: "/api/tags/"

@@ -1,0 +1,50 @@
+---
+# roles/apps/vikunja/defaults/main.yml
+# Vikunja — Task/project management (Todoist/Wunderlist alternative)
+# Native OIDC via PocketID
+
+vikunja_stack_path: "/opt/stacks/vikunja"
+vikunja_data_path: "/mnt/data/vikunja"
+vikunja_image: "vikunja/vikunja:1"
+vikunja_port: 8234
+
+# Domain
+vikunja_domain: ""  # e.g. "tasks.firma-abc.de"
+
+# Database (PostgreSQL)
+vikunja_db_image: "postgres:18"
+vikunja_db_name: "vikunja"
+vikunja_db_user: "vikunja"
+vikunja_db_password: ""  # Generated if empty
+
+# JWT secret (generated if empty, persist forever)
+vikunja_jwt_secret: ""
+
+# OIDC via PocketID
+vikunja_oidc_enabled: false
+vikunja_oidc_client_id: ""
+vikunja_oidc_client_secret: ""
+vikunja_oidc_issuer_url: ""  # e.g. "https://id.firma-abc.de"
+vikunja_oidc_provider_name: "pocketid"
+vikunja_local_auth_enabled: false  # Disable local login (SSO-only)
+
+# SMTP (falls back to global loco.smtp)
+vikunja_smtp_host: ""
+vikunja_smtp_port: ""
+vikunja_smtp_user: ""
+vikunja_smtp_password: ""
+vikunja_smtp_from: ""
+
+# Caddy
+vikunja_blocked_paths:
+  - "/register*"
+vikunja_public_paths: []
+
+# Backup
+vikunja_backup_paths:
+  - "/opt/stacks/vikunja"
+  - "/mnt/data/vikunja"
+
+vikunja_pre_backup_cmd: "docker exec vikunja-db pg_dumpall -U postgres > /opt/backups/dumps/vikunja_pg.sql"
+
+vikunja_health_path: "/api/v1/info"

@@ -1,0 +1,25 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# lldap — Lightweight LDAP User Directory
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  lldap:
+    image: {{ lldap_image }}
+    container_name: lldap
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:{{ lldap_ldap_port }}:3890"
+      - "127.0.0.1:{{ lldap_web_port }}:17170"
+    environment:
+      - UID=1000
+      - GID=1000
+      - TZ={{ lldap_timezone }}
+      - LLDAP_JWT_SECRET={{ lldap_jwt_secret }}
+      - LLDAP_KEY_SEED={{ lldap_key_seed }}
+      - LLDAP_LDAP_BASE_DN={{ lldap_base_dn }}
+      - LLDAP_LDAP_USER_PASS={{ lldap_admin_password }}
+    volumes:
+      - {{ lldap_data_path }}:/data
+    # NO watchtower label — infrastructure container

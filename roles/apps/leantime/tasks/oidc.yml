@@ -1,0 +1,64 @@
+---
+# Register OIDC client in PocketID for Leantime
+
+- name: Create OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ leantime_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    body_format: json
+    body:
+      name: "Leantime ({{ kunde_name }})"
+      callbackURLs:
+        - "https://{{ leantime_domain }}/oidc/callback"
+    status_code: [200, 201]
+  register: _leantime_oidc_client
+  when:
+    - leantime_oidc_client_id | length == 0
+    - loco.pocketid.api_token | default('') | length > 0
+
+- name: Set OIDC client ID from API response
+  ansible.builtin.set_fact:
+    leantime_oidc_client_id: "{{ _leantime_oidc_client.json.id }}"
+  when: _leantime_oidc_client is not skipped and _leantime_oidc_client is changed
+
+- name: Generate OIDC client secret
+  ansible.builtin.uri:
+    url: "https://{{ leantime_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients/{{ leantime_oidc_client_id }}/secret"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    status_code: 200
+  register: _leantime_secret_result
+  when: leantime_oidc_client_id | default('') | length > 0
+
+- name: Set OIDC client secret
+  ansible.builtin.set_fact:
+    leantime_oidc_client_secret: "{{ _leantime_secret_result.json.secret }}"
+  when: _leantime_secret_result is defined and _leantime_secret_result is not skipped
+
+- name: Store Leantime OIDC credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — Leantime OIDC Client"
+    credential_username: "{{ leantime_oidc_client_id }}"
+    credential_password: "{{ leantime_oidc_client_secret }}"
+    credential_uri: "https://{{ leantime_domain }}"
+    credential_notes: "PocketID OIDC client for Leantime. Deployed: {{ ansible_facts.date_time.iso8601 }}"
+  when:
+    - loco is defined
+    - leantime_oidc_client_id | length > 0
+
+- name: Redeploy Leantime .env with OIDC credentials
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ leantime_stack_path }}/.env"
+    mode: "0600"
+  notify: restart leantime
+
+- name: Apply OIDC config immediately
+  ansible.builtin.meta: flush_handlers

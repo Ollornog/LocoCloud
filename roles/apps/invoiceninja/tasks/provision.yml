@@ -1,0 +1,38 @@
+---
+# roles/apps/invoiceninja/tasks/provision.yml
+# Initial provisioning: create admin user and configure company details.
+# Run with: -e "invoiceninja_provision=true"
+# Requires: invoiceninja_admin_email, invoiceninja_admin_password
+
+- name: Validate provisioning parameters
+  ansible.builtin.fail:
+    msg: "invoiceninja_admin_email and invoiceninja_admin_password must be set for provisioning"
+  when: >
+    invoiceninja_admin_email is not defined or
+    invoiceninja_admin_password is not defined
+
+- name: Create admin user via artisan
+  ansible.builtin.command: >
+    docker exec invoiceninja
+    php artisan ninja:create-account
+    --email={{ invoiceninja_admin_email }}
+    --password={{ invoiceninja_admin_password }}
+  register: _in_create_admin
+  changed_when: "'created' in _in_create_admin.stdout | lower"
+  failed_when: false
+
+- name: Store admin credentials in Vaultwarden
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — Invoice Ninja Admin"
+    credential_username: "{{ invoiceninja_admin_email }}"
+    credential_password: "{{ invoiceninja_admin_password }}"
+    credential_uri: "https://{{ invoiceninja_domain }}"
+    credential_notes: "Invoice Ninja admin account. Deployed: {{ ansible_facts.date_time.iso8601 }}"
+  when:
+    - loco is defined
+    - loco.vaultwarden is defined
+    - _in_create_admin.rc == 0

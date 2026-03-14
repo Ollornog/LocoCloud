@@ -1,0 +1,45 @@
+---
+# roles/apps/directus/defaults/main.yml
+# Directus — Headless CMS / data platform
+# Native OIDC via PocketID (env vars)
+# License: BSL 1.1 (free for entities under $5M total finances)
+
+directus_stack_path: "/opt/stacks/directus"
+directus_data_path: "/mnt/data/directus"
+directus_image: "directus/directus:11"
+directus_port: 8244
+
+# Domain
+directus_domain: ""  # e.g. "cms.firma-abc.de"
+
+# Database (PostgreSQL)
+directus_db_image: "postgres:18"
+directus_db_name: "directus"
+directus_db_user: "directus"
+directus_db_password: ""  # Generated if empty
+
+# Secret (JWT signing, generated if empty)
+directus_secret: ""
+
+# Admin (initial setup)
+directus_admin_email: ""
+directus_admin_password: ""  # Generated if empty
+
+# OIDC via PocketID
+directus_oidc_enabled: false
+directus_oidc_client_id: ""
+directus_oidc_client_secret: ""
+directus_oidc_issuer_url: ""  # e.g. "https://id.firma-abc.de/.well-known/openid-configuration"
+
+# Caddy
+directus_blocked_paths: []
+directus_public_paths: []
+
+# Backup
+directus_backup_paths:
+  - "/opt/stacks/directus"
+  - "/mnt/data/directus"
+
+directus_pre_backup_cmd: "docker exec directus-db pg_dumpall -U postgres > /opt/backups/dumps/directus_pg.sql"
+
+directus_health_path: "/server/health"
