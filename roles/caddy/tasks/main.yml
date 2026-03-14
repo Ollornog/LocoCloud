@@ -35,6 +35,14 @@
   when: caddy_mode == "customer"
   notify: restart caddy
 
+- name: Deploy Caddyfile (admin-gateway)
+  ansible.builtin.template:
+    src: Caddyfile-admin-gateway.j2
+    dest: "{{ caddy_stack_path }}/Caddyfile"
+    mode: "0644"
+  when: caddy_mode == "admin_gateway"
+  notify: restart caddy
+
 # --- DNS mode: build custom Caddy image with DNS plugin ---
 - name: Deploy Caddy Dockerfile for DNS challenge
   ansible.builtin.template:

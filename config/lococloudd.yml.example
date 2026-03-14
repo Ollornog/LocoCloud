@@ -80,6 +80,7 @@ bitwarden_cli:
 admin_gateway:
   # Server der *.admin.example.com via Caddy (+ optional Netbird) an den Master weiterleitet
   public_ip: ""                                    # z.B. "203.0.113.10"
+  master_netbird_ip: ""                            # Netbird-IP des Masters (z.B. "100.64.0.1")
   # DNS: *.admin.example.com -> A-Record auf diese IP
 
 # --- gocryptfs (Verschluesselung) ---

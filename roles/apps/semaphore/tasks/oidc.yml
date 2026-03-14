@@ -1,0 +1,97 @@
+---
+# roles/apps/semaphore/tasks/oidc.yml
+# Register Semaphore as OIDC client in PocketID and configure SSO.
+# Only runs when pocketid_api_token is available.
+
+- name: Check if Semaphore OIDC client exists in PocketID
+  ansible.builtin.uri:
+    url: "{{ pocketid_api_url }}/api/oidc/clients"
+    method: GET
+    headers:
+      X-API-Key: "{{ pocketid_api_token }}"
+    status_code: 200
+  register: oidc_clients
+
+- name: Find existing Semaphore OIDC client
+  ansible.builtin.set_fact:
+    semaphore_oidc_client: >-
+      {{ oidc_clients.json | selectattr('name', 'equalto', 'Semaphore') | list | first | default(None) }}
+
+- name: Create Semaphore OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "{{ pocketid_api_url }}/api/oidc/clients"
+    method: POST
+    headers:
+      X-API-Key: "{{ pocketid_api_token }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      name: "Semaphore"
+      callbackURLs:
+        - "https://{{ semaphore_domain }}/api/auth/oidc/pocketid/redirect"
+    status_code: [200, 201]
+  register: oidc_create_result
+  when: semaphore_oidc_client is none
+
+- name: Set Semaphore OIDC client ID from creation
+  ansible.builtin.set_fact:
+    semaphore_oidc_client_id: "{{ oidc_create_result.json.id }}"
+  when: semaphore_oidc_client is none
+
+- name: Set Semaphore OIDC client ID from existing client
+  ansible.builtin.set_fact:
+    semaphore_oidc_client_id: "{{ semaphore_oidc_client.id }}"
+  when: semaphore_oidc_client is not none
+
+# PocketID v2: Secret must be generated separately
+- name: Generate Semaphore OIDC client secret
+  ansible.builtin.uri:
+    url: "{{ pocketid_api_url }}/api/oidc/clients/{{ semaphore_oidc_client_id }}/secret"
+    method: POST
+    headers:
+      X-API-Key: "{{ pocketid_api_token }}"
+    status_code: 200
+  register: semaphore_secret_result
+
+- name: Set Semaphore OIDC client secret
+  ansible.builtin.set_fact:
+    semaphore_oidc_client_secret: "{{ semaphore_secret_result.json.secret }}"
+
+- name: Enable OIDC in Semaphore config
+  ansible.builtin.set_fact:
+    semaphore_oidc_enabled: true
+    semaphore_oidc_issuer_url: "https://{{ pocketid_domain }}"
+
+- name: Update Semaphore .env with OIDC config
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ semaphore_stack_path }}/.env"
+    mode: "0600"
+
+- name: Restart Semaphore to apply OIDC config
+  community.docker.docker_compose_v2:
+    project_src: "{{ semaphore_stack_path }}"
+    state: restarted
+
+- name: Wait for Semaphore to be ready after OIDC config
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ semaphore_port }}/api/ping"
+    method: GET
+    status_code: [200, 204]
+  register: semaphore_health
+  until: semaphore_health.status in [200, 204]
+  retries: 30
+  delay: 5
+
+- name: Store Semaphore OIDC credentials in Vaultwarden
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ vw_local_api_url | default('http://127.0.0.1:' + (vaultwarden_port | default(8222) | string)) }}"
+    credential_name: "Master — Semaphore OIDC Client"
+    credential_username: "{{ semaphore_oidc_client_id }}"
+    credential_password: "{{ semaphore_oidc_client_secret }}"
+    credential_uri: "https://{{ pocketid_domain }}"
+    credential_notes: "Semaphore SSO OIDC client. Issuer: https://{{ pocketid_domain }}"
+  when: semaphore_oidc_client_secret | length > 0

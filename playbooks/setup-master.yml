@@ -79,6 +79,7 @@
       vars:
         semaphore_domain: "{{ loco.urls.semaphore }}"
         semaphore_admin_email: "{{ loco.operator.email }}"
+        pocketid_domain: "{{ loco.urls.pocketid }}"
       tags: [semaphore]
 
     - role: grafana_stack

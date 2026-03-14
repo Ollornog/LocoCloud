@@ -92,6 +92,7 @@ roles/
     backrest/            # No DB, Tinyauth (Restic Web UI)
 playbooks/
   setup-master.yml       # Master setup (run first)
+  setup-admin-gateway.yml # Admin gateway (*.admin.example.com → Master via Netbird)
   onboard-customer.yml   # New customer
   site.yml               # Full deploy (idempotent)
   add-app.yml            # Single app

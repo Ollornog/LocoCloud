@@ -120,8 +120,8 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 ### 2.7 Semaphore-Rolle (`roles/apps/semaphore/`)
 
 - [x] Docker Compose Template (+ PostgreSQL)
-- [ ] OIDC mit Master-PocketID (ausstehend)
-- [ ] Projekt-Templates vorbereiten (ausstehend)
+- [x] OIDC mit Master-PocketID (via `oidc.yml` — PocketID-Client automatisch registriert)
+- [x] Projekt-Templates vorbereiten (via `setup-templates.yml` — Master-Projekt + Repository automatisch)
 
 ### 2.8 Playbook: `setup-master.yml`
 
@@ -131,7 +131,7 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 
 ### 2.9 Admin-Gateway-Caddy-Konfiguration
 
-- [ ] Playbook/Rolle für den Caddy auf dem Admin-Gateway (*.admin.example.com → Netbird → Master) (ausstehend)
+- [x] `setup-admin-gateway.yml` + `Caddyfile-admin-gateway.j2` (ACME-TLS, Reverse-Proxy via Netbird mit HTTP/1.1 + SNI)
 - [x] Oder: Dokumentation für manuelle Einrichtung (falls der Gateway nicht von Ansible verwaltet wird)
 
 **Ergebnis Phase 2:** `setup-master.yml` richtet den Master komplett ein. Alle Admin-Dienste erreichbar unter `*.admin.example.com`.
@@ -211,7 +211,7 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 ### 4.4 Vaultwarden Kunde (`roles/apps/vaultwarden/`)
 
 - [x] Docker Compose: Vaultwarden (SQLite)
-- [ ] OIDC via PocketID API (SSO) (ausstehend)
+- [x] OIDC via PocketID API (SSO) — `oidc.yml` registriert Client, generiert Secret, konfiguriert SSO_ONLY
 - [x] Admin-Token generieren + in Admin-VW speichern
 
 ### 4.5 Watchtower (`roles/watchtower/`) — DEPRECATED
