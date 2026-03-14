@@ -54,7 +54,7 @@ roles/
   audit_log/             # Docker events + admin action logging → Loki
   customer_panel/        # Customer dashboard (status, LLDAP, contact, self-healing)
   watchtower/            # DEPRECATED — now removes Watchtower (updates via Ansible)
-  monitoring/            # Wrapper → delegates to alloy
+  monitoring/            # DEPRECATED wrapper → use alloy directly
   lxc_create/            # Proxmox LXC creation
   apps/
     _template/           # Copy for new app roles

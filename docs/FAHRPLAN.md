@@ -1,6 +1,6 @@
 # LocoCloud — Implementierungs-Fahrplan
 
-**Version:** 1.0 — Februar 2026
+**Version:** 1.1 — März 2026
 **Grundlage:** `docs/KONZEPT.md` v5.0
 
 ---
@@ -120,8 +120,8 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 ### 2.7 Semaphore-Rolle (`roles/apps/semaphore/`)
 
 - [x] Docker Compose Template (+ PostgreSQL)
-- [ ] OIDC mit Master-PocketID
-- [ ] Projekt-Templates vorbereiten
+- [ ] OIDC mit Master-PocketID (ausstehend)
+- [ ] Projekt-Templates vorbereiten (ausstehend)
 
 ### 2.8 Playbook: `setup-master.yml`
 
@@ -131,7 +131,7 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 
 ### 2.9 Admin-Gateway-Caddy-Konfiguration
 
-- [ ] Playbook/Rolle für den Caddy auf dem Admin-Gateway (*.admin.example.com → Netbird → Master)
+- [ ] Playbook/Rolle für den Caddy auf dem Admin-Gateway (*.admin.example.com → Netbird → Master) (ausstehend)
 - [x] Oder: Dokumentation für manuelle Einrichtung (falls der Gateway nicht von Ansible verwaltet wird)
 
 **Ergebnis Phase 2:** `setup-master.yml` richtet den Master komplett ein. Alle Admin-Dienste erreichbar unter `*.admin.example.com`.
@@ -188,9 +188,9 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 
 ### 4.1 App-Template-Rolle (`roles/apps/_template/`)
 
-- [ ] Vorlage für neue App-Rollen (copy-paste-Basis)
-- [ ] Standard-Tasks: deploy.yml, oidc.yml, remove.yml
-- [ ] Standard-Templates: docker-compose.yml.j2, env.j2
+- [x] Vorlage für neue App-Rollen (copy-paste-Basis)
+- [x] Standard-Tasks: deploy.yml, oidc.yml, remove.yml
+- [x] Standard-Templates: docker-compose.yml.j2, env.j2
 
 ### 4.2 Nextcloud (`roles/apps/nextcloud/`)
 
@@ -211,21 +211,23 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 ### 4.4 Vaultwarden Kunde (`roles/apps/vaultwarden/`)
 
 - [x] Docker Compose: Vaultwarden (SQLite)
-- [ ] OIDC via PocketID API (SSO)
+- [ ] OIDC via PocketID API (SSO) (ausstehend)
 - [x] Admin-Token generieren + in Admin-VW speichern
 
-### 4.5 Watchtower (`roles/apps/watchtower/`)
+### 4.5 Watchtower (`roles/watchtower/`) — DEPRECATED
 
-- [x] Docker Compose: Label-basiert, Schedule 04:00
-- [x] E-Mail-Benachrichtigung bei Updates
-- [x] Wird auf jedem Server deployt (kein eigener Eintrag in apps_enabled)
+- [x] ~~Docker Compose: Label-basiert, Schedule 04:00~~
+- [x] ~~E-Mail-Benachrichtigung bei Updates~~
+- [x] Rolle entfernt: Deinstalliert jetzt bestehende Watchtower-Installationen
+- [x] Updates laufen über `update-customer.yml` via Semaphore
 
 ### 4.6 Playbooks für App-Management
 
 - [x] `add-app.yml` — App zu bestehendem Kunden hinzufügen
 - [x] `remove-app.yml` — App entfernen (Daten archivieren)
-- [ ] `update-app.yml` — Image-Tag aktualisieren, Container neu starten
-- [ ] `update-caddy.yml` — Caddyfile regenerieren + restart
+- [x] `update-app.yml` — Image-Tag aktualisieren, Container neu starten
+- [x] `update-caddy.yml` — Caddyfile regenerieren + restart
+- [x] `update-customer.yml` — Alle Container eines Kunden updaten (Watchtower-Ersatz)
 
 **Ergebnis Phase 4:** Ein Cloud-Only-Kunde mit Nextcloud, Paperless und Vaultwarden. Vollständig automatisiert, OIDC-SSO, Credentials in Vaultwarden. **Das ist das MVP.**
 
@@ -273,11 +275,11 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 
 **Ziel:** Produktionsbetrieb absichern.
 
-### 6.1 Monitoring (`roles/grafana_stack/`, `roles/alloy/`, `roles/monitoring/`)
+### 6.1 Monitoring (`roles/grafana_stack/`, `roles/alloy/`)
 
-- [x] Grafana Stack auf Master deployen (Grafana + Prometheus + Loki)
-- [x] Alloy Agent Rolle (auf jedem Kunden-Server, ersetzt Zabbix Agent)
-- [x] Monitoring-Rolle als Wrapper → delegiert an Alloy
+- [x] Grafana Stack auf Master deployen (Grafana + VictoriaMetrics + Loki)
+- [x] Alloy Agent Rolle (auf jedem Kunden-Server)
+- [x] `monitoring/`-Wrapper deprecated → Playbooks nutzen `alloy` direkt
 - [x] Standard-Checks: CPU, RAM, Disk, Docker, HTTP-Status, Backup
 - [x] Health-Checks auf Backend-Ports (nicht öffentliche URL!)
 
@@ -306,7 +308,19 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 - [x] `update-all.yml` — OS-Updates auf allen Servern eines Kunden
 - [x] `offboard-customer.yml` — Gestuft: Archivieren oder Löschen
 
-**Ergebnis Phase 6:** Automatische Backups, zentrales Monitoring, Restore-Fähigkeit, Offboarding.
+### 6.6 Neue Rollen (Phase 2 Erweiterung)
+
+- [x] `roles/lldap/` — LLDAP User Directory (Auth-Chain: lldap → PocketID → Apps)
+- [x] `roles/audit_log/` — Docker-Events + Admin-Aktionen → Loki
+- [x] `roles/customer_panel/` — Kunden-Dashboard (Status, LLDAP-Userlink, Notfallkontakt)
+- [x] `roles/compliance/` — Automatische AVV, TOM, VVT, Löschkonzept
+- [x] `roles/netbird_mtu/` — VPN MTU-Optimierung (1420, MSS Clamping)
+- [x] `playbooks/setup-breakglass.yml` — Notfall-Admin-Account (versiegelt)
+- [x] `playbooks/disable-user.yml` — User in non-LDAP Apps deaktivieren
+- [x] `playbooks/generate-docs.yml` — Compliance-Dokumente generieren
+- [x] `playbooks/restore-test.yml` — Monatlicher Backup-Restore-Test
+
+**Ergebnis Phase 6:** Automatische Backups, zentrales Monitoring, Restore-Fähigkeit, Offboarding, Audit-Logging, Compliance.
 
 ---
 
@@ -316,8 +330,9 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 
 ### 7.1 Weitere App-Rollen (nach Bedarf)
 
-- [ ] Documenso, Pingvin Share, HedgeDoc, Outline, Gitea, Cal.com, Listmonk
-- [ ] Jede App nach `new-app-checklist.md`
+- [x] Documenso, Pingvin Share, HedgeDoc, Outline, Gitea, Cal.com, Listmonk — Rollen implementiert
+- [x] EspoCRM, Planka, Vikunja, Leantime, Kimai, Solidtime, Zulip, Rocket.Chat, n8n, OrangeHRM, Easy Appointments, BookStack, Directus, Huly, LimeSurvey, Authentik, Backrest, Invoice Ninja
+- [x] Jede App nach `new-app-checklist.md`
 
 ### 7.2 Dokumentation vervollständigen
 
@@ -341,7 +356,7 @@ Wird auf JEDEM Server/LXC ausgeführt. Grundlage für alles Weitere.
 
 - [x] Code-Review: Alle Rollen verwenden idempotente Module (state: present, template, file)
 - [x] Jede Rolle einzeln testbar mit Tags
-- [ ] Jedes Playbook 2x hintereinander ausführen → keine Änderungen beim 2. Lauf (manuell auf Infra testen)
+- [ ] Jedes Playbook 2x hintereinander ausführen → keine Änderungen beim 2. Lauf (manuell auf Infra testen, ausstehend)
 
 ### 7.5 Semaphore-Templates
 
@@ -378,9 +393,9 @@ Phase 5–7 können teilweise parallel bearbeitet werden (z.B. Backup-Rolle wäh
 | Phase | Was | Ergebnis |
 |-------|-----|----------|
 | **1** | Repo-Skelett + Base-Rolle | Ansible-Projekt funktioniert, Server härten möglich |
-| **2** | Master-Server komplett | Admin-Infrastruktur steht (PocketID, Tinyauth, VW, Semaphore) |
+| **2** | Master-Server komplett | Admin-Infrastruktur steht (PocketID, LLDAP, Tinyauth, VW, Semaphore, Grafana Stack) |
 | **3** | Kunden-Onboarding Cloud-Only | Erster Kunde mit Auth-Stack, automatisiert |
 | **4** | App-Rollen (NC, Paperless, VW) | **MVP: Kompletter Kunde mit Apps** |
 | **5** | Proxmox + LXC | Hybrid + Lokal-Only Deployments |
-| **6** | Monitoring + Backup | Produktionsbetrieb abgesichert |
-| **7** | Docs + Security + Polish | Public-Release-Qualität |
+| **6** | Monitoring + Backup + Compliance | Produktionsbetrieb abgesichert (Audit, Compliance, Break-Glass) |
+| **7** | Docs + Security + Polish + 30 App-Rollen | Public-Release-Qualität |

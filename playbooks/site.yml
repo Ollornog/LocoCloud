@@ -47,6 +47,12 @@
       when: "'backup_server' not in (server_roles | default([]))"
 
     # Auth stack (only on hosts with customer_master role)
+    - role: lldap
+      vars:
+        lldap_domain: "{{ kunde_domain }}"
+      tags: [lldap]
+      when: "'customer_master' in server_roles"
+
     - role: pocketid
       vars:
         pocketid_domain: "id.{{ kunde_domain }}"
@@ -71,14 +77,14 @@
     - role: audit_log
       tags: [audit_log]
 
-    # Monitoring (Grafana Alloy agent)
-    - role: monitoring
+    # Monitoring (Grafana Alloy agent — direct, not via monitoring wrapper)
+    - role: alloy
       vars:
-        monitoring_prometheus_url: "{{ loco.grafana.prometheus_remote_write_url | default('') }}"
-        monitoring_loki_url: "{{ loco.grafana.loki_push_url | default('') }}"
-        monitoring_instance_label: "{{ inventory_hostname }}"
-        monitoring_kunde_label: "{{ kunde_id | default('') }}"
-      tags: [monitoring, alloy]
+        alloy_prometheus_url: "{{ loco.grafana.prometheus_remote_write_url | default('') }}"
+        alloy_loki_url: "{{ loco.grafana.loki_push_url | default('') }}"
+        alloy_instance_label: "{{ inventory_hostname }}"
+        alloy_kunde_label: "{{ kunde_id | default('') }}"
+      tags: [alloy, monitoring]
 
     # Backup (Restic)
     - role: backup

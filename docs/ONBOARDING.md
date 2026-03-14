@@ -171,10 +171,9 @@ ansible-playbook playbooks/onboard-customer.yml -i inventories/kunde-abc001/
 
 Das Playbook durchläuft:
 
-1. **Play 1 (localhost):** Netbird-Gruppe + Policies + Setup-Key erstellen
-2. **Play 2 (Entry-Point):** Base + Netbird + PocketID + Tinyauth + Caddy
+1. **Play 1 (localhost):** Netbird-Gruppe + Policies + Setup-Key + Compliance-Dokumente
+2. **Play 2 (Entry-Point):** Base + Netbird + LLDAP + PocketID + Tinyauth (wenn nötig) + Caddy + Alloy
 3. **Play 3 (Proxmox):** LXCs erstellen (nur hybrid/lokal_only)
-4. **Play 4 (Gateway):** Auth-Stack auf Gateway (nur lokal_only)
 
 ## Schritt 4: Apps deployen
 
