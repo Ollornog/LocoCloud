@@ -68,9 +68,16 @@ netbird.example.com → A-Record auf diesen Server
 relay.example.com   → A-Record auf diesen Server
 ```
 
-### 2. Gateway-Caddy konfigurieren
+### 2. Admin-Gateway konfigurieren
 
-Auf dem Gateway-Server muss Caddy den Admin-Wildcard an den Master weiterleiten:
+Der Admin-Gateway leitet `*.admin.example.com` an den Master weiter.
+
+**Automatisch (empfohlen):**
+```bash
+ansible-playbook playbooks/setup-admin-gateway.yml -i inventories/master/
+```
+
+**Manuell** (falls der Gateway nicht von Ansible verwaltet wird):
 
 ```
 *.admin.example.com {
@@ -131,7 +138,7 @@ Beim Setup-Lauf passiert automatisch:
 | PocketID Registration | Blockiert via Caddy (`/register` → 403) |
 | Vaultwarden Signups | Deaktiviert (`SIGNUPS_ALLOWED=false`). Temporaer aktiviert durch `credentials`-Rolle fuer Service-User-Erstellung. |
 | Vaultwarden Login | Nur via SSO/PocketID (`SSO_ONLY=true`) |
-| Admin-Dienste | Hinter Tinyauth Forward-Auth (PocketID OIDC) |
+| Admin-Dienste | Optional hinter Tinyauth Forward-Auth (PocketID OIDC), wenn `loco.tinyauth.enabled` |
 | SSH-Key | Automatisch generiert, in `/root/.ssh/id_ed25519` |
 
 ---

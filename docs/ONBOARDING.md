@@ -296,7 +296,7 @@ Erstellt einen versiegelten Notfall-Admin-Account (`notfall-admin`) in LLDAP, un
 
 ## Checkliste nach Onboarding
 
-- [ ] Alle Subdomains erreichbar (PocketID, Tinyauth, Apps)
+- [ ] Alle Subdomains erreichbar (PocketID, Apps, ggf. Tinyauth wenn aktiviert)
 - [ ] Admin-Login in PocketID funktioniert
 - [ ] OIDC-Login in jeder App funktioniert
 - [ ] Kunden-Benutzer können sich anmelden

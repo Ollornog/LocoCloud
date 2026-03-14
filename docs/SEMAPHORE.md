@@ -86,7 +86,7 @@ Folgende Templates pro Kunde anlegen:
 | Inventory | Firma ABC |
 | Vault Password | Ansible Vault Password |
 | Extra Variables | `{"username": "m.mustermann", "email": "m.mustermann@firma-abc.de", "display_name": "Max Mustermann"}` |
-| Description | Benutzer in PocketID + Tinyauth anlegen. |
+| Description | Benutzer in LLDAP anlegen (wird via LDAP-Sync nach PocketID übernommen). |
 
 #### Remove User
 
@@ -97,7 +97,17 @@ Folgende Templates pro Kunde anlegen:
 | Inventory | Firma ABC |
 | Vault Password | Ansible Vault Password |
 | Extra Variables | `{"username": "m.mustermann", "email": "m.mustermann@firma-abc.de"}` |
-| Description | Benutzer aus PocketID + Tinyauth entfernen. |
+| Description | Benutzer in LLDAP deaktivieren/entfernen. PocketID-Sync übernimmt Sperrung. |
+
+#### Update Customer (Container-Updates)
+
+| Feld | Wert |
+|------|------|
+| Name | Update Customer |
+| Playbook | `playbooks/update-customer.yml` |
+| Inventory | Firma ABC |
+| Vault Password | Ansible Vault Password |
+| Description | Alle Docker-Container des Kunden updaten (pull + recreate). Ersetzt Watchtower. |
 
 #### OS Update
 

@@ -56,6 +56,12 @@
     - role: pocketid
       vars:
         pocketid_domain: "id.{{ kunde_domain }}"
+        pocketid_ldap_enabled: true
+        pocketid_ldap_url: "ldap://127.0.0.1:{{ lldap_ldap_port | default(3890) }}"
+        pocketid_ldap_bind_dn: "uid=readonly,ou=people,{{ lldap_base_dn }}"
+        pocketid_ldap_bind_password: "{{ lldap_service_password }}"
+        pocketid_ldap_base_dn: "ou=people,{{ lldap_base_dn }}"
+        pocketid_ldap_group_base_dn: "ou=groups,{{ lldap_base_dn }}"
       tags: [pocketid]
       when: "'customer_master' in server_roles"
 
