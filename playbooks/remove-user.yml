@@ -1,8 +1,9 @@
 ---
 # playbooks/remove-user.yml
-# Remove a user from a customer's Tinyauth whitelist + deactivate in PocketID.
+# Remove/deactivate a user from LLDAP (propagates to PocketID via LDAP sync).
+# Also removes from Tinyauth whitelist if enabled.
 # Usage: ansible-playbook playbooks/remove-user.yml -i inventories/kunde-abc/ \
-#        -e "email=m.mueller@firma-abc.de"
+#        -e "username=m.mueller email=m.mueller@firma-abc.de"
 
 - name: "Remove User"
   hosts: all:!localhost:!*proxmox*
@@ -19,64 +20,99 @@
       ansible.builtin.assert:
         that:
           - email is defined and email | length > 0
-        fail_msg: "Required: -e 'email=...'"
+        fail_msg: "Required: -e 'email=...' (optional: username=...)"
 
   tasks:
-    # Remove from Tinyauth whitelist (immediate session revocation)
-    - name: Read current Tinyauth .env
-      ansible.builtin.slurp:
-        src: "/opt/stacks/tinyauth/.env"
-      register: tinyauth_env_raw
-      when: "'customer_master' in server_roles"
-
-    - name: Parse current whitelist
-      ansible.builtin.set_fact:
-        current_whitelist: "{{ (tinyauth_env_raw.content | b64decode).split('\n') | select('match', '^OAUTH_WHITELIST=') | first | regex_replace('^OAUTH_WHITELIST=', '') }}"
-      when: "'customer_master' in server_roles"
-
-    - name: Remove email from whitelist
-      ansible.builtin.set_fact:
-        updated_whitelist: "{{ current_whitelist.split(',') | reject('equalto', email) | join(',') }}"
-      when: "'customer_master' in server_roles"
-
-    - name: Update Tinyauth .env without user
-      ansible.builtin.lineinfile:
-        path: "/opt/stacks/tinyauth/.env"
-        regexp: "^OAUTH_WHITELIST="
-        line: "OAUTH_WHITELIST={{ updated_whitelist }}"
-      when: updated_whitelist is defined
-      notify: restart tinyauth
-
-    # Deactivate in PocketID
-    - name: List PocketID users
-      ansible.builtin.uri:
-        url: "https://id.{{ kunde_domain }}/api/users"
-        method: GET
-        headers:
-          X-API-Key: "{{ loco.pocketid.api_token }}"
-        status_code: 200
-      register: pid_users
+    # --- Tinyauth: Remove from whitelist first (immediate session revocation) ---
+    - name: Update Tinyauth whitelist
       when:
         - "'customer_master' in server_roles"
-        - loco.pocketid.api_token | default('') | length > 0
+        - loco.tinyauth.enabled | default(false)
+      block:
+        - name: Read current Tinyauth .env
+          ansible.builtin.slurp:
+            src: "/opt/stacks/tinyauth/.env"
+          register: tinyauth_env_raw
 
-    - name: Find user ID
-      ansible.builtin.set_fact:
-        pid_user_id: "{{ pid_users.json | selectattr('email', 'equalto', email) | map(attribute='id') | first | default('') }}"
-      when: pid_users is defined and pid_users.json is defined
+        - name: Parse current whitelist
+          ansible.builtin.set_fact:
+            current_whitelist: "{{ (tinyauth_env_raw.content | b64decode).split('\n') | select('match', '^OAUTH_WHITELIST=') | first | regex_replace('^OAUTH_WHITELIST=', '') }}"
 
-    - name: Delete user from PocketID
+        - name: Remove email from whitelist
+          ansible.builtin.set_fact:
+            updated_whitelist: "{{ current_whitelist.split(',') | reject('equalto', email) | join(',') }}"
+
+        - name: Update Tinyauth .env without user
+          ansible.builtin.lineinfile:
+            path: "/opt/stacks/tinyauth/.env"
+            regexp: "^OAUTH_WHITELIST="
+            line: "OAUTH_WHITELIST={{ updated_whitelist }}"
+          when: updated_whitelist is defined
+          notify: restart tinyauth
+
+    # --- LLDAP: Delete user from directory ---
+    - name: Authenticate with LLDAP
       ansible.builtin.uri:
-        url: "https://id.{{ kunde_domain }}/api/users/{{ pid_user_id }}"
-        method: DELETE
+        url: "http://127.0.0.1:{{ lldap_web_port | default(17170) }}/auth/simple/login"
+        method: POST
+        body_format: json
+        body:
+          username: "admin"
+          password: "{{ lldap_admin_password }}"
+        status_code: 200
+      register: _lldap_auth
+      when: "'customer_master' in server_roles"
+      no_log: true
+
+    - name: Find user in LLDAP by email
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ lldap_web_port | default(17170) }}/api/graphql"
+        method: POST
         headers:
-          X-API-Key: "{{ loco.pocketid.api_token }}"
-        status_code: [200, 204, 404]
-      when: pid_user_id is defined and pid_user_id | length > 0
+          Authorization: "Bearer {{ _lldap_auth.json.token }}"
+        body_format: json
+        body:
+          query: >-
+            {
+              users(filters: { eq: { field: "email", value: "{{ email }}" } }) {
+                id
+                email
+              }
+            }
+        status_code: 200
+      register: _lldap_users
+      when: "'customer_master' in server_roles"
+
+    - name: Extract LLDAP user ID
+      ansible.builtin.set_fact:
+        _lldap_user_id: "{{ (_lldap_users.json.data.users | default([])) | map(attribute='id') | first | default('') }}"
+      when: "'customer_master' in server_roles"
+
+    - name: Delete user from LLDAP
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ lldap_web_port | default(17170) }}/api/graphql"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ _lldap_auth.json.token }}"
+        body_format: json
+        body:
+          query: >-
+            mutation { deleteUser(userId: "{{ _lldap_user_id }}") { ok } }
+        status_code: 200
+      when:
+        - "'customer_master' in server_roles"
+        - _lldap_user_id | default('') | length > 0
 
     - name: User removed
       ansible.builtin.debug:
-        msg: "User {{ email }} removed from Tinyauth whitelist and PocketID. Session revoked immediately."
+        msg: |
+          User {{ email }} removed from LLDAP.
+          PocketID will reflect the change on next LDAP sync (max 1h).
+          Apps with native LDAP (Nextcloud, Pingvin Share) will deny login immediately.
+          {% if loco.tinyauth.enabled | default(false) %}
+          Tinyauth whitelist updated — forward-auth session revoked immediately.
+          {% endif %}
+          For non-LDAP apps, run: ansible-playbook playbooks/disable-user.yml -e "user_email={{ email }}"
 
   handlers:
     - name: restart tinyauth
