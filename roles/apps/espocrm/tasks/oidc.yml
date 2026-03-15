@@ -1,0 +1,92 @@
+---
+# roles/apps/espocrm/tasks/oidc.yml
+# Register OIDC client in PocketID for EspoCRM.
+# EspoCRM stores OIDC config in data/config.php, NOT via env vars.
+# → PocketID client is registered automatically
+# → EspoCRM OIDC config must be done manually in the web UI
+
+- name: Create OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ espocrm_oidc_issuer | regex_replace('^https?://', '') }}/api/oidc/clients"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    body_format: json
+    body:
+      name: "EspoCRM ({{ kunde_name }})"
+      callbackURLs:
+        - "https://{{ espocrm_domain }}"
+    status_code: [200, 201]
+  register: _espocrm_oidc_client
+  when:
+    - espocrm_oidc_client_id | default('') | length == 0
+    - loco.pocketid.api_token | default('') | length > 0
+
+- name: Set OIDC client ID from API response
+  ansible.builtin.set_fact:
+    espocrm_oidc_client_id: "{{ _espocrm_oidc_client.json.id }}"
+  when: _espocrm_oidc_client is not skipped and _espocrm_oidc_client is changed
+
+- name: Generate OIDC client secret
+  ansible.builtin.uri:
+    url: "https://{{ espocrm_oidc_issuer | regex_replace('^https?://', '') }}/api/oidc/clients/{{ espocrm_oidc_client_id }}/secret"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    status_code: 200
+  register: _espocrm_secret_result
+  when: espocrm_oidc_client_id | default('') | length > 0
+
+- name: Set OIDC client secret
+  ansible.builtin.set_fact:
+    espocrm_oidc_client_secret: "{{ _espocrm_secret_result.json.secret }}"
+  when: _espocrm_secret_result is defined and _espocrm_secret_result is not skipped
+
+- name: Store EspoCRM OIDC credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — EspoCRM OIDC Client"
+    credential_username: "{{ espocrm_oidc_client_id }}"
+    credential_password: "{{ espocrm_oidc_client_secret }}"
+    credential_uri: "https://{{ espocrm_domain }}"
+    credential_notes: |
+      PocketID OIDC client for EspoCRM.
+      OIDC must be configured manually in EspoCRM Web-UI:
+      Administration > Authentication > OIDC
+      - Client ID: {{ espocrm_oidc_client_id }}
+      - Client Secret: (see password field)
+      - Authorization Redirect URI: https://{{ espocrm_domain }}
+      - Issuer: {{ espocrm_oidc_issuer }}
+      Deployed: {{ ansible_facts.date_time.iso8601 }}
+  when:
+    - loco is defined
+    - espocrm_oidc_client_id | default('') | length > 0
+
+- name: Show manual OIDC configuration instructions
+  ansible.builtin.debug:
+    msg: |
+      ============================================================
+      MANUELLE KONFIGURATION ERFORDERLICH
+      ============================================================
+      EspoCRM speichert OIDC-Config in data/config.php (nicht Env-Vars).
+      Konfiguriere OIDC manuell in der EspoCRM Web-UI:
+
+      1. Login: https://{{ espocrm_domain }}
+      2. Administration > Authentication
+      3. Authentication Method: OIDC
+      4. OIDC Settings:
+         - Client ID: {{ espocrm_oidc_client_id }}
+         - Client Secret: (aus Vaultwarden: "{{ kunde_name }} — EspoCRM OIDC Client")
+         - Authorization Redirect URI: https://{{ espocrm_domain }}
+         - Authorization Endpoint: {{ espocrm_oidc_issuer }}/authorize
+         - Token Endpoint: {{ espocrm_oidc_issuer }}/token
+         - JSON Web Key Set Endpoint: {{ espocrm_oidc_issuer }}/.well-known/jwks.json
+      5. Logout: Enable "Logout with OIDC"
+      6. Save
+
+      Credentials sind in Vaultwarden gespeichert.
+      ============================================================
+  when: espocrm_oidc_client_id | default('') | length > 0

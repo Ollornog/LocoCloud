@@ -1,0 +1,35 @@
+---
+# roles/apps/espocrm/tasks/remove.yml
+# Archive EspoCRM data, stop containers — do NOT delete data.
+
+- name: Stop EspoCRM
+  community.docker.docker_compose_v2:
+    project_src: "{{ espocrm_stack_path }}"
+    state: absent
+  ignore_errors: true
+
+- name: Ensure archive directory exists
+  ansible.builtin.file:
+    path: /opt/archives
+    state: directory
+    mode: "0700"
+
+- name: Archive EspoCRM stack
+  ansible.builtin.command: >
+    tar czf /opt/archives/espocrm-stack-{{ ansible_facts.date_time.date }}.tar.gz
+    -C {{ espocrm_stack_path }} .
+  args:
+    creates: "/opt/archives/espocrm-stack-{{ ansible_facts.date_time.date }}.tar.gz"
+
+- name: Archive EspoCRM data
+  ansible.builtin.command: >
+    tar czf /opt/archives/espocrm-data-{{ ansible_facts.date_time.date }}.tar.gz
+    -C {{ espocrm_data_path }} .
+  args:
+    creates: "/opt/archives/espocrm-data-{{ ansible_facts.date_time.date }}.tar.gz"
+
+- name: Archive complete
+  ansible.builtin.debug:
+    msg: >-
+      EspoCRM stopped. Data archived to /opt/archives/espocrm-*-{{ ansible_facts.date_time.date }}.tar.gz.
+      Stack and data directories are preserved. Delete manually if no longer needed.

@@ -1,7 +1,7 @@
 ---
 # roles/apps/espocrm/defaults/main.yml
 # EspoCRM — Open-source CRM for sales, marketing, support
-# OIDC via PocketID (configured through web UI after deployment)
+# OIDC via PocketID (client registered automatically, config via web UI)
 
 espocrm_stack_path: "/opt/stacks/espocrm"
 espocrm_data_path: "/mnt/data/espocrm"
@@ -23,10 +23,13 @@ espocrm_db_root_password: ""  # Generated if empty
 espocrm_admin_username: "admin"
 espocrm_admin_password: ""  # Generated if empty
 
-# OIDC is configured via the EspoCRM web UI after deployment
-# (Administration > Authentication > OIDC)
-# PocketID callback URL: provided by EspoCRM UI
+# OIDC — PocketID client is registered via API, but EspoCRM OIDC config
+# must be done manually in the web UI (Administration > Authentication > OIDC)
+# because EspoCRM stores OIDC settings in data/config.php, not env vars.
 espocrm_oidc_enabled: false
+espocrm_oidc_issuer: ""  # e.g. "https://id.firma-abc.de"
+espocrm_oidc_client_id: ""  # Set by oidc.yml via PocketID API
+espocrm_oidc_client_secret: ""  # Set by oidc.yml via PocketID API
 
 # LDAP (alternative to OIDC, configured via web UI)
 espocrm_ldap_enabled: false
@@ -42,7 +45,6 @@ espocrm_backup_paths:
 
 espocrm_pre_backup_cmd: >-
   docker exec espocrm-db
-  mariadb-dump -u root -p{{ espocrm_db_root_password }}
-  --all-databases --single-transaction
+  mariadb-dump --single-transaction espocrm
 
 espocrm_health_path: "/"

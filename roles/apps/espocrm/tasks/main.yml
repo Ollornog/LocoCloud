@@ -4,3 +4,8 @@
 - name: Deploy EspoCRM
   ansible.builtin.import_tasks: deploy.yml
   tags: [espocrm, deploy]
+
+- name: Configure OIDC for EspoCRM
+  ansible.builtin.import_tasks: oidc.yml
+  tags: [espocrm, oidc]
+  when: espocrm_oidc_enabled | default(false)

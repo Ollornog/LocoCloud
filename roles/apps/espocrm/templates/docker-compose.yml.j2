@@ -15,14 +15,8 @@ services:
       - {{ espocrm_data_path }}/data:/var/www/html/data
       - {{ espocrm_data_path }}/custom:/var/www/html/custom
       - {{ espocrm_data_path }}/client-custom:/var/www/html/client/custom
-    environment:
-      ESPOCRM_DATABASE_HOST: espocrm-db
-      ESPOCRM_DATABASE_USER: {{ espocrm_db_user }}
-      ESPOCRM_DATABASE_PASSWORD: {{ espocrm_db_password }}
-      ESPOCRM_DATABASE_NAME: {{ espocrm_db_name }}
-      ESPOCRM_ADMIN_USERNAME: {{ espocrm_admin_username }}
-      ESPOCRM_ADMIN_PASSWORD: {{ espocrm_admin_password }}
-      ESPOCRM_SITE_URL: "https://{{ espocrm_domain }}"
+    env_file:
+      - .env
     depends_on:
       espocrm-db:
         condition: service_healthy
@@ -35,21 +29,22 @@ services:
       - {{ espocrm_data_path }}/data:/var/www/html/data
       - {{ espocrm_data_path }}/custom:/var/www/html/custom
       - {{ espocrm_data_path }}/client-custom:/var/www/html/client/custom
+    env_file:
+      - .env
     entrypoint: docker-daemon.sh
+    depends_on:
+      - espocrm
 
   espocrm-db:
     image: {{ espocrm_db_image }}
     container_name: espocrm-db
     restart: unless-stopped
-    environment:
-      MYSQL_DATABASE: {{ espocrm_db_name }}
-      MYSQL_USER: {{ espocrm_db_user }}
-      MYSQL_PASSWORD: {{ espocrm_db_password }}
-      MYSQL_ROOT_PASSWORD: {{ espocrm_db_root_password }}
+    env_file:
+      - .env
     volumes:
       - {{ espocrm_data_path }}/db:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u root -p{{ espocrm_db_root_password }} --silent"]
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u root --silent"]
       interval: 10s
       timeout: 5s
       retries: 5

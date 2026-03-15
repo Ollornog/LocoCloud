@@ -29,6 +29,12 @@
     - "{{ espocrm_data_path }}/client-custom"
     - "{{ espocrm_data_path }}/db"
 
+- name: Deploy EspoCRM .env
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ espocrm_stack_path }}/.env"
+    mode: "0600"
+
 - name: Deploy EspoCRM docker-compose.yml
   ansible.builtin.template:
     src: docker-compose.yml.j2
