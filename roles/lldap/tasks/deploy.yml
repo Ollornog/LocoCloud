@@ -1,6 +1,13 @@
 ---
 # roles/lldap/tasks/deploy.yml
 
+# Derive base DN from domain if not explicitly set
+# e.g. "firma-abc.de" → "dc=firma-abc,dc=de"
+- name: Derive lldap base DN from domain
+  ansible.builtin.set_fact:
+    lldap_base_dn: "{{ lldap_domain.split('.') | map('regex_replace', '^(.*)$', 'dc=\\1') | join(',') }}"
+  when: lldap_base_dn | length == 0
+
 - name: Create lldap directories
   ansible.builtin.file:
     path: "{{ item }}"

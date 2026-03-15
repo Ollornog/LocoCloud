@@ -1,6 +1,7 @@
 ---
 # playbooks/add-user.yml
-# Add a user to a customer's PocketID + Tinyauth whitelist.
+# Add a user to a customer's LLDAP directory (syncs to PocketID via LDAP).
+# Optionally updates Tinyauth whitelist if enabled.
 # Usage: ansible-playbook playbooks/add-user.yml -i inventories/kunde-abc/ \
 #        -e "username=m.mueller email=m.mueller@firma-abc.de display_name='Max Mueller'"
 
@@ -24,56 +25,97 @@
         fail_msg: "Required: -e 'username=... email=... display_name=...'"
 
   tasks:
-    # Only run on entry-point (where PocketID + Tinyauth live)
-    - name: Create user in PocketID
+    # --- LLDAP: Create user in user directory ---
+    - name: Authenticate with LLDAP
       ansible.builtin.uri:
-        url: "https://id.{{ kunde_domain }}/api/users"
+        url: "http://127.0.0.1:{{ lldap_web_port | default(17170) }}/auth/simple/login"
         method: POST
-        headers:
-          X-API-Key: "{{ loco.pocketid.api_token }}"
         body_format: json
         body:
-          username: "{{ username }}"
-          email: "{{ email }}"
-          first_name: "{{ display_name.split(' ') | first }}"
-          last_name: "{{ display_name.split(' ')[1:] | join(' ') | default('') }}"
-        status_code: [200, 201]
-      register: pocketid_user_result
+          username: "admin"
+          password: "{{ lldap_admin_password }}"
+        status_code: 200
+      register: _lldap_auth
       when: "'customer_master' in server_roles"
+      no_log: true
 
-    # Update Tinyauth whitelist
-    - name: Read current Tinyauth .env
-      ansible.builtin.slurp:
-        src: "/opt/stacks/tinyauth/.env"
-      register: tinyauth_env_raw
+    - name: Create user in LLDAP
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ lldap_web_port | default(17170) }}/api/graphql"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ _lldap_auth.json.token }}"
+        body_format: json
+        body:
+          query: >-
+            mutation {
+              createUser(user: {
+                id: "{{ username }}"
+                email: "{{ email }}"
+                displayName: "{{ display_name }}"
+              }) { id }
+            }
+        status_code: 200
+      register: _lldap_create
       when: "'customer_master' in server_roles"
+      failed_when: >-
+        _lldap_create.status != 200 and
+        'already exists' not in (_lldap_create.json.errors | default([]) | map(attribute='message') | join(' '))
 
-    - name: Parse current whitelist
-      ansible.builtin.set_fact:
-        current_whitelist: "{{ (tinyauth_env_raw.content | b64decode).split('\n') | select('match', '^OAUTH_WHITELIST=') | first | regex_replace('^OAUTH_WHITELIST=', '') }}"
+    - name: Add user to 'users' group in LLDAP
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ lldap_web_port | default(17170) }}/api/graphql"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ _lldap_auth.json.token }}"
+        body_format: json
+        body:
+          query: >-
+            mutation {
+              addUserToGroup(userId: "{{ username }}", groupId: {{ lldap_users_group_id | default(2) }}) {
+                ok
+              }
+            }
+        status_code: 200
       when: "'customer_master' in server_roles"
+      failed_when: false
 
-    - name: Add email to whitelist
-      ansible.builtin.set_fact:
-        updated_whitelist: "{{ current_whitelist + ',' + email }}"
+    # --- Tinyauth: Update whitelist (only if enabled) ---
+    - name: Update Tinyauth whitelist
       when:
         - "'customer_master' in server_roles"
-        - email not in current_whitelist
+        - loco.tinyauth.enabled | default(false)
+      block:
+        - name: Read current Tinyauth .env
+          ansible.builtin.slurp:
+            src: "/opt/stacks/tinyauth/.env"
+          register: tinyauth_env_raw
 
-    - name: Update Tinyauth .env with new whitelist
-      ansible.builtin.lineinfile:
-        path: "/opt/stacks/tinyauth/.env"
-        regexp: "^OAUTH_WHITELIST="
-        line: "OAUTH_WHITELIST={{ updated_whitelist }}"
-      when: updated_whitelist is defined
-      notify: restart tinyauth
+        - name: Parse current whitelist
+          ansible.builtin.set_fact:
+            current_whitelist: "{{ (tinyauth_env_raw.content | b64decode).split('\n') | select('match', '^OAUTH_WHITELIST=') | first | regex_replace('^OAUTH_WHITELIST=', '') }}"
+
+        - name: Add email to whitelist
+          ansible.builtin.set_fact:
+            updated_whitelist: "{{ current_whitelist + ',' + email }}"
+          when: email not in current_whitelist
+
+        - name: Update Tinyauth .env with new whitelist
+          ansible.builtin.lineinfile:
+            path: "/opt/stacks/tinyauth/.env"
+            regexp: "^OAUTH_WHITELIST="
+            line: "OAUTH_WHITELIST={{ updated_whitelist }}"
+          when: updated_whitelist is defined
+          notify: restart tinyauth
 
     - name: User added
       ansible.builtin.debug:
         msg: |
-          User {{ username }} ({{ email }}) added.
-          PocketID will send a setup email to {{ email }}.
-          User must register their passkey manually.
+          User {{ username }} ({{ email }}) added to LLDAP.
+          PocketID will pick up the user via LDAP sync (max 1h).
+          {% if loco.tinyauth.enabled | default(false) %}
+          Tinyauth whitelist updated.
+          {% endif %}
 
   handlers:
     - name: restart tinyauth

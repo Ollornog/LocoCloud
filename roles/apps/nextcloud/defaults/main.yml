@@ -21,6 +21,15 @@ nextcloud_db_root_password: ""  # Generated if empty
 nextcloud_redis_image: "redis:7-alpine"
 nextcloud_redis_db: 0  # DB number for single_lxc shared Redis
 
+# PHP OPcache tuning (bytecode cache — avoids re-compiling PHP on each request)
+nextcloud_opcache_memory: 256          # MB, default 128
+nextcloud_opcache_interned_strings: 32 # MB, default 8
+nextcloud_opcache_max_files: 20000     # default 10000
+nextcloud_opcache_revalidate_freq: 60  # seconds between file change checks
+
+# APCu (local shared memory cache for memcache.local)
+nextcloud_apcu_shm_size: "128M"
+
 # Imaginary (image preview generation)
 nextcloud_imaginary_image: "nextcloud/aio-imaginary:latest"
 

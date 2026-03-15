@@ -9,9 +9,9 @@ Diese Anleitung beschreibt den kompletten Ablauf, einen neuen Kunden in LocoClou
 ```
 1. Kunden-Inventar anlegen          ← scripts/new-customer.sh
 2. Inventar konfigurieren           ← hosts.yml + group_vars/all.yml + vault.yml
-3. Netbird + Auth-Stack deployen    ← onboard-customer.yml
+3. Auth-Stack deployen              ← onboard-customer.yml (LLDAP + PocketID + ggf. Tinyauth)
 4. Apps deployen                    ← site.yml oder add-app.yml
-5. Benutzer anlegen                 ← add-user.yml
+5. Benutzer anlegen                 ← add-user.yml (in LLDAP, synct nach PocketID)
 6. Break-Glass Notfallzugang        ← setup-breakglass.yml
 ```
 
@@ -296,7 +296,7 @@ Erstellt einen versiegelten Notfall-Admin-Account (`notfall-admin`) in LLDAP, un
 
 ## Checkliste nach Onboarding
 
-- [ ] Alle Subdomains erreichbar (PocketID, Tinyauth, Apps)
+- [ ] Alle Subdomains erreichbar (PocketID, Apps, ggf. Tinyauth wenn aktiviert)
 - [ ] Admin-Login in PocketID funktioniert
 - [ ] OIDC-Login in jeder App funktioniert
 - [ ] Kunden-Benutzer können sich anmelden

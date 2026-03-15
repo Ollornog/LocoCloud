@@ -1,0 +1,19 @@
+; ============================================
+; GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+; Nextcloud PHP OPcache + APCu Tuning
+; Generiert: {{ ansible_facts.date_time.iso8601 }}
+; ============================================
+
+; --- OPcache ---
+; Compiled bytecode cache — eliminates re-parsing PHP files on every request.
+; After container restart, OPcache rebuilds on first access (brief warmup).
+opcache.memory_consumption={{ nextcloud_opcache_memory }}
+opcache.interned_strings_buffer={{ nextcloud_opcache_interned_strings }}
+opcache.max_accelerated_files={{ nextcloud_opcache_max_files }}
+opcache.revalidate_freq={{ nextcloud_opcache_revalidate_freq }}
+opcache.save_comments=1
+
+; --- APCu ---
+; Local shared memory cache for Nextcloud's memcache.local.
+apc.enable_cli=1
+apc.shm_size={{ nextcloud_apcu_shm_size }}

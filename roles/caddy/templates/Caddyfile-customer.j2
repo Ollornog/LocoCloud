@@ -13,7 +13,7 @@
 	header Permissions-Policy "camera=(), microphone=(), geolocation=()"
 }
 
-{% if tinyauth_enabled | default(false) %}
+{% if loco.tinyauth.enabled | default(false) %}
 (auth) {
 	forward_auth 127.0.0.1:{{ tinyauth_port }} {
 		uri /api/auth/caddy
@@ -33,7 +33,7 @@ id.{{ kunde_domain }} {
 	}
 }
 
-{% if tinyauth_enabled | default(false) %}
+{% if loco.tinyauth.enabled | default(false) %}
 # --- Tinyauth Login Portal ---
 auth.{{ kunde_domain }} {
 	import public
@@ -67,7 +67,7 @@ auth.{{ kunde_domain }} {
 {% endif %}
 
 	handle {
-{% if tinyauth_enabled | default(false) and app.tinyauth | default(false) %}
+{% if loco.tinyauth.enabled | default(false) and app.tinyauth | default(false) %}
 		import auth
 {% endif %}
 {% if app.target == 'lokal' %}

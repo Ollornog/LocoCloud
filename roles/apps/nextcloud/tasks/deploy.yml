@@ -34,6 +34,13 @@
     dest: "{{ nextcloud_stack_path }}/install-preview-packages.sh"
     mode: "0755"
 
+- name: Deploy PHP tuning config
+  ansible.builtin.template:
+    src: php-tuning.ini.j2
+    dest: "{{ nextcloud_stack_path }}/php-tuning.ini"
+    mode: "0644"
+  notify: restart caddy
+
 - name: Deploy Nextcloud docker-compose.yml
   ansible.builtin.template:
     src: docker-compose.yml.j2
@@ -60,6 +67,20 @@
   until: nc_health.status == 200
   retries: 60
   delay: 10
+
+# --- Memcache (APCu local + Redis distributed/locking) ---
+
+- name: Configure Nextcloud memcache
+  ansible.builtin.command: >
+    docker exec -u www-data nextcloud
+    php occ config:system:set {{ item.key }} --value="{{ item.value }}"
+  loop:
+    - { key: "memcache.local", value: "\\OC\\Memcache\\APCu" }
+    - { key: "memcache.locking", value: "\\OC\\Memcache\\Redis" }
+    - { key: "memcache.distributed", value: "\\OC\\Memcache\\Redis" }
+  loop_control:
+    label: "{{ item.key }}"
+  changed_when: true
 
 # --- Imaginary + Preview Generator ---
 
