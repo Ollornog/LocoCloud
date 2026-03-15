@@ -1466,105 +1466,171 @@ Gespeichert auf Master-LXC: `/root/.loco-vaultwarden-token` (chmod 600)
 
 ## 11. Backup-Architektur
 
-### 11.1 Übersicht
+### 11.1 Übersicht — 3-2-1 Strategie
+
+Jeder Server sichert sich selbst (Push-Modell) an bis zu drei Restic-Ziele. Jeder Kunde bekommt ein eigenes Restic-Repository pro Ziel. Alle Repos sind AES-256-verschlüsselt (Restic-Standard).
 
 ```
-Kunden-Server
-    │ Restic via SFTP über Netbird (oder direkt per SFTP)
-    ▼
-Backup-Ziel (pro Kunde konfigurierbar)
-    ├── Option 1: Eigener Backup-Server via Netbird
-    ├── Option 2: Cloud Storage Box
-    └── Option 3: Off-Site auf Betreiber-Infrastruktur via Netbird
+Kunden-Server / Master-Server
+    │  Pre-Backup: DB-Dumps (PG, MariaDB, SQLite)
+    │  → restic backup (Push)
+    │
+    ├──→ Ziel 1: Hetzner Storage Box Nürnberg (SFTP, Port 23)
+    │              └── /<kunde>/restic-repo/  (verschlüsselt)
+    │
+    ├──→ Ziel 2: Hetzner Storage Box Helsinki (SFTP, Port 23)
+    │              └── /<kunde>/restic-repo/  (verschlüsselt)
+    │
+    └──→ Ziel 3: Offsite-Proxmox (Pull durch Backup-LXC)
+                   └── /mnt/backup/<kunde>/restic-repo/  (verschlüsselt)
 ```
 
-Das Backup-Ziel ist **pro Kunde konfigurierbar**, nicht eine globale Entscheidung. Alle Ziele sind über Netbird oder direkt per SFTP erreichbar. Restic verschlüsselt client-seitig — der Backup-Server sieht nur verschlüsselte Blobs.
+**Prinzipien:**
 
-**Ohne Backup-Ziel = kein Backup.** Wenn im Inventar kein `backup.targets` definiert ist, wird kein Backup konfiguriert. Der Betreiber entscheidet bewusst pro Kunde, ob und wohin gesichert wird.
+- **Ohne Backup-Ziel = kein Backup.** Wenn im Inventar kein `backup.targets` definiert ist, wird nichts konfiguriert.
+- **Pro Kunde konfigurierbar** — jeder Kunde kann unterschiedliche Ziele haben.
+- **Client-seitige Verschlüsselung** — Backup-Server sehen nur verschlüsselte Blobs.
+- **Restic-Passwort pro Kunde** — isoliert, ≥48 Zeichen, in Vaultwarden gespeichert.
+- **DB-Dumps vor jedem Run** — konsistente Backups laufender Datenbanken.
+- **Fehler-Alerting** — fehlgeschlagene Backups erzeugen E-Mail-Alert.
 
-### 11.2 Was wird gesichert
+### 11.2 Backup-Ziele
 
-1. Docker Volumes aller Apps (aus `/mnt/data/`)
-2. Datenbank-Dumps (Pre-Backup-Hooks, siehe 11.4)
-3. PocketID Daten (SQLite + Config)
-4. Tinyauth Config
-5. Caddy Caddyfile
-6. Docker Compose + .env Files
-7. gocryptfs-Konfiguration (nicht die Keyfiles — die liegen auf dem Master)
+| Ziel | Standort | Typ | Zweck |
+|------|----------|-----|-------|
+| Hetzner Storage Box NBG | Nürnberg | SFTP (Port 23) | Primär-Backup, schneller Restore |
+| Hetzner Storage Box HEL | Helsinki | SFTP (Port 23) | Geo-Redundanz (anderes Rechenzentrum) |
+| Offsite-Proxmox | Homeserver des Betreibers | Lokal (Pull-Modell) | Offline-Fallback, Desaster-Recovery |
 
-### 11.3 Konfiguration im Inventar
+**Zusätzlich (optional, empfohlen):**
+- Hetzner Cloud Backup aktivieren (20% vom Server-Preis) — schnelles Server-Rebuild bei OS-Problemen
+- Storage Box Snapshots aktivieren — Schutz vor versehentlichem Löschen im Repo
+
+**Wichtig:** Hetzner Cloud Backups sichern KEINE Volumes. Storage Box Snapshots liegen auf demselben Host (kein Offsite). Beides ist kein Ersatz für Restic.
+
+**Storage Box Isolation:** Sub-Account pro Kunde auf jeder Storage Box. Sub-Accounts können sich gegenseitig nicht sehen.
+
+### 11.3 Was wird gesichert
+
+```
+/opt/stacks/                    # Docker-Compose + .env aller Apps
+/opt/backups/dumps/             # DB-Dumps (pre-backup erzeugt)
+/mnt/data/                      # App-Daten (gocryptfs-geschützt)
+/opt/scripts/                   # Health-Check, Backup-Scripts
+/etc/ssh/sshd_config.d/         # SSH-Hardening
+/etc/sysctl.d/                  # Kernel-Hardening
+```
+
+**Was NICHT gesichert wird** (wird beim Rebuild neu erzeugt):
+- Let's Encrypt Zertifikate (Caddy holt automatisch neue)
+- Docker Images (`docker compose pull`)
+- Netbird-Config (neuer Join mit Setup-Key)
+- Restic-Binary selbst (`apt install restic`)
+
+### 11.4 Konfiguration im Inventar
 
 ```yaml
 backup:
   enabled: true
+  schedule: "0 3 * * *"           # Täglich um 03:00 (cron-Format)
+  alert_email: "admin@example.com" # E-Mail bei Backup-Fehlern
   targets:
-    # Option 1: Eigener Backup-Server via Netbird
-    - type: "sftp"
-      host: "{{ backup_server_netbird_ip }}"
-      user: "backup"
-      path: "/backup/{{ kunde_id }}"
-
-    # Option 2: Cloud Storage Box
-    - type: "sftp"
+    # Hetzner Storage Box Nürnberg
+    - name: "storagebox-nbg"
       host: "uXXXXX.your-storagebox.de"
       port: 23
-      user: "uXXXXX"
-      path: "/backup/{{ kunde_id }}"
+      user: "uXXXXX-sub1"
+      path: "/backup"
+      ssh_key_name: "storagebox"   # Referenz auf SSH-Key in backup.ssh_keys
 
-    # Option 3: Off-Site auf Betreiber-Infrastruktur via Netbird
-    - type: "sftp"
-      host: "{{ loco.backup_netbird_ip }}"
-      user: "backup"
-      path: "/backup/{{ kunde_id }}"
-  schedule:
-    incremental: "0 */6 * * *"
+    # Hetzner Storage Box Helsinki
+    - name: "storagebox-hel"
+      host: "uYYYYY.your-storagebox.de"
+      port: 23
+      user: "uYYYYY-sub1"
+      path: "/backup"
+      ssh_key_name: "storagebox"
+
+  ssh_keys:
+    # SSH-Key für Storage Box Zugang (wird von Ansible generiert)
+    - name: "storagebox"
+      port: 23                     # Storage Boxes nutzen Port 23
+
   retention:
     keep_daily: 7
     keep_weekly: 4
     keep_monthly: 6
+
+  check_schedule: "0 5 * * 0"     # Sonntag 05:00 — Repo-Integrität
   restore_test:
     enabled: true
-    schedule: "0 3 1 * *"  # Monatlich am 1. um 03:00
+    schedule: "0 3 1 * *"         # Monatlich am 1. um 03:00
 ```
 
-### 11.4 Pre-Backup-Hooks (Datenbank-Dumps)
+### 11.5 Globale Backup-Konfiguration
 
-Vor jedem Restic-Backup werden automatisch Datenbank-Dumps erstellt. Der Cron-Job ruft ein Wrapper-Script auf:
+In `config/lococloudd.yml` wird das Offsite-Backup konfiguriert:
+
+```yaml
+backup:
+  offsite:
+    enabled: false
+    host: ""                       # Netbird-IP des Backup-LXC
+    user: "backup"
+    path: "/mnt/backup"
+    pull_schedule: "0 6 * * *"     # Pull von Storage Box, täglich 06:00
+```
+
+### 11.6 Pre-Backup-Hooks (Datenbank-Dumps)
+
+Vor jedem Restic-Backup werden automatisch konsistente DB-Dumps erstellt. Das Script erkennt laufende Container automatisch:
+
+- **PostgreSQL:** `pg_dump` pro Container (alle `*-db` Container mit `pg_dump`)
+- **MariaDB/MySQL:** `mariadb-dump --single-transaction` pro Container
+- **SQLite:** `.backup` Befehl für konsistenten Dump (PocketID, lldap, Vaultwarden, Pingvin Share, etc.)
 
 ```bash
-#!/bin/bash
-# /opt/lococloudd/scripts/pre-backup.sh
-# Wird vor jedem Restic-Backup ausgeführt
-
-DUMP_DIR="/mnt/data/db-dumps"
-mkdir -p "$DUMP_DIR"
-
-# PostgreSQL-Dumps (für Paperless, etc.)
-for db in $(docker exec postgres psql -U postgres -t -c "SELECT datname FROM pg_database WHERE datistemplate=false AND datname != 'postgres'"); do
-  docker exec postgres pg_dump -U postgres "$db" | gzip > "$DUMP_DIR/${db}_$(date +%Y%m%d_%H%M%S).sql.gz"
-done
-
-# MariaDB/MySQL-Dumps (für Nextcloud, etc.)
-if docker ps --format '{{.Names}}' | grep -q mariadb; then
-  docker exec mariadb mysqldump -u root --all-databases | gzip > "$DUMP_DIR/mariadb_all_$(date +%Y%m%d_%H%M%S).sql.gz"
-fi
-
-# Alte Dumps aufräumen (nur letzte 3 behalten)
-find "$DUMP_DIR" -name "*.sql.gz" -mtime +3 -delete
+# Ablauf pro Backup-Run:
+# 1. pre-backup.sh: DB-Dumps nach /opt/backups/dumps/
+# 2. restic backup: Alle Quellen + Dumps an alle Targets
+# 3. restic forget --prune: Retention Policy anwenden
+# 4. Bei Fehler: E-Mail-Alert
 ```
 
-**Ansible konfiguriert den Cron-Job:**
-```yaml
-- name: Configure backup cron with pre-hook
-  cron:
-    name: "restic-backup-{{ kunde_id }}"
-    minute: "0"
-    hour: "*/6"
-    job: "/opt/lococloudd/scripts/pre-backup.sh && /opt/lococloudd/scripts/restic-backup.sh"
-    user: root
+Alte Dumps werden nach 7 Tagen aufgeräumt (lokal).
+
+### 11.7 SSH-Zugang zu Storage Boxes
+
+Die `backup`-Rolle generiert einen Ed25519-SSH-Key pro Server und konfiguriert `~/.ssh/config` für die Storage Box Hosts. Der Public Key muss einmalig auf der Storage Box hinterlegt werden (Port 23).
+
+```
+/root/.ssh/
+├── backup-storagebox          # Private Key (mode 0600)
+├── backup-storagebox.pub      # Public Key → auf Storage Box hinterlegen
+└── config                     # Host-Aliase für Storage Boxes
 ```
 
-### 11.5 Monatlicher Restore-Test
+### 11.8 Offsite-Backup (Pull-Modell)
+
+Ein Backup-LXC auf dem Homeserver des Betreibers zieht Backups von den Storage Boxes zu sich (**Pull-Modell**). Vorteil: Kompromittierte Server können die Offsite-Backups nicht löschen.
+
+```
+Backup-LXC (Proxmox Homeserver)
+├── Debian 13, 2 GB RAM, 2 Cores
+├── /mnt/backup/<kunde>/          ← Lokale Restic-Repos
+├── Netbird (für Erreichbarkeit)
+├── restic (für Restore)
+└── Cron: restic copy von Storage Box → lokal
+```
+
+**Restore im Notfall (offline):**
+1. Auf Backup-LXC einloggen
+2. `restic mount /mnt/restore-browse` → Snapshots durchsuchen
+3. `restic restore latest --target /mnt/restore/` → Komplett-Restore
+
+### 11.9 Monatlicher Restore-Test
+
+### 11.9 Monatlicher Restore-Test
 
 **Die Behörde will sehen, dass Restores funktionieren.** Der Restore-Test wird als Ansible-Playbook automatisiert und monatlich per Cron (oder Semaphore-Schedule) ausgeführt:
 
@@ -1587,6 +1653,60 @@ find "$DUMP_DIR" -name "*.sql.gz" -mtime +3 -delete
 ```
 
 **Nachweis:** Jeder Restore-Test wird mit Timestamp und Ergebnis in einer Log-Datei protokolliert (`/var/log/lococloudd/restore-tests.log`). Diese Datei kann bei Audits vorgelegt werden.
+
+### 11.10 Disaster Recovery
+
+**Online-Restore (neuer Server):** Ablauf via `playbooks/restore.yml`:
+1. Neuen Server bestellen (gleicher Typ)
+2. Basis-Setup (Docker, Restic, SSH-Key)
+3. Restic Restore aus Storage Box
+4. DB-Dumps importieren
+5. SSO-Konfiguration prüfen (PocketID muss erreichbar sein)
+6. Container starten, DNS umbiegen
+7. Caddy holt automatisch neue Let's Encrypt Certs
+8. Netbird-Client Join mit Setup-Key
+
+**Offline-Restore (Offsite-Proxmox):** Wenn alles online tot ist:
+1. Auf Backup-LXC einloggen (Proxmox-Root-Passwort aus Safe)
+2. Restic Restore aus lokalem Repo (Restic-Passwort aus Safe/USB)
+3. Neuen LXC auf Proxmox erstellen, Docker installieren
+4. Stacks kopieren, Caddyfile auf lokale IPs anpassen
+5. SSO deaktivieren (PocketID ist offline)
+6. Container starten, Zugriff via lokale IP
+
+### 11.11 Offline-Notfall-Kit (physisch im Safe)
+
+| Was | Format | Inhalt |
+|-----|--------|--------|
+| Restic-Passwörter | KeePass auf USB-Stick | Ein Eintrag pro Kunde |
+| Vaultwarden-Export | Verschlüsselter JSON auf USB | Alle Credentials |
+| SSH-Key (ed25519) | Datei auf USB-Stick | Zugang zu Servern |
+| Proxmox-Root-Passwort | Papier | Zugang zum Homeserver |
+| Hetzner-Account-Login | Papier | Console, Recovery |
+| Storage-Box-Credentials | Papier | Hostname + User pro Box |
+| Restore-Anleitung | Papier (1 Seite) | Kurzanleitung |
+
+USB-Stick: Verschlüsselt (LUKS oder VeraCrypt), im feuerfesten Safe. Update-Rhythmus: Bei jedem neuen Kunden oder Passwort-Änderung.
+
+### 11.12 Retention Policy
+
+| Typ | Anzahl | Begründung |
+|-----|--------|------------|
+| Täglich | 7 | Eine Woche Rollback |
+| Wöchentlich | 4 | Ein Monat |
+| Monatlich | 6 | Halbes Jahr |
+
+Auf allen drei Zielen identisch. DB-Dumps lokal: 7 Tage Retention.
+
+### 11.13 Sicherheitsaspekte
+
+- **Verschlüsselung:** AES-256-CTR + Poly1305 (Restic-Standard, nicht abschaltbar)
+- **Passwort pro Kunde:** Zufällig generiert (≥48 Zeichen), in Vaultwarden gespeichert
+- **Zugriffsrechte:** Restic-Passwort + SSH-Keys nur `root:0600`
+- **Storage Box Isolation:** Sub-Accounts pro Kunde, gegenseitig unsichtbar
+- **Kompromittierter Server:** Kann nur eigene Repos beschreiben, Offsite (Pull-Modell) ist unerreichbar
+- **Ransomware:** Restic-Repos auf Storage Box bleiben intakt, Restore auf frischem Server
+- **DSGVO:** Alle Daten verschlüsselt in EU (DE + FI), AVV mit Hetzner
 
 ---
 

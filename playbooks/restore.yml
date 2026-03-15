@@ -2,9 +2,9 @@
 # playbooks/restore.yml
 # Restore app data from a Restic backup.
 # Usage: ansible-playbook playbooks/restore.yml -i inventories/kunde-abc/ \
-#        -e "app_name=nextcloud" [-e "snapshot_id=abc123"]
+#        -e "app_name=nextcloud" [-e "snapshot_id=abc123"] [-e "target_name=storagebox-nbg"]
 #
-# Default: restores latest snapshot. Specify snapshot_id for a specific version.
+# Default: restores latest snapshot from first backup target.
 
 - name: "Restore App Data"
   hosts: all:!localhost:!*proxmox*
@@ -34,16 +34,17 @@
       when: target_app == None
 
   tasks:
+    - name: Select backup target
+      ansible.builtin.set_fact:
+        backup_target: >-
+          {{ backup.targets | selectattr('name', 'equalto', target_name | default('')) | list | first
+             | default(backup.targets | first) }}
+
     - name: Set restore variables
       ansible.builtin.set_fact:
         restore_snapshot: "{{ snapshot_id | default('latest') }}"
         restore_target: "/opt/restore/{{ app_name }}-{{ ansible_facts.date_time.date }}"
-        backup_target: "{{ backup.targets | first }}"
-        restore_repo: "{{ backup.targets | first | dict2items | selectattr('key', 'in', ['type', 'user', 'host', 'port', 'path']) | items2dict }}"
-
-    - name: Build repo URL
-      ansible.builtin.set_fact:
-        restore_repo_url: "{{ backup_target.type }}:{{ backup_target.user }}@{{ backup_target.host }}:{{ backup_target.port | default(22) }}{{ backup_target.path }}"
+        restore_repo_url: "sftp:{{ backup_target.name }}:{{ backup_target.path }}"
 
     # List available snapshots
     - name: List available snapshots
@@ -86,9 +87,11 @@
           Restore complete!
           App: {{ app_name }}
           Snapshot: {{ restore_snapshot }}
+          Source: {{ backup_target.name }}
           Restored to: {{ restore_target }}
 
           Next steps:
           1. Review restored data in {{ restore_target }}
           2. Copy relevant files to the app data directory
-          3. Restart the app: ansible-playbook playbooks/add-app.yml -i inventories/{{ kunde_id }}/ -e "app_name={{ app_name }}"
+          3. Import DB dumps if needed (see {{ restore_target }}/opt/backups/dumps/)
+          4. Restart the app: ansible-playbook playbooks/add-app.yml -i inventories/{{ kunde_id }}/ -e "app_name={{ app_name }}"

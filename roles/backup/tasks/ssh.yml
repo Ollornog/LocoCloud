@@ -1,0 +1,53 @@
+---
+# roles/backup/tasks/ssh.yml
+# Generate SSH keys and config for backup targets (Storage Boxes, etc.)
+
+- name: Ensure .ssh directory exists
+  ansible.builtin.file:
+    path: /root/.ssh
+    state: directory
+    mode: "0700"
+
+- name: Generate backup SSH keys
+  community.crypto.openssh_keypair:
+    path: "/root/.ssh/backup-{{ item.name }}"
+    type: ed25519
+    comment: "backup@{{ ansible_hostname }}"
+    mode: "0600"
+  loop: "{{ backup.ssh_keys | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _backup_ssh_keys
+
+- name: Deploy SSH config for backup targets
+  ansible.builtin.template:
+    src: ssh-config.j2
+    dest: /root/.ssh/config.d/backup
+    mode: "0600"
+  when: backup.targets | default([]) | length > 0
+
+- name: Ensure SSH config includes config.d
+  ansible.builtin.lineinfile:
+    path: /root/.ssh/config
+    line: "Include config.d/*"
+    create: true
+    mode: "0600"
+    insertbefore: BOF
+
+- name: Ensure config.d directory exists
+  ansible.builtin.file:
+    path: /root/.ssh/config.d
+    state: directory
+    mode: "0700"
+
+- name: Show SSH public keys for manual Storage Box setup
+  ansible.builtin.debug:
+    msg: >-
+      SSH public key for '{{ item.name }}':
+      {{ lookup('file', '/root/.ssh/backup-' + item.name + '.pub', errors='ignore') | default('(key not yet generated)') }}
+      → Hinterlege diesen Key auf der Storage Box via:
+      cat /root/.ssh/backup-{{ item.name }}.pub | ssh -p {{ item.port | default(23) }} <user>@<host> install-ssh-key
+  loop: "{{ backup.ssh_keys | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: _backup_ssh_keys is changed

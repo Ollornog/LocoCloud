@@ -1,6 +1,6 @@
 ---
 # roles/backup/defaults/main.yml
-# Restic-based backup with pre-backup DB dumps
+# Restic-based backup with pre-backup DB dumps (3-2-1 strategy)
 
 backup_script_path: "/opt/scripts/backup"
 backup_dump_path: "/opt/backups/dumps"
@@ -8,13 +8,50 @@ backup_dump_path: "/opt/backups/dumps"
 # Restic encryption password (generated if empty, stored in Vaultwarden)
 backup_restic_password: ""
 
-# Schedule (cron format)
-backup_schedule: "0 */6 * * *"  # Every 6 hours
+# Schedule (cron format) — daily at 03:00
+backup_schedule: "0 3 * * *"
+
+# Alert email for backup failures
+backup_alert_email: "{{ loco.operator.email | default('') }}"
 
 # Retention policy
 backup_retention_keep_daily: 7
 backup_retention_keep_weekly: 4
 backup_retention_keep_monthly: 6
 
+# DB dump retention (days)
+backup_dump_retention_days: 7
+
+# Restic repo integrity check (cron format) — Sunday 05:00
+backup_check_schedule: "0 5 * * 0"
+
 # Backup targets (from customer inventory: backup.targets)
-# Each target: { type: "sftp", host: "...", port: 22, user: "...", path: "..." }
+# Each target:
+#   name: "storagebox-nbg"
+#   host: "uXXXXX.your-storagebox.de"
+#   port: 23
+#   user: "uXXXXX-sub1"
+#   path: "/backup"
+#   ssh_key_name: "storagebox"     # references backup.ssh_keys[].name
+
+# SSH keys for backup targets (from customer inventory: backup.ssh_keys)
+# Each key:
+#   name: "storagebox"
+#   port: 23                       # SSH port for this target type
+
+# Extra backup paths (beyond automatic app detection)
+backup_extra_paths:
+  - "/opt/stacks"
+  - "/opt/scripts"
+  - "/etc/ssh/sshd_config.d"
+  - "/etc/sysctl.d"
+
+# Paths to exclude
+backup_exclude_patterns:
+  - "*.sock"
+  - "*.pid"
+  - "*.tmp"
+  - "*.swp"
+  - "*~"
+  - "**/cache/**"
+  - "**/Cache/**"

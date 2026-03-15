@@ -1,0 +1,60 @@
+#!/bin/bash
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# LocoCloud Offsite Pull — Backup-LXC
+# Zieht Restic-Repos von Storage Boxes auf lokale Disk
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+set -euo pipefail
+
+BACKUP_BASE="{{ loco.backup.offsite.path | default('/mnt/backup') }}"
+LOG_FILE="/var/log/lococloudd-offsite-pull.log"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+log "=== Offsite Pull Start ==="
+ERRORS=0
+
+{% for kunde in offsite_kunden | default([]) %}
+# --- {{ kunde.name }} ---
+KUNDE_DIR="$BACKUP_BASE/{{ kunde.id }}"
+mkdir -p "$KUNDE_DIR"
+PASSWORD_FILE="$BACKUP_BASE/.restic-password-{{ kunde.id }}"
+
+SOURCE_REPO="sftp:{{ kunde.source_target }}:{{ kunde.source_path | default('/backup') }}"
+LOCAL_REPO="$KUNDE_DIR"
+
+log "Pulling {{ kunde.name }} from {{ kunde.source_target }}..."
+
+# Initialize local repo if needed
+if ! restic -r "$LOCAL_REPO" --password-file "$PASSWORD_FILE" snapshots >/dev/null 2>&1; then
+    log "Initialisiere lokales Repo: {{ kunde.name }}"
+    restic -r "$LOCAL_REPO" --password-file "$PASSWORD_FILE" init 2>&1 | tee -a "$LOG_FILE" || {
+        log "FEHLER: Init fehlgeschlagen fuer {{ kunde.name }}"
+        ((ERRORS++)) || true
+        {% if not loop.last %}
+        # Continue with next customer
+        {% endif %}
+    }
+fi
+
+# Copy snapshots from remote to local
+if restic -r "$SOURCE_REPO" --password-file "$PASSWORD_FILE" \
+    copy --repo2 "$LOCAL_REPO" --password-file2 "$PASSWORD_FILE" \
+    2>&1 | tee -a "$LOG_FILE"; then
+    log "OK: {{ kunde.name }}"
+else
+    log "FEHLER: Pull fehlgeschlagen fuer {{ kunde.name }}"
+    ((ERRORS++)) || true
+fi
+
+{% endfor %}
+
+if [ $ERRORS -gt 0 ]; then
+    log "=== Offsite Pull FEHLERHAFT: $ERRORS Kunden fehlgeschlagen ==="
+    exit 1
+else
+    log "=== Offsite Pull OK ==="
+fi

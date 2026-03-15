@@ -1,0 +1,50 @@
+---
+# roles/backup/tasks/offsite-pull.yml
+# Configure offsite backup pull on the Backup-LXC.
+# The LXC pulls Restic repos from Storage Boxes to local disk.
+# This runs on the offsite Backup-LXC, NOT on customer servers.
+
+- name: Install Restic on offsite backup server
+  ansible.builtin.apt:
+    name: restic
+    state: present
+
+- name: Create offsite backup directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - "{{ loco.backup.offsite.path | default('/mnt/backup') }}"
+    - /opt/scripts/backup
+
+- name: Deploy offsite pull script
+  ansible.builtin.template:
+    src: offsite-pull.sh.j2
+    dest: /opt/scripts/backup/offsite-pull.sh
+    mode: "0700"
+
+- name: Setup offsite pull cron
+  ansible.builtin.cron:
+    name: "lococloudd-offsite-pull"
+    job: "/opt/scripts/backup/offsite-pull.sh >> /var/log/lococloudd-offsite-pull.log 2>&1"
+    minute: "{{ (loco.backup.offsite.pull_schedule | default('0 6 * * *')).split(' ')[0] }}"
+    hour: "{{ (loco.backup.offsite.pull_schedule | default('0 6 * * *')).split(' ')[1] }}"
+    day: "{{ (loco.backup.offsite.pull_schedule | default('0 6 * * *')).split(' ')[2] }}"
+    month: "{{ (loco.backup.offsite.pull_schedule | default('0 6 * * *')).split(' ')[3] }}"
+    weekday: "{{ (loco.backup.offsite.pull_schedule | default('0 6 * * *')).split(' ')[4] }}"
+    user: root
+    state: present
+
+- name: Setup logrotate for offsite pull log
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/lococloudd-offsite-pull
+    mode: "0644"
+    content: |
+      /var/log/lococloudd-offsite-pull.log {
+          weekly
+          rotate 4
+          compress
+          missingok
+          notifempty
+      }

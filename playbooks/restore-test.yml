@@ -4,7 +4,7 @@
 # Usage: ansible-playbook playbooks/restore-test.yml -i inventories/kunde-abc/
 
 - name: "Restore Test"
-  hosts: all:!localhost
+  hosts: all:!localhost:!*proxmox*
   become: true
 
   pre_tasks:
@@ -23,27 +23,30 @@
           - backup.targets | default([]) | length > 0
         fail_msg: "Backup not configured for this customer. Skipping restore test."
 
+    - name: Set repo URL from first target
+      ansible.builtin.set_fact:
+        restore_test_repo: "sftp:{{ backup.targets[0].name }}:{{ backup.targets[0].path }}"
+        restore_test_dir: "/tmp/restore-test-{{ ansible_facts.date_time.date }}"
+
     - name: Create temp restore directory
       ansible.builtin.file:
-        path: "/tmp/restore-test-{{ ansible_facts.date_time.date }}"
+        path: "{{ restore_test_dir }}"
         state: directory
         mode: "0700"
 
     - name: Run Restic restore (latest snapshot)
       ansible.builtin.command:
         cmd: >-
-          restic restore latest
-          --repo {{ backup.targets[0].type }}:{{ backup.targets[0].path | default('') }}
-          --target /tmp/restore-test-{{ ansible_facts.date_time.date }}
+          restic -r {{ restore_test_repo }}
           --password-file /opt/scripts/backup/.restic-password
-      environment:
-        RESTIC_PASSWORD_FILE: "/opt/scripts/backup/.restic-password"
+          restore latest
+          --target {{ restore_test_dir }}
       register: restore_result
       changed_when: false
 
     - name: Verify restored files exist
       ansible.builtin.find:
-        paths: "/tmp/restore-test-{{ ansible_facts.date_time.date }}"
+        paths: "{{ restore_test_dir }}"
         file_type: any
         recurse: true
       register: restored_files
@@ -57,8 +60,8 @@
 
     - name: Check for DB dumps in restored data
       ansible.builtin.find:
-        paths: "/tmp/restore-test-{{ ansible_facts.date_time.date }}"
-        patterns: "*.sql,*.archive"
+        paths: "{{ restore_test_dir }}"
+        patterns: "*.sql.gz,*.db"
         recurse: true
       register: restored_dumps
 
@@ -83,7 +86,7 @@
 
     - name: Check for docker-compose files in restored stacks
       ansible.builtin.find:
-        paths: "/tmp/restore-test-{{ ansible_facts.date_time.date }}"
+        paths: "{{ restore_test_dir }}"
         patterns: "docker-compose.yml"
         recurse: true
       register: restored_stacks
@@ -98,7 +101,7 @@
 
     - name: Cleanup temp restore directory
       ansible.builtin.file:
-        path: "/tmp/restore-test-{{ ansible_facts.date_time.date }}"
+        path: "{{ restore_test_dir }}"
         state: absent
 
     - name: Log restore test result

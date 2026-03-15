@@ -12,6 +12,7 @@ One master server manages multiple customer environments via inventories.
 - **Auth chain**: lldap (user directory) → PocketID (OIDC) → Apps. Apps with native LDAP (Nextcloud, Pingvin Share) connect directly to lldap for real-time user status
 - **Tinyauth**: Optional forward-auth proxy (disabled by default, for apps without own auth)
 - **Credentials**: All generated passwords stored in Vaultwarden via `scripts/vw-credentials.py`
+- **Backup**: 3-2-1 strategy — Restic to Storage Box NBG + HEL (SFTP), offsite pull to Proxmox homeserver. Pre-backup DB dumps (PG, MariaDB, SQLite). Weekly integrity check, monthly restore test
 - **Encryption**: gocryptfs on `/mnt/data`, keyfile only on master
 - **Networking**: Netbird VPN (optional) or direct IP connectivity
 - **TLS modes**: `acme` (public LE), `cert_sync` (rsync certs from public server), `dns` (DNS-01 challenge), `internal` (Caddy CA)

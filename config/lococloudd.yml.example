@@ -114,6 +114,16 @@ compliance:
   docs_output_path: "/opt/lococloudd/docs/kunden"  # Wo die generierten Dokumente landen
   # TOM, VVT, Loeschkonzept werden als Jinja2-Templates pro Kunde generiert
 
+# --- Backup (Offsite / globale Einstellungen) ---
+backup:
+  offsite:
+    enabled: false
+    host: ""                                         # Netbird-IP des Backup-LXC (z.B. "100.64.x.x")
+    user: "backup"
+    path: "/mnt/backup"
+    pull_schedule: "0 6 * * *"                       # Pull von Storage Box, taeglich 06:00
+    pull_source: "storagebox-nbg"                    # Von welchem Target pullen (name aus Inventar)
+
 # --- Netbird Server (optional, fuer Self-Hosting) ---
 # netbird_server:
 #   self_hosted: false                              # true wenn eigener Netbird-Server

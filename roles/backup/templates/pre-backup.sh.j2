@@ -1,0 +1,100 @@
+#!/bin/bash
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# LocoCloud Pre-Backup: DB-Dumps
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+set -euo pipefail
+
+DUMP_DIR="{{ backup_dump_path }}"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+RETENTION_DAYS={{ backup_dump_retention_days }}
+ERRORS=0
+
+mkdir -p "$DUMP_DIR"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# --- PostgreSQL Dumps ---
+# Detect all running containers with pg_dump available
+for CONTAINER in $(docker ps --format '{{ '{{' }}.Names{{ '}}' }}' | grep -E '\-db$' || true); do
+    if docker exec "$CONTAINER" sh -c 'command -v pg_dump' >/dev/null 2>&1; then
+        DB_USER=$(docker exec "$CONTAINER" sh -c 'echo $POSTGRES_USER' 2>/dev/null || echo "postgres")
+        DB_NAME=$(docker exec "$CONTAINER" sh -c 'echo $POSTGRES_DB' 2>/dev/null || echo "")
+        if [ -n "$DB_NAME" ]; then
+            log "Dumping PostgreSQL: $CONTAINER/$DB_NAME"
+            if docker exec "$CONTAINER" pg_dump -U "$DB_USER" "$DB_NAME" | gzip > "$DUMP_DIR/${CONTAINER}_${TIMESTAMP}.sql.gz"; then
+                log "OK: $CONTAINER"
+            else
+                log "FEHLER: PostgreSQL dump $CONTAINER fehlgeschlagen"
+                ((ERRORS++)) || true
+            fi
+        fi
+    fi
+done
+
+# --- MariaDB/MySQL Dumps ---
+for CONTAINER in $(docker ps --format '{{ '{{' }}.Names{{ '}}' }}' | grep -E '\-db$' || true); do
+    if docker exec "$CONTAINER" sh -c 'command -v mariadb-dump || command -v mysqldump' >/dev/null 2>&1; then
+        # Skip if already handled as PostgreSQL
+        docker exec "$CONTAINER" sh -c 'command -v pg_dump' >/dev/null 2>&1 && continue
+
+        DB_NAME=$(docker exec "$CONTAINER" sh -c 'echo $MYSQL_DATABASE' 2>/dev/null || echo "")
+        DUMP_CMD=$(docker exec "$CONTAINER" sh -c 'command -v mariadb-dump || command -v mysqldump' 2>/dev/null)
+        if [ -n "$DB_NAME" ] && [ -n "$DUMP_CMD" ]; then
+            log "Dumping MariaDB: $CONTAINER/$DB_NAME"
+            if docker exec "$CONTAINER" "$DUMP_CMD" --single-transaction "$DB_NAME" | gzip > "$DUMP_DIR/${CONTAINER}_${TIMESTAMP}.sql.gz"; then
+                log "OK: $CONTAINER"
+            else
+                log "FEHLER: MariaDB dump $CONTAINER fehlgeschlagen"
+                ((ERRORS++)) || true
+            fi
+        fi
+    fi
+done
+
+# --- SQLite Dumps ---
+# PocketID, lldap, Vaultwarden, Pingvin Share, Uptime Kuma use SQLite
+{% raw %}
+SQLITE_TARGETS=(
+    "pocketid:/data/pocketid.db"
+    "lldap:/data/users.db"
+    "vaultwarden:/data/db.sqlite3"
+    "pingvin-share:/opt/app/backend/prisma/data.db"
+    "uptime-kuma:/app/data/kuma.db"
+)
+{% endraw %}
+
+for ENTRY in "${SQLITE_TARGETS[@]}"; do
+    CONTAINER="${ENTRY%%:*}"
+    DB_PATH="${ENTRY#*:}"
+    if docker ps --format '{{ '{{' }}.Names{{ '}}' }}' | grep -q "^${CONTAINER}$"; then
+        log "Dumping SQLite: $CONTAINER"
+        BACKUP_PATH="${DB_PATH%.db}-backup.db"
+        if docker exec "$CONTAINER" sqlite3 "$DB_PATH" ".backup '${BACKUP_PATH}'" 2>/dev/null; then
+            if docker cp "$CONTAINER:${BACKUP_PATH}" "$DUMP_DIR/${CONTAINER}_${TIMESTAMP}.db"; then
+                docker exec "$CONTAINER" rm -f "$BACKUP_PATH" 2>/dev/null || true
+                log "OK: $CONTAINER"
+            else
+                log "FEHLER: SQLite copy $CONTAINER fehlgeschlagen"
+                ((ERRORS++)) || true
+            fi
+        else
+            log "FEHLER: SQLite dump $CONTAINER fehlgeschlagen"
+            ((ERRORS++)) || true
+        fi
+    fi
+done
+
+# --- Cleanup alte Dumps ---
+find "$DUMP_DIR" -name "*.sql.gz" -mtime +"$RETENTION_DAYS" -delete 2>/dev/null || true
+find "$DUMP_DIR" -name "*.db" -mtime +"$RETENTION_DAYS" -delete 2>/dev/null || true
+
+DUMP_COUNT=$(find "$DUMP_DIR" -name "*_${TIMESTAMP}*" 2>/dev/null | wc -l)
+log "Pre-backup done: $DUMP_COUNT dumps created, $ERRORS errors"
+
+if [ $ERRORS -gt 0 ]; then
+    exit 1
+fi

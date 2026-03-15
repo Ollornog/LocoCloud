@@ -1,0 +1,20 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# SSH-Config fuer Backup-Targets
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+{% for target in backup.targets | default([]) %}
+{% set ssh_key = backup.ssh_keys | default([]) | selectattr('name', 'equalto', target.ssh_key_name | default('')) | list | first | default(None) %}
+Host {{ target.name }}
+    HostName {{ target.host }}
+    User {{ target.user }}
+    Port {{ target.port | default(22) }}
+{% if ssh_key is not none %}
+    IdentityFile /root/.ssh/backup-{{ ssh_key.name }}
+{% endif %}
+    StrictHostKeyChecking accept-new
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+
+{% endfor %}

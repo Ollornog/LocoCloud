@@ -1,0 +1,8 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Restic Exclude Patterns
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+{% for pattern in backup_exclude_patterns %}
+{{ pattern }}
+{% endfor %}

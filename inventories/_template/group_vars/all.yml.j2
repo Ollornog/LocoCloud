@@ -45,14 +45,35 @@ apps_enabled: []
 #    backup_paths:
 #      - "/mnt/data/nextcloud"
 
-# --- Backup ---
+# --- Backup (3-2-1 Strategie) ---
 backup:
   enabled: false
+  schedule: "0 3 * * *"             # Taeglich um 03:00
+  alert_email: ""                    # E-Mail bei Backup-Fehlern
   targets: []
+  #  - name: "storagebox-nbg"
+  #    host: "uXXXXX.your-storagebox.de"
+  #    port: 23
+  #    user: "uXXXXX-sub1"
+  #    path: "/backup"
+  #    ssh_key_name: "storagebox"
+  #  - name: "storagebox-hel"
+  #    host: "uYYYYY.your-storagebox.de"
+  #    port: 23
+  #    user: "uYYYYY-sub1"
+  #    path: "/backup"
+  #    ssh_key_name: "storagebox"
+  ssh_keys: []
+  #  - name: "storagebox"
+  #    port: 23
   retention:
     keep_daily: 7
     keep_weekly: 4
     keep_monthly: 6
+  check_schedule: "0 5 * * 0"       # Sonntag 05:00 — Repo-Integritaet
+  restore_test:
+    enabled: true
+    schedule: "0 3 1 * *"           # Monatlich am 1. um 03:00
 
 # --- DynDNS (optional) ---
 dyndns:

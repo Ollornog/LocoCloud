@@ -24,6 +24,10 @@
 | gocryptfs nach Reboot nicht gemountet | Systemd-Service `gocryptfs-mount.service` prüfen. Muss VOR `docker.service` starten. Master erreichbar? SSH-Key gültig? |
 | gocryptfs Keyfile auf Server vergessen | SOFORT löschen! Keyfile darf nur auf Master + Key-Backup liegen. |
 | Caddy HTTP/2 leere Responses über Netbird VPN | HTTP/2 Binary Framing + WireGuard MTU ~1420 → Frame-Fragmentierung, Stream-Desync. Fix: `versions 1.1` im `transport http` Block + `tls_server_name` + `header_up Host`. Gilt für alle `reverse_proxy https://` über Netbird. |
+| Storage Box SSH Port 23 | Hetzner Storage Boxes nutzen Port 23 für SSH/SFTP, NICHT Port 22. SSH-Config und Restic-Repo-URLs müssen Port 23 verwenden. `backup`-Rolle konfiguriert das automatisch via `~/.ssh/config.d/backup`. |
+| Storage Box Sub-Account Isolation | Sub-Accounts auf Storage Boxes können sich gegenseitig nicht sehen. Pro Kunde eigenen Sub-Account anlegen. SSH-Key pro Server, nicht pro Kunde (mehrere Server eines Kunden brauchen je einen Key). |
+| Restic copy für Offsite-Pull | `restic copy` zwischen Repos erfordert gleiches Passwort auf Source und Target. Offsite-LXC muss Restic-Passwort pro Kunde kennen (aus Vaultwarden/Safe). |
+| SQLite Dump Konsistenz | Laufende SQLite-DBs NICHT auf Dateisystem-Ebene sichern (Write-Ahead-Log kann inkonsistent sein). Immer `.backup`-Befehl verwenden: `sqlite3 db.db ".backup 'backup.db'"`. Pre-Backup-Script macht das automatisch für PocketID, lldap, Vaultwarden. |
 | Grafana Alloy hoher RAM | `--server.http.memory-limit-mb=256` auf kleinen LXCs. WAL-Größe begrenzen. |
 | Loki Retention greift nicht | `compactor` muss in Loki-Config aktiviert sein. Ohne Compactor werden alte Chunks nicht gelöscht. |
 | ACME schlägt fehl bei Netbird-only Setup | Server nicht öffentlich erreichbar → HTTP-01 Challenge fehlschlägt. Fix: `admin.tls_mode` in Config auf `cert_sync`, `dns` oder `internal` setzen. Siehe `setup.sh` TLS-Frage. |

@@ -1,54 +1,100 @@
 #!/bin/bash
 # ============================================
 # GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
-# LocoCloud Backup Script
+# LocoCloud Backup Script (3-2-1 Strategy)
+# Kunde: {{ kunde_name | default(kunde_id | default('master')) }}
 # Generiert: {{ ansible_facts.date_time.iso8601 }}
 # ============================================
 set -euo pipefail
 
 PASSWORD_FILE="{{ backup_script_path }}/.restic-password"
+EXCLUDE_FILE="{{ backup_script_path }}/restic-excludes.txt"
 LOG_FILE="/var/log/lococloudd-backup.log"
+ALERT_EMAIL="{{ backup.alert_email | default(backup_alert_email) }}"
+HOSTNAME="$(hostname)"
+KUNDE="{{ kunde_id | default('master') }}"
 
 log() {
-    echo "$(date -Iseconds) $1" | tee -a "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
 }
 
-log "=== Backup started ==="
+alert() {
+    log "FEHLER: $1"
+    if [ -n "$ALERT_EMAIL" ] && command -v mail >/dev/null 2>&1; then
+        echo "Backup FEHLER auf $HOSTNAME (Kunde: $KUNDE): $1" | \
+            mail -s "BACKUP FEHLER: $KUNDE @ $HOSTNAME" "$ALERT_EMAIL" 2>/dev/null || true
+    fi
+}
 
-# Phase 1: Pre-backup (DB dumps)
-log "Running pre-backup dumps..."
-{{ backup_script_path }}/pre-backup.sh 2>&1 | tee -a "$LOG_FILE"
+backup_to_repo() {
+    local REPO="$1"
+    local NAME="$2"
 
-# Phase 2: Restic backup to each target
-{% for target in backup.targets | default([]) %}
-REPO="{{ target.type }}:{{ target.user }}@{{ target.host }}:{{ target.port | default(22) }}{{ target.path }}"
-log "Backing up to $REPO..."
-restic -r "$REPO" backup \
-    --password-file "$PASSWORD_FILE" \
-    --tag "{{ kunde_id }}" \
+    log "Start Backup → $NAME ($REPO)"
+
+    # Initialize repo if not yet initialized
+    if ! restic -r "$REPO" --password-file "$PASSWORD_FILE" snapshots >/dev/null 2>&1; then
+        log "Initialisiere Repo: $NAME"
+        if ! restic -r "$REPO" --password-file "$PASSWORD_FILE" init 2>&1 | tee -a "$LOG_FILE"; then
+            alert "Repo init fehlgeschlagen: $NAME"
+            return 1
+        fi
+    fi
+
+    # Backup
+    if ! restic -r "$REPO" --password-file "$PASSWORD_FILE" backup \
+        --exclude-file="$EXCLUDE_FILE" \
+        --tag "$KUNDE" \
+        --tag "$HOSTNAME" \
+{% for path in backup_extra_paths %}
+        {{ path }} \
+{% endfor %}
+        {{ backup_dump_path }} \
 {% for app in apps_enabled | default([]) %}
 {% for bpath in app.backup_paths | default([]) %}
-    {{ bpath }} \
+        {{ bpath }} \
 {% endfor %}
 {% endfor %}
-    {{ backup_dump_path }} \
-    /opt/stacks \
 {% if loco.netbird.enabled | default(false) %}
-    /var/lib/netbird \
+        /var/lib/netbird \
 {% endif %}
-    /var/log/audit \
-    2>&1 | tee -a "$LOG_FILE"
+        2>&1 | tee -a "$LOG_FILE"; then
+        alert "Backup fehlgeschlagen: $NAME"
+        return 1
+    fi
 
-# Apply retention policy
-log "Applying retention policy on $REPO..."
-restic -r "$REPO" forget \
-    --password-file "$PASSWORD_FILE" \
-    --keep-daily {{ backup.retention.keep_daily | default(backup_retention_keep_daily) }} \
-    --keep-weekly {{ backup.retention.keep_weekly | default(backup_retention_keep_weekly) }} \
-    --keep-monthly {{ backup.retention.keep_monthly | default(backup_retention_keep_monthly) }} \
-    --prune \
-    2>&1 | tee -a "$LOG_FILE"
+    # Retention
+    log "Applying retention → $NAME"
+    restic -r "$REPO" --password-file "$PASSWORD_FILE" forget \
+        --keep-daily {{ backup.retention.keep_daily | default(backup_retention_keep_daily) }} \
+        --keep-weekly {{ backup.retention.keep_weekly | default(backup_retention_keep_weekly) }} \
+        --keep-monthly {{ backup.retention.keep_monthly | default(backup_retention_keep_monthly) }} \
+        --prune \
+        2>&1 | tee -a "$LOG_FILE" || true
+
+    log "OK: Backup → $NAME abgeschlossen"
+}
+
+# --- Pre-Backup (DB dumps) ---
+log "=== Backup-Run Start ==="
+{{ backup_script_path }}/pre-backup.sh 2>&1 | tee -a "$LOG_FILE" || {
+    alert "Pre-Backup (DB-Dumps) fehlgeschlagen"
+    # Continue anyway — better backup without fresh dumps than no backup
+}
+
+# --- Backups to all targets ---
+ERRORS=0
+
+{% for target in backup.targets | default([]) %}
+# Target: {{ target.name }}
+backup_to_repo "sftp:{{ target.name }}:{{ target.path }}" "{{ target.name }}" || ((ERRORS++)) || true
 
 {% endfor %}
 
-log "=== Backup complete ==="
+# --- Summary ---
+if [ $ERRORS -gt 0 ]; then
+    log "=== Backup-Run FEHLERHAFT: $ERRORS Ziel(e) fehlgeschlagen ==="
+    exit 1
+else
+    log "=== Backup-Run OK ==="
+fi
