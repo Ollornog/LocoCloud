@@ -1370,15 +1370,15 @@ Nextcloud "Paperless Dokumente" (/mnt/data/paperless/media/documents/, read-only
 
 **Documenso → Paperless (`documenso_paperless_bridge`):**
 ```
-Documenso (Dokument fertig signiert)
-  ↓ API-Polling (Cron, alle 5 Min)
-Python-Script lädt signiertes PDF via Documenso API
-  ↓ Download + Copy
+Documenso (Dokument fertig signiert, Status COMPLETED)
+  ↓ Cron (alle 5 Min)
+Python-Script fragt Documenso-PostgreSQL direkt ab (docker exec psql)
+  ↓ Extrahiert signiertes PDF aus DocumentData-Tabelle
 Paperless consume (/mnt/data/paperless/consume/)
   ↓ Paperless verarbeitet (OCR, Archiv)
 ```
 
-Das Documenso-Bridge-Script nutzt die Documenso REST-API (`/api/v1/documents`), trackt bereits synchronisierte IDs in einer State-Datei und ist idempotent. Voraussetzung: Documenso API-Token muss nach dem ersten Login manuell erstellt werden (Settings → API Tokens).
+Kein API-Token nötig — das Script nutzt `docker exec` auf den Documenso-DB-Container mit den vorhandenen DB-Credentials. State-File trackt bereits synchronisierte IDs (idempotent). Unterstützt beide Documenso-Speichermodi (DB-base64 und Uploads-Verzeichnis).
 
 ---
 

@@ -59,7 +59,7 @@
 | Paperless Default Permissions pro User | Settings → Permissions gilt nur für den eingeloggten User, nicht global. Für automatische Zuweisung bei Mail/Consume: Workflow mit `assign_view_groups`/`assign_change_groups`. |
 | Paperless IMAP-Ordner bei Dovecot | Alle Ordner haben `INBOX.` Prefix. In Mail-Regeln: `INBOX.Archiv`, nicht `Archiv`. |
 | Paperless API Trailing Slash | Alle API-Endpoints enden mit `/`. Ohne Slash gibt es 301 Redirects. |
-| Documenso API-Token für Bridge | `documenso_paperless_bridge` braucht Documenso API-Token. Muss nach erstem Login manuell erstellt werden: Settings → API Tokens. Kann nicht per Ansible vorab erstellt werden. Token als `documenso_paperless_api_token` im Inventar oder Vault setzen. |
+| Documenso→Paperless Bridge: DB-Zugriff | Bridge fragt Documenso-PostgreSQL direkt via `docker exec psql` ab — kein API-Token nötig. Voraussetzung: Documenso-DB-Container muss laufen. Script handhabt beide Speichermodi (base64 in DB und Uploads-Verzeichnis). |
 | Documenso→Paperless Consume Permissions | Consume-Ordner braucht `777` ohne Sticky Bit (wie bei nc_paperless_bridge). Sync-Script (root) schreibt PDFs rein, Paperless (UID 1000) muss nach Verarbeitung löschen können. |
 | PocketID /register | Per Caddy auf 403 blocken. PocketID kann Registrierung nicht nativ deaktivieren. |
 | PocketID + LDAP: lokale Accounts kollidieren | Lokaler PocketID-Account mit gleicher E-Mail wie LDAP-Account → LDAP-Account wird ignoriert. Fix: Lokale Accounts ERST löschen, dann LDAP aktivieren. |

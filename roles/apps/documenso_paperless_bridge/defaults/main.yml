@@ -3,21 +3,20 @@
 # Documenso→Paperless Bridge — Fertig signierte Dokumente automatisch archivieren
 #
 # Architecture:
-#   Documenso (signiertes Dokument fertig)
-#     ↓ API-Polling (Cron, alle 5 Min)
-#   Python-Script laedt signiertes PDF herunter
-#     ↓ Copy
+#   Documenso (Dokument fertig signiert, Status COMPLETED)
+#     ↓ Cron (alle 5 Min)
+#   Python-Script fragt Documenso-PostgreSQL direkt ab
+#     ↓ Extrahiert signiertes PDF aus DB
 #   Paperless consume → /mnt/data/paperless/consume/
 #     ↓ Paperless verarbeitet (OCR, Archiv)
-#   Paperless Archiv
 #
-# Voraussetzung: Documenso API-Token muss nach dem ersten Login
-# manuell erstellt werden (Settings → API Tokens) und als
-# Variable documenso_paperless_api_token gesetzt werden.
+# Kein API-Token noetig — das Script nutzt die DB-Credentials
+# aus dem Documenso-Deployment direkt (docker exec).
 
-# Documenso API
-documenso_paperless_api_url: "http://127.0.0.1:{{ documenso_port | default(8086) }}"
-documenso_paperless_api_token: ""  # Required: Documenso API Token (from Settings → API Tokens)
+# Documenso DB container name (must match documenso role)
+documenso_paperless_db_container: "documenso-db"
+documenso_paperless_db_user: "{{ documenso_db_user | default('documenso') }}"
+documenso_paperless_db_name: "{{ documenso_db_name | default('documenso') }}"
 
 # Paperless consume directory (must match paperless role)
 documenso_paperless_consume_path: "/mnt/data/paperless/consume"

@@ -2,29 +2,31 @@
 # ============================================
 # GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
 # Documenso → Paperless Bridge
-# Laedt fertig signierte Dokumente aus Documenso und legt sie
-# im Paperless consume-Ordner ab.
+# Fragt Documenso-PostgreSQL direkt nach fertig signierten
+# Dokumenten ab und legt sie im Paperless consume-Ordner ab.
+# Kein API-Token noetig — nutzt docker exec + psql.
 # Generiert: {{ ansible_facts.date_time.iso8601 }}
 # ============================================
 """
-Polls Documenso API for completed documents, downloads signed PDFs,
-and places them in Paperless consume directory for automatic archival.
+Polls Documenso's PostgreSQL for completed documents, extracts the
+signed PDF data, and places it in Paperless consume directory.
 
-Uses only Python stdlib (no external dependencies).
+Uses only Python stdlib + docker exec (no external dependencies).
 """
 
+import base64
 import json
 import os
+import subprocess
 import sys
-import urllib.request
-import urllib.error
 import logging
 from pathlib import Path
 from datetime import datetime
 
 # --- Configuration ---
-API_URL = "{{ documenso_paperless_api_url }}"
-API_TOKEN = "{{ documenso_paperless_api_token }}"
+DB_CONTAINER = "{{ documenso_paperless_db_container }}"
+DB_USER = "{{ documenso_paperless_db_user }}"
+DB_NAME = "{{ documenso_paperless_db_name }}"
 CONSUME_PATH = "{{ documenso_paperless_consume_path }}"
 STATE_FILE = "{{ documenso_paperless_state_file }}"
 FILE_PREFIX = "{{ documenso_paperless_file_prefix }}"
@@ -37,12 +39,21 @@ logging.basicConfig(
 log = logging.getLogger("documenso-paperless")
 
 
-def api_request(path: str) -> urllib.request.Request:
-    """Build an authenticated API request."""
-    url = f"{API_URL}{path}"
-    req = urllib.request.Request(url)
-    req.add_header("Authorization", f"Bearer {API_TOKEN}")
-    return req
+def psql(query: str, tuples_only: bool = True) -> str:
+    """Execute a psql query via docker exec and return stdout."""
+    cmd = [
+        "docker", "exec", DB_CONTAINER,
+        "psql", "-U", DB_USER, "-d", DB_NAME,
+        "-c", query,
+    ]
+    if tuples_only:
+        cmd.extend(["-t", "-A"])
+
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    if result.returncode != 0:
+        log.error("psql error: %s", result.stderr.strip())
+        return ""
+    return result.stdout.strip()
 
 
 def load_synced_ids() -> set:
@@ -61,75 +72,108 @@ def save_synced_id(doc_id: str) -> None:
 
 
 def get_completed_documents() -> list:
-    """Fetch all completed documents from Documenso API."""
-    try:
-        req = api_request("/api/v1/documents")
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read().decode())
-    except urllib.error.HTTPError as e:
-        log.error("API error listing documents: %s %s", e.code, e.reason)
+    """Query Documenso DB for completed documents."""
+    # Documenso schema: "Document" table with status enum
+    query = """
+        SELECT d.id, d.title, d."completedAt", d."documentDataId"
+        FROM "Document" d
+        WHERE d.status = 'COMPLETED'
+          AND d."deletedAt" IS NULL
+        ORDER BY d."completedAt" DESC;
+    """
+    output = psql(query)
+    if not output:
         return []
-    except Exception as e:
-        log.error("Failed to list documents: %s", e)
-        return []
 
-    # Documenso API returns { documents: [...] } or directly [...]
-    docs = data if isinstance(data, list) else data.get("documents", data.get("data", []))
+    docs = []
+    for line in output.split("\n"):
+        if not line.strip():
+            continue
+        parts = line.split("|")
+        if len(parts) >= 4:
+            docs.append({
+                "id": parts[0].strip(),
+                "title": parts[1].strip(),
+                "completedAt": parts[2].strip(),
+                "documentDataId": parts[3].strip(),
+            })
+    return docs
 
-    completed = []
-    for doc in docs:
-        status = doc.get("status", "")
-        if status == "COMPLETED":
-            completed.append(doc)
 
-    return completed
+def extract_document_pdf(document_data_id: str) -> bytes:
+    """Extract the signed PDF from Documenso's DocumentData table.
 
+    Documenso stores document data as base64 in the 'data' column
+    of the 'DocumentData' table (when using database storage transport).
+    """
+    # Get the document data — base64 encoded PDF
+    query = f"""
+        SELECT "data" FROM "DocumentData"
+        WHERE id = {document_data_id};
+    """
+    raw = psql(query)
+    if not raw:
+        return b""
 
-def download_document(doc_id: str, title: str) -> bool:
-    """Download a completed document PDF and save to Paperless consume."""
+    # DocumentData.data can be:
+    # 1. A base64 string (database transport, starts with data: or raw base64)
+    # 2. A file path (S3/file transport)
+
+    # Handle data URI format: data:application/pdf;base64,<data>
+    if raw.startswith("data:"):
+        try:
+            _, encoded = raw.split(",", 1)
+            return base64.b64decode(encoded)
+        except Exception as e:
+            log.error("Failed to decode data URI: %s", e)
+            return b""
+
+    # Try raw base64 decode
     try:
-        # Documenso API: download completed document as PDF
-        req = api_request(f"/api/v1/documents/{doc_id}/download")
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            pdf_data = resp.read()
-    except urllib.error.HTTPError as e:
-        log.error("Failed to download document %s: %s %s", doc_id, e.code, e.reason)
-        return False
-    except Exception as e:
-        log.error("Download error for document %s: %s", doc_id, e)
-        return False
+        decoded = base64.b64decode(raw)
+        # Verify it's a PDF (starts with %PDF)
+        if decoded[:4] == b"%PDF":
+            return decoded
+    except Exception:
+        pass
 
-    if len(pdf_data) < 100:
-        log.warning("Document %s seems too small (%d bytes), skipping", doc_id, len(pdf_data))
-        return False
+    # Could be a file path — check uploads directory
+    if raw.startswith("/") or raw.startswith("uploads/"):
+        upload_path = raw
+        if not upload_path.startswith("/"):
+            upload_path = f"/app/{upload_path}"
 
-    # Sanitize filename
-    safe_title = "".join(c if c.isalnum() or c in " -_.()" else "_" for c in title)
-    safe_title = safe_title.strip()[:200] or f"document-{doc_id}"
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{FILE_PREFIX}_{safe_title}_{timestamp}.pdf"
-    filepath = os.path.join(CONSUME_PATH, filename)
+        # Try to copy from Documenso container
+        try:
+            result = subprocess.run(
+                ["docker", "cp", f"documenso:{upload_path}", "/tmp/.documenso-bridge-tmp.pdf"],
+                capture_output=True, timeout=30,
+            )
+            if result.returncode == 0:
+                with open("/tmp/.documenso-bridge-tmp.pdf", "rb") as f:
+                    data = f.read()
+                os.unlink("/tmp/.documenso-bridge-tmp.pdf")
+                return data
+        except Exception as e:
+            log.error("Failed to extract file from container: %s", e)
 
-    try:
-        with open(filepath, "wb") as f:
-            f.write(pdf_data)
-        # Ensure Paperless (UID 1000) can read and delete the file
-        os.chmod(filepath, 0o666)
-        log.info("Saved: %s (%d bytes)", filename, len(pdf_data))
-        return True
-    except Exception as e:
-        log.error("Failed to save %s: %s", filepath, e)
-        return False
+    log.warning("Could not extract PDF data for DocumentData %s", document_data_id)
+    return b""
 
 
 def main() -> int:
-    if not API_TOKEN:
-        log.error("No API token configured. Set documenso_paperless_api_token.")
-        return 1
-
     if not os.path.isdir(CONSUME_PATH):
         log.error("Consume directory does not exist: %s", CONSUME_PATH)
         return 1
+
+    # Check if DB container is running
+    check = subprocess.run(
+        ["docker", "ps", "--format", "{% raw %}{{.Names}}{% endraw %}", "--filter", f"name=^{DB_CONTAINER}$"],
+        capture_output=True, text=True, timeout=10,
+    )
+    if DB_CONTAINER not in check.stdout:
+        log.debug("Documenso DB container not running, skipping")
+        return 0
 
     synced_ids = load_synced_ids()
     completed = get_completed_documents()
@@ -140,16 +184,39 @@ def main() -> int:
 
     new_count = 0
     for doc in completed:
-        doc_id = str(doc.get("id", ""))
-        if not doc_id or doc_id in synced_ids:
+        doc_id = doc["id"]
+        if doc_id in synced_ids:
             continue
 
-        title = doc.get("title", doc.get("name", f"document-{doc_id}"))
+        title = doc["title"] or f"document-{doc_id}"
         log.info("New completed document: %s (ID: %s)", title, doc_id)
 
-        if download_document(doc_id, title):
+        pdf_data = extract_document_pdf(doc["documentDataId"])
+        if not pdf_data:
+            log.error("Could not extract PDF for document %s, skipping", doc_id)
+            continue
+
+        if len(pdf_data) < 100:
+            log.warning("Document %s too small (%d bytes), skipping", doc_id, len(pdf_data))
+            continue
+
+        # Sanitize filename
+        safe_title = "".join(c if c.isalnum() or c in " -_.()" else "_" for c in title)
+        safe_title = safe_title.strip()[:200] or f"document-{doc_id}"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{FILE_PREFIX}_{safe_title}_{timestamp}.pdf"
+        filepath = os.path.join(CONSUME_PATH, filename)
+
+        try:
+            with open(filepath, "wb") as f:
+                f.write(pdf_data)
+            # Paperless (UID 1000) must be able to read and delete
+            os.chmod(filepath, 0o666)
+            log.info("Saved: %s (%d bytes)", filename, len(pdf_data))
             save_synced_id(doc_id)
             new_count += 1
+        except Exception as e:
+            log.error("Failed to save %s: %s", filepath, e)
 
     if new_count > 0:
         log.info("Synced %d new document(s) to Paperless", new_count)

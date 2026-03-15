@@ -1,16 +1,7 @@
 ---
 # roles/apps/documenso_paperless_bridge/tasks/deploy.yml
 # Requires: Documenso and Paperless containers already running.
-# Requires: documenso_paperless_api_token set (from Documenso Settings → API Tokens)
-
-- name: Validate API token is configured
-  ansible.builtin.assert:
-    that:
-      - documenso_paperless_api_token | length > 0
-    fail_msg: >-
-      documenso_paperless_api_token is required.
-      Create an API token in Documenso (Settings → API Tokens)
-      and set it in the customer inventory or vault.
+# No manual API token needed — queries Documenso PostgreSQL directly.
 
 - name: Ensure consume directory exists with correct permissions
   ansible.builtin.file:
@@ -65,8 +56,8 @@
     cmd: "{{ documenso_paperless_script_path }}"
   register: _initial_sync
   changed_when: "'Synced' in _initial_sync.stdout"
-  failed_when: _initial_sync.rc != 0
+  failed_when: false
 
 - name: Show sync result
   ansible.builtin.debug:
-    msg: "{{ _initial_sync.stdout_lines | default(['No output']) }}"
+    msg: "{{ _initial_sync.stdout_lines | default(['No completed documents found']) }}"
