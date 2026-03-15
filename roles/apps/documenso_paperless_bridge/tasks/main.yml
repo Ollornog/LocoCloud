@@ -1,0 +1,6 @@
+---
+# roles/apps/documenso_paperless_bridge/tasks/main.yml
+
+- name: Deploy Documenso→Paperless bridge
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [documenso_paperless_bridge, deploy]

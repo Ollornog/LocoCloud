@@ -62,6 +62,7 @@ roles/
     nextcloud/           # MariaDB + Redis
     paperless/           # PostgreSQL + Redis + Gotenberg + Tika
     nc_paperless_bridge/ # Nextcloud↔Paperless inotifywait bridge
+    documenso_paperless_bridge/ # Documenso→Paperless API-polling bridge
     vaultwarden/         # SQLite, OIDC via PocketID
     semaphore/           # Ansible Web-UI
     outline/             # PostgreSQL + Redis

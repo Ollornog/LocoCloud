@@ -1,0 +1,33 @@
+---
+# roles/apps/documenso_paperless_bridge/defaults/main.yml
+# Documenso→Paperless Bridge — Fertig signierte Dokumente automatisch archivieren
+#
+# Architecture:
+#   Documenso (signiertes Dokument fertig)
+#     ↓ API-Polling (Cron, alle 5 Min)
+#   Python-Script laedt signiertes PDF herunter
+#     ↓ Copy
+#   Paperless consume → /mnt/data/paperless/consume/
+#     ↓ Paperless verarbeitet (OCR, Archiv)
+#   Paperless Archiv
+#
+# Voraussetzung: Documenso API-Token muss nach dem ersten Login
+# manuell erstellt werden (Settings → API Tokens) und als
+# Variable documenso_paperless_api_token gesetzt werden.
+
+# Documenso API
+documenso_paperless_api_url: "http://127.0.0.1:{{ documenso_port | default(8086) }}"
+documenso_paperless_api_token: ""  # Required: Documenso API Token (from Settings → API Tokens)
+
+# Paperless consume directory (must match paperless role)
+documenso_paperless_consume_path: "/mnt/data/paperless/consume"
+
+# Script and state paths
+documenso_paperless_script_path: "/opt/scripts/documenso-to-paperless.py"
+documenso_paperless_state_file: "/opt/scripts/.documenso-synced-ids"
+
+# Cron schedule (default: every 5 minutes)
+documenso_paperless_schedule: "*/5 * * * *"
+
+# File prefix for synced documents in Paperless
+documenso_paperless_file_prefix: "documenso"

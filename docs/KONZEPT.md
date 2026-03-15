@@ -1355,6 +1355,31 @@ Bei `lxc_per_app` muss `add-app.yml` einen komplett neuen LXC erstellen und boot
 2. `update-caddy.yml` ausführen → Caddyfile regenerieren + restart
 3. Falls App-Config geändert: `update-app.yml` → .env + Docker Compose regenerieren
 
+### 9.6 App-Bridges (Cross-App-Integration)
+
+Eigenständige Rollen die Datenflüsse zwischen Apps automatisieren:
+
+**Nextcloud → Paperless (`nc_paperless_bridge`):**
+```
+Nextcloud "INBOX" (/mnt/data/paperless-sort/)
+  ↓ inotifywait (sofort, systemd Service)
+Paperless consume (/mnt/data/paperless/consume/)
+  ↓ Paperless verarbeitet (OCR, Archiv)
+Nextcloud "Paperless Dokumente" (/mnt/data/paperless/media/documents/, read-only)
+```
+
+**Documenso → Paperless (`documenso_paperless_bridge`):**
+```
+Documenso (Dokument fertig signiert)
+  ↓ API-Polling (Cron, alle 5 Min)
+Python-Script lädt signiertes PDF via Documenso API
+  ↓ Download + Copy
+Paperless consume (/mnt/data/paperless/consume/)
+  ↓ Paperless verarbeitet (OCR, Archiv)
+```
+
+Das Documenso-Bridge-Script nutzt die Documenso REST-API (`/api/v1/documents`), trackt bereits synchronisierte IDs in einer State-Datei und ist idempotent. Voraussetzung: Documenso API-Token muss nach dem ersten Login manuell erstellt werden (Settings → API Tokens).
+
 ---
 
 ## 10. Credential-Management (Ansible Vault + Vaultwarden)

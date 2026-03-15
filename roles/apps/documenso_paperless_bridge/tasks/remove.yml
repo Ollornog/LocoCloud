@@ -1,0 +1,26 @@
+---
+# roles/apps/documenso_paperless_bridge/tasks/remove.yml
+
+- name: Remove sync cron job
+  ansible.builtin.cron:
+    name: "documenso-to-paperless"
+    state: absent
+
+- name: Remove sync script
+  ansible.builtin.file:
+    path: "{{ documenso_paperless_script_path }}"
+    state: absent
+
+- name: Remove state file
+  ansible.builtin.file:
+    path: "{{ documenso_paperless_state_file }}"
+    state: absent
+
+- name: Remove logrotate config
+  ansible.builtin.file:
+    path: /etc/logrotate.d/documenso-to-paperless
+    state: absent
+
+- name: Bridge removed
+  ansible.builtin.debug:
+    msg: "Documenso→Paperless bridge removed. Existing documents in Paperless are unaffected."

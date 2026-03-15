@@ -1,0 +1,72 @@
+---
+# roles/apps/documenso_paperless_bridge/tasks/deploy.yml
+# Requires: Documenso and Paperless containers already running.
+# Requires: documenso_paperless_api_token set (from Documenso Settings → API Tokens)
+
+- name: Validate API token is configured
+  ansible.builtin.assert:
+    that:
+      - documenso_paperless_api_token | length > 0
+    fail_msg: >-
+      documenso_paperless_api_token is required.
+      Create an API token in Documenso (Settings → API Tokens)
+      and set it in the customer inventory or vault.
+
+- name: Ensure consume directory exists with correct permissions
+  ansible.builtin.file:
+    path: "{{ documenso_paperless_consume_path }}"
+    state: directory
+    mode: "0777"
+
+- name: Remove sticky bit from consume directory
+  ansible.builtin.command:
+    cmd: "chmod -t {{ documenso_paperless_consume_path }}"
+  changed_when: false
+
+- name: Create scripts directory
+  ansible.builtin.file:
+    path: /opt/scripts
+    state: directory
+    mode: "0755"
+
+- name: Deploy Documenso→Paperless sync script
+  ansible.builtin.template:
+    src: documenso-to-paperless.py.j2
+    dest: "{{ documenso_paperless_script_path }}"
+    mode: "0700"
+
+- name: Setup sync cron job
+  ansible.builtin.cron:
+    name: "documenso-to-paperless"
+    job: "{{ documenso_paperless_script_path }} >> /var/log/documenso-to-paperless.log 2>&1"
+    minute: "{{ documenso_paperless_schedule.split(' ')[0] }}"
+    hour: "{{ documenso_paperless_schedule.split(' ')[1] }}"
+    day: "{{ documenso_paperless_schedule.split(' ')[2] }}"
+    month: "{{ documenso_paperless_schedule.split(' ')[3] }}"
+    weekday: "{{ documenso_paperless_schedule.split(' ')[4] }}"
+    user: root
+    state: present
+
+- name: Setup logrotate for sync log
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/documenso-to-paperless
+    mode: "0644"
+    content: |
+      /var/log/documenso-to-paperless.log {
+          weekly
+          rotate 4
+          compress
+          missingok
+          notifempty
+      }
+
+- name: Run initial sync
+  ansible.builtin.command:
+    cmd: "{{ documenso_paperless_script_path }}"
+  register: _initial_sync
+  changed_when: "'Synced' in _initial_sync.stdout"
+  failed_when: _initial_sync.rc != 0
+
+- name: Show sync result
+  ansible.builtin.debug:
+    msg: "{{ _initial_sync.stdout_lines | default(['No output']) }}"
