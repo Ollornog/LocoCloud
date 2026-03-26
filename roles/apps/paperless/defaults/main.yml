@@ -77,5 +77,20 @@ paperless_backup_paths:
   - "/mnt/data/paperless"
   - "/opt/stacks/paperless"
 
+# Group permissions — auto-assign view/change/delete to company group
+# Group name should match the PocketID/LLDAP group for this customer
+paperless_group_permissions_enabled: false
+paperless_company_group: ""  # e.g. "Brunpower" — must match PocketID group name
+
+# Post-consume: auto-trash small images (email signatures etc.)
+paperless_auto_trash_small_images: true
+paperless_auto_trash_max_size_kb: 50
+paperless_auto_trash_max_long_side: 400
+paperless_auto_trash_max_short_side: 200
+paperless_auto_trash_tiny_size_kb: 6  # images ≤6KB always trashed
+
+# Saved views: template user whose views get copied to new users
+paperless_views_template_user: ""  # e.g. "Ollornog" — leave empty to skip view copying
+
 # Health check — /api/tags/ statt /api/ (gibt 302 bei aktivem SSO)
 paperless_health_path: "/api/tags/"

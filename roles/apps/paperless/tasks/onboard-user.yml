@@ -1,0 +1,107 @@
+---
+# roles/apps/paperless/tasks/onboard-user.yml
+# Add a user to the Paperless company group and copy saved views.
+# Called from playbooks/add-user.yml when paperless_group_permissions_enabled.
+#
+# Required vars: username, paperless_company_group
+# Optional: paperless_views_template_user (copy saved views from this user)
+
+- name: Add user to Paperless Django group
+  ansible.builtin.command: >
+    docker exec paperless python3 manage.py shell -c "
+    from django.contrib.auth.models import User, Group
+
+    username = '{{ username }}'
+    group_name = '{{ paperless_company_group }}'
+
+    try:
+        user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        # SSO user might use email as username
+        try:
+            user = User.objects.get(email='{{ email }}')
+        except User.DoesNotExist:
+            print(f'user {username} not found — must SSO-login first')
+            exit(0)
+
+    g, _ = Group.objects.get_or_create(name=group_name)
+    if g in user.groups.all():
+        print('already in group')
+    else:
+        user.groups.add(g)
+        print('added to group')
+    "
+  register: _pl_user_group
+  changed_when: "'added' in _pl_user_group.stdout"
+
+- name: Grant delete permission on existing documents
+  ansible.builtin.command: >
+    docker exec paperless python3 manage.py shell -c "
+    from documents.models import Document
+    from django.contrib.auth.models import Group
+    from guardian.shortcuts import assign_perm
+
+    g = Group.objects.get(name='{{ paperless_company_group }}')
+    count = 0
+    for doc in Document.objects.all():
+        assign_perm('delete_document', g, doc)
+        count += 1
+    print(f'{count} documents — delete permission ensured')
+    "
+  changed_when: false
+
+- name: Copy saved views from template user
+  ansible.builtin.command: >
+    docker exec paperless python3 manage.py shell -c "
+    from documents.models import SavedView, SavedViewFilterRule
+    from django.contrib.auth.models import User
+
+    source_name = '{{ paperless_views_template_user }}'
+    target_name = '{{ username }}'
+
+    try:
+        source = User.objects.get(username=source_name)
+    except User.DoesNotExist:
+        print(f'template user {source_name} not found')
+        exit(0)
+
+    try:
+        target = User.objects.get(username=target_name)
+    except User.DoesNotExist:
+        try:
+            target = User.objects.get(email='{{ email }}')
+        except User.DoesNotExist:
+            print(f'target user {target_name} not found — must SSO-login first')
+            exit(0)
+
+    copied = 0
+    for v_orig in SavedView.objects.filter(owner=source):
+        v_new, created = SavedView.objects.get_or_create(
+            owner=target,
+            name=v_orig.name,
+            defaults=dict(
+                show_on_dashboard=v_orig.show_on_dashboard,
+                show_in_sidebar=v_orig.show_in_sidebar,
+                sort_field=v_orig.sort_field,
+                sort_reverse=v_orig.sort_reverse,
+                page_size=v_orig.page_size,
+                display_mode=v_orig.display_mode,
+                display_fields=v_orig.display_fields,
+            )
+        )
+        if not created:
+            continue
+
+        for r in SavedViewFilterRule.objects.filter(saved_view=v_orig):
+            SavedViewFilterRule.objects.get_or_create(
+                saved_view=v_new,
+                rule_type=r.rule_type,
+                value=r.value
+            )
+        copied += 1
+
+    print(f'{copied} views copied')
+    "
+  register: _pl_copy_views
+  changed_when: "'0 views' not in _pl_copy_views.stdout"
+  when: paperless_views_template_user | default('') | length > 0

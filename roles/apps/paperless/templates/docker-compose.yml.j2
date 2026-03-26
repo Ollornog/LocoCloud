@@ -16,6 +16,9 @@ services:
       - {{ paperless_data_path }}/media:/usr/src/paperless/media
       - {{ paperless_data_path }}/consume:/usr/src/paperless/consume
       - {{ paperless_data_path }}/export:/usr/src/paperless/export
+{% if paperless_group_permissions_enabled %}
+      - {{ paperless_data_path }}/scripts:/scripts
+{% endif %}
     env_file:
       - .env
     depends_on:

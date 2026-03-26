@@ -1,0 +1,81 @@
+#!/bin/bash
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Paperless post-consume script
+# Group: {{ paperless_company_group }}
+# ============================================
+#
+# Sets delete_document permission for company group on every new document.
+# Paperless workflows can only assign view/change — delete requires django-guardian.
+# Optionally trashes small images (email signatures etc.).
+
+set -euo pipefail
+
+PAPERLESS_URL="http://localhost:8000"
+GROUP_NAME="{{ paperless_company_group }}"
+
+# --- 1. Set delete_document permission for company group ---
+python3 /usr/src/paperless/src/manage.py shell -c "
+from documents.models import Document
+from django.contrib.auth.models import Group
+from guardian.shortcuts import assign_perm
+import os
+
+doc_id = os.environ.get('DOCUMENT_ID')
+if not doc_id:
+    exit(1)
+
+g = Group.objects.get(name='${GROUP_NAME}')
+doc = Document.objects.get(id=int(doc_id))
+assign_perm('delete_document', g, doc)
+print(f'delete_document granted to ${GROUP_NAME} for doc {doc_id}')
+"
+
+{% if paperless_auto_trash_small_images %}
+# --- 2. Auto-trash small images (email signatures etc.) ---
+MAX_SIZE_KB={{ paperless_auto_trash_max_size_kb }}
+MAX_DIM={{ paperless_auto_trash_max_long_side }}
+MIN_DIM={{ paperless_auto_trash_max_short_side }}
+TINY_SIZE_KB={{ paperless_auto_trash_tiny_size_kb }}
+
+SOURCE="${DOCUMENT_SOURCE_PATH:-}"
+if [ -z "$SOURCE" ]; then
+    exit 0
+fi
+
+MIME=$(file --mime-type -b "$SOURCE")
+if [[ "$MIME" != image/jpeg && "$MIME" != image/png && "$MIME" != image/gif ]]; then
+    exit 0
+fi
+
+SIZE_KB=$(du -k "$SOURCE" | cut -f1)
+DIMENSIONS=$(python3 -c "
+from PIL import Image
+img = Image.open('$SOURCE')
+print(img.width, img.height)
+" 2>/dev/null) || exit 0
+
+WIDTH=$(echo $DIMENSIONS | cut -d' ' -f1)
+HEIGHT=$(echo $DIMENSIONS | cut -d' ' -f2)
+
+echo "Image: ${WIDTH}x${HEIGHT}px, ${SIZE_KB}KB"
+
+LONG=$(( WIDTH > HEIGHT ? WIDTH : HEIGHT ))
+SHORT=$(( WIDTH < HEIGHT ? WIDTH : HEIGHT ))
+
+if [ "$SIZE_KB" -le "$TINY_SIZE_KB" ] || { [ "$LONG" -le "$MAX_DIM" ] && [ "$SHORT" -le "$MIN_DIM" ]; }; then
+    echo "Small image detected, moving to trash..."
+    # Read API token from Paperless admin user
+    TOKEN=$(python3 /usr/src/paperless/src/manage.py shell -c "
+from rest_framework.authtoken.models import Token
+from django.contrib.auth.models import User
+admin = User.objects.filter(is_superuser=True).first()
+token, _ = Token.objects.get_or_create(user=admin)
+print(token.key)
+")
+    curl -s -X DELETE \
+        -H "Authorization: Token ${TOKEN}" \
+        "${PAPERLESS_URL}/api/documents/${DOCUMENT_ID}/"
+    echo "Doc ${DOCUMENT_ID} moved to trash"
+fi
+{% endif %}

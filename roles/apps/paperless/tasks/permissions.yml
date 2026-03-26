@@ -1,0 +1,105 @@
+---
+# roles/apps/paperless/tasks/permissions.yml
+# Set up group-based permissions for Paperless-NGX.
+#
+# Creates Django group, configures workflow for auto-assign view/change,
+# deploys post-consume script for delete permission (django-guardian),
+# and patches existing documents.
+
+- name: Create scripts directory
+  ansible.builtin.file:
+    path: "{{ paperless_data_path }}/scripts"
+    state: directory
+    mode: "0755"
+
+- name: Deploy post-consume script
+  ansible.builtin.template:
+    src: post-consume.sh.j2
+    dest: "{{ paperless_data_path }}/scripts/post-consume.sh"
+    mode: "0755"
+  notify: restart paperless
+
+- name: Create Django group in Paperless
+  ansible.builtin.command: >
+    docker exec paperless python3 manage.py shell -c "
+    from django.contrib.auth.models import Group
+    g, created = Group.objects.get_or_create(name='{{ paperless_company_group }}')
+    print('created' if created else 'exists')
+    "
+  register: _pl_group_create
+  changed_when: "'created' in _pl_group_create.stdout"
+
+- name: Configure workflow for group permission auto-assignment
+  ansible.builtin.command: >
+    docker exec paperless python3 manage.py shell -c "
+    from documents.models import Workflow, WorkflowTrigger, WorkflowAction
+    from django.contrib.auth.models import Group
+
+    GROUP_NAME = '{{ paperless_company_group }}'
+    WF_NAME = GROUP_NAME + '-Gruppe zuweisen'
+
+    g = Group.objects.get(name=GROUP_NAME)
+
+    # Idempotent: check if workflow exists
+    wf, wf_created = Workflow.objects.get_or_create(
+        name=WF_NAME,
+        defaults={'enabled': True}
+    )
+
+    if wf_created:
+        # Trigger: on document added (type=1), all sources
+        trigger = WorkflowTrigger.objects.create(
+            type=1,
+            filter_filename='*'
+        )
+        wf.triggers.add(trigger)
+
+        # Action: assign view+change to group, remove owner
+        action = WorkflowAction.objects.create(
+            assign_owner=None,
+            remove_all_owners=True
+        )
+        action.assign_view_groups.add(g)
+        action.assign_change_groups.add(g)
+        wf.actions.add(action)
+        print('workflow created')
+    else:
+        # Ensure action has correct groups
+        for action in wf.actions.all():
+            action.assign_view_groups.add(g)
+            action.assign_change_groups.add(g)
+            action.remove_all_owners = True
+            action.assign_owner = None
+            action.save()
+        print('workflow exists, updated')
+    "
+  register: _pl_workflow
+  changed_when: "'created' in _pl_workflow.stdout"
+
+- name: Patch existing documents — set group permissions
+  ansible.builtin.command: >
+    docker exec paperless python3 manage.py shell -c "
+    from documents.models import Document
+    from django.contrib.auth.models import Group
+    from guardian.shortcuts import assign_perm
+
+    g = Group.objects.get(name='{{ paperless_company_group }}')
+    count = 0
+    for doc in Document.objects.all():
+        for perm in ['view_document', 'change_document', 'delete_document']:
+            assign_perm(perm, g, doc)
+        count += 1
+    print(f'{count} documents patched')
+    "
+  register: _pl_patch_docs
+  changed_when: "'0 documents' not in _pl_patch_docs.stdout"
+
+- name: Remove owner from all existing documents
+  ansible.builtin.command: >
+    docker exec paperless python3 manage.py shell -c "
+    from documents.models import Document
+    count = Document.objects.exclude(owner=None).update(owner=None)
+    print(f'{count} owners removed')
+    "
+  register: _pl_remove_owners
+  changed_when: "'0 owners' not in _pl_remove_owners.stdout"

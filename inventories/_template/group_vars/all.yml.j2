@@ -27,6 +27,11 @@ kunden_users: []
 
 kunden_emails: "{{ '{{ kunden_users | map(attribute=\\'email\\') | list }}' }}"
 
+# --- Paperless group permissions ---
+# paperless_group_permissions_enabled: true
+# paperless_company_group: "{{ kunde_name }}"  # must match PocketID/LLDAP group
+# paperless_views_template_user: ""            # copy saved views from this user
+
 # --- Apps ---
 apps_enabled: []
 #  - name: "Nextcloud"

@@ -9,3 +9,8 @@
   ansible.builtin.import_tasks: oidc.yml
   tags: [paperless, oidc]
   when: paperless_oidc_enabled | default(false)
+
+- name: Configure group permissions for Paperless
+  ansible.builtin.import_tasks: permissions.yml
+  tags: [paperless, permissions]
+  when: paperless_group_permissions_enabled | default(false)

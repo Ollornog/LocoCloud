@@ -108,6 +108,16 @@
           when: updated_whitelist is defined
           notify: restart tinyauth
 
+    # --- Paperless: Add user to company group + copy views ---
+    - name: Onboard user in Paperless
+      ansible.builtin.include_role:
+        name: apps/paperless
+        tasks_from: onboard-user.yml
+      when:
+        - paperless_group_permissions_enabled | default(false)
+        - paperless_company_group | default('') | length > 0
+      tags: [paperless]
+
     - name: User added
       ansible.builtin.debug:
         msg: |
@@ -115,6 +125,13 @@
           PocketID will pick up the user via LDAP sync (max 1h).
           {% if loco.tinyauth.enabled | default(false) %}
           Tinyauth whitelist updated.
+          {% endif %}
+          {% if paperless_group_permissions_enabled | default(false) %}
+          Paperless: Added to group {{ paperless_company_group }}.
+          {% if paperless_views_template_user | default('') | length > 0 %}
+          Saved views copied from {{ paperless_views_template_user }}.
+          {% endif %}
+          Note: User must SSO-login to Paperless first if not yet registered.
           {% endif %}
 
   handlers:
