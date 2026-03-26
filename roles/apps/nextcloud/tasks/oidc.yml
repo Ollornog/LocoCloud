@@ -88,7 +88,7 @@
     --clientid="{{ nextcloud_oidc_client_id }}"
     --clientsecret="{{ nextcloud_oidc_client_secret }}"
     --discoveryuri="{{ nextcloud_oidc_provider_url }}/.well-known/openid-configuration"
-    --scope="openid email profile"
+    --scope="openid email profile groups"
     --unique-uid=0
     --check-bearer=0
     --send-id-token-hint=0

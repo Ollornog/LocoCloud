@@ -77,10 +77,18 @@ paperless_backup_paths:
   - "/mnt/data/paperless"
   - "/opt/stacks/paperless"
 
-# Group permissions — auto-assign view/change/delete to company group
-# Group name should match the PocketID/LLDAP group for this customer
-paperless_group_permissions_enabled: false
-paperless_company_group: ""  # e.g. "Brunpower" — must match PocketID group name
+# LLDAP group sync — provision PocketID/LLDAP groups into Paperless
+# Syncs group names + membership. Source of truth: LLDAP.
+paperless_group_sync_enabled: false
+# Exclude LLDAP system groups from sync (admins managed separately)
+paperless_group_sync_exclude:
+  - "lldap_admin"
+  - "lldap_password_manager"
+  - "lldap_strict_readonly"
+
+# Permission groups — which synced groups get auto view/change/delete on documents
+# Leave empty to only sync groups without document permissions (configure later)
+paperless_permission_groups: []  # e.g. ["Brunpower"] — groups that own all documents
 
 # Post-consume: auto-trash small images (email signatures etc.)
 paperless_auto_trash_small_images: true

@@ -16,7 +16,7 @@ services:
       - {{ paperless_data_path }}/media:/usr/src/paperless/media
       - {{ paperless_data_path }}/consume:/usr/src/paperless/consume
       - {{ paperless_data_path }}/export:/usr/src/paperless/export
-{% if paperless_group_permissions_enabled %}
+{% if paperless_permission_groups | default([]) | length > 0 %}
       - {{ paperless_data_path }}/scripts:/scripts
 {% endif %}
     env_file:

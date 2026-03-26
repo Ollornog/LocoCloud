@@ -27,9 +27,9 @@ kunden_users: []
 
 kunden_emails: "{{ '{{ kunden_users | map(attribute=\\'email\\') | list }}' }}"
 
-# --- Paperless group permissions ---
-# paperless_group_permissions_enabled: true
-# paperless_company_group: "{{ kunde_name }}"  # must match PocketID/LLDAP group
+# --- Paperless LLDAP group sync ---
+# paperless_group_sync_enabled: true           # sync LLDAP groups to Paperless
+# paperless_permission_groups: ["{{ kunde_name }}"]  # groups with full doc permissions
 # paperless_views_template_user: ""            # copy saved views from this user
 
 # --- Apps ---

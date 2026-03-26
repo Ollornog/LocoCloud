@@ -1,0 +1,50 @@
+---
+# roles/lldap/tasks/query-groups.yml
+# Reusable task: Query all groups with members from LLDAP.
+# Returns: _lldap_groups_result (list of {id, displayName, users: [{id, email}]})
+#
+# Usage in other roles:
+#   - name: Query LLDAP groups
+#     ansible.builtin.include_role:
+#       name: lldap
+#       tasks_from: query-groups.yml
+#   # Now use _lldap_groups_result
+
+- name: Authenticate with LLDAP
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ lldap_web_port | default(17170) }}/auth/simple/login"
+    method: POST
+    body_format: json
+    body:
+      username: "admin"
+      password: "{{ lldap_admin_password }}"
+    status_code: 200
+  register: _lldap_auth_qg
+  no_log: true
+
+- name: Query all groups with members from LLDAP
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ lldap_web_port | default(17170) }}/api/graphql"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ _lldap_auth_qg.json.token }}"
+    body_format: json
+    body:
+      query: >-
+        {
+          groups {
+            id
+            displayName
+            users {
+              id
+              email
+              displayName
+            }
+          }
+        }
+    status_code: 200
+  register: _lldap_groups_raw
+
+- name: Set LLDAP groups result
+  ansible.builtin.set_fact:
+    _lldap_groups_result: "{{ _lldap_groups_raw.json.data.groups }}"

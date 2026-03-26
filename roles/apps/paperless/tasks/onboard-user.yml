@@ -1,54 +1,13 @@
 ---
 # roles/apps/paperless/tasks/onboard-user.yml
-# Add a user to the Paperless company group and copy saved views.
-# Called from playbooks/add-user.yml when paperless_group_permissions_enabled.
+# Sync a user's LLDAP group membership to Paperless and copy saved views.
+# Called from playbooks/add-user.yml when paperless_group_sync_enabled.
 #
-# Required vars: username, paperless_company_group
+# Required vars: username, email
 # Optional: paperless_views_template_user (copy saved views from this user)
 
-- name: Add user to Paperless Django group
-  ansible.builtin.command: >
-    docker exec paperless python3 manage.py shell -c "
-    from django.contrib.auth.models import User, Group
-
-    username = '{{ username }}'
-    group_name = '{{ paperless_company_group }}'
-
-    try:
-        user = User.objects.get(username=username)
-    except User.DoesNotExist:
-        # SSO user might use email as username
-        try:
-            user = User.objects.get(email='{{ email }}')
-        except User.DoesNotExist:
-            print(f'user {username} not found — must SSO-login first')
-            exit(0)
-
-    g, _ = Group.objects.get_or_create(name=group_name)
-    if g in user.groups.all():
-        print('already in group')
-    else:
-        user.groups.add(g)
-        print('added to group')
-    "
-  register: _pl_user_group
-  changed_when: "'added' in _pl_user_group.stdout"
-
-- name: Grant delete permission on existing documents
-  ansible.builtin.command: >
-    docker exec paperless python3 manage.py shell -c "
-    from documents.models import Document
-    from django.contrib.auth.models import Group
-    from guardian.shortcuts import assign_perm
-
-    g = Group.objects.get(name='{{ paperless_company_group }}')
-    count = 0
-    for doc in Document.objects.all():
-        assign_perm('delete_document', g, doc)
-        count += 1
-    print(f'{count} documents — delete permission ensured')
-    "
-  changed_when: false
+- name: Sync LLDAP groups to Paperless (full sync)
+  ansible.builtin.include_tasks: sync-groups.yml
 
 - name: Copy saved views from template user
   ansible.builtin.command: >

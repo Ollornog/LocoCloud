@@ -2,19 +2,19 @@
 # ============================================
 # GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
 # Paperless post-consume script
-# Group: {{ paperless_company_group }}
+# Permission groups: {{ paperless_permission_groups | join(', ') }}
 # ============================================
 #
-# Sets delete_document permission for company group on every new document.
+# Sets delete_document permission for permission groups on every new document.
 # Paperless workflows can only assign view/change — delete requires django-guardian.
 # Optionally trashes small images (email signatures etc.).
 
 set -euo pipefail
 
 PAPERLESS_URL="http://localhost:8000"
-GROUP_NAME="{{ paperless_company_group }}"
 
-# --- 1. Set delete_document permission for company group ---
+{% if paperless_permission_groups | length > 0 %}
+# --- 1. Set delete_document permission for permission groups ---
 python3 /usr/src/paperless/src/manage.py shell -c "
 from documents.models import Document
 from django.contrib.auth.models import Group
@@ -25,11 +25,18 @@ doc_id = os.environ.get('DOCUMENT_ID')
 if not doc_id:
     exit(1)
 
-g = Group.objects.get(name='${GROUP_NAME}')
 doc = Document.objects.get(id=int(doc_id))
-assign_perm('delete_document', g, doc)
-print(f'delete_document granted to ${GROUP_NAME} for doc {doc_id}')
+
+{% for group in paperless_permission_groups %}
+try:
+    g = Group.objects.get(name='{{ group }}')
+    assign_perm('delete_document', g, doc)
+    print(f'delete_document granted to {{ group }} for doc {doc_id}')
+except Group.DoesNotExist:
+    print(f'WARNING: Group {{ group }} not found')
+{% endfor %}
 "
+{% endif %}
 
 {% if paperless_auto_trash_small_images %}
 # --- 2. Auto-trash small images (email signatures etc.) ---
@@ -65,7 +72,6 @@ SHORT=$(( WIDTH < HEIGHT ? WIDTH : HEIGHT ))
 
 if [ "$SIZE_KB" -le "$TINY_SIZE_KB" ] || { [ "$LONG" -le "$MAX_DIM" ] && [ "$SHORT" -le "$MIN_DIM" ]; }; then
     echo "Small image detected, moving to trash..."
-    # Read API token from Paperless admin user
     TOKEN=$(python3 /usr/src/paperless/src/manage.py shell -c "
 from rest_framework.authtoken.models import Token
 from django.contrib.auth.models import User

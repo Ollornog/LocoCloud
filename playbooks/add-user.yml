@@ -108,14 +108,12 @@
           when: updated_whitelist is defined
           notify: restart tinyauth
 
-    # --- Paperless: Add user to company group + copy views ---
+    # --- Paperless: Sync LLDAP groups + copy views ---
     - name: Onboard user in Paperless
       ansible.builtin.include_role:
         name: apps/paperless
         tasks_from: onboard-user.yml
-      when:
-        - paperless_group_permissions_enabled | default(false)
-        - paperless_company_group | default('') | length > 0
+      when: paperless_group_sync_enabled | default(false)
       tags: [paperless]
 
     - name: User added
@@ -126,8 +124,8 @@
           {% if loco.tinyauth.enabled | default(false) %}
           Tinyauth whitelist updated.
           {% endif %}
-          {% if paperless_group_permissions_enabled | default(false) %}
-          Paperless: Added to group {{ paperless_company_group }}.
+          {% if paperless_group_sync_enabled | default(false) %}
+          Paperless: LLDAP groups synced.
           {% if paperless_views_template_user | default('') | length > 0 %}
           Saved views copied from {{ paperless_views_template_user }}.
           {% endif %}

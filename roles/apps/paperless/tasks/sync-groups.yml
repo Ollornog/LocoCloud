@@ -1,0 +1,63 @@
+---
+# roles/apps/paperless/tasks/sync-groups.yml
+# Sync LLDAP groups → Paperless Django groups.
+# Source of truth: LLDAP. Creates groups, syncs membership, removes stale members.
+# Can be run repeatedly (idempotent) — on deploy, after group changes, or via add-user.
+
+- name: Query LLDAP groups
+  ansible.builtin.include_role:
+    name: lldap
+    tasks_from: query-groups.yml
+
+- name: Filter groups for Paperless sync
+  ansible.builtin.set_fact:
+    _pl_sync_groups: >-
+      {{ _lldap_groups_result
+         | rejectattr('displayName', 'in', paperless_group_sync_exclude)
+         | list }}
+
+- name: Sync groups and membership to Paperless
+  ansible.builtin.command: >
+    docker exec paperless python3 manage.py shell -c "
+    import json, sys
+    from django.contrib.auth.models import User, Group
+
+    groups_data = json.loads(sys.stdin.read())
+
+    for g_data in groups_data:
+        group_name = g_data['displayName']
+        lldap_members = {u['id'] for u in g_data.get('users', [])}
+        lldap_emails = {u['email'].lower() for u in g_data.get('users', [])}
+
+        # Create or get Django group
+        dj_group, created = Group.objects.get_or_create(name=group_name)
+        action = 'created' if created else 'exists'
+
+        # Sync membership: add missing, remove stale
+        added = 0
+        removed = 0
+
+        for user in User.objects.all():
+            is_lldap_member = (
+                user.username in lldap_members or
+                user.email.lower() in lldap_emails
+            )
+            is_dj_member = dj_group in user.groups.all()
+
+            if is_lldap_member and not is_dj_member:
+                user.groups.add(dj_group)
+                added += 1
+            elif not is_lldap_member and is_dj_member:
+                user.groups.remove(dj_group)
+                removed += 1
+
+        print(f'{group_name}: {action}, +{added} -{removed} members')
+    "
+  args:
+    stdin: "{{ _pl_sync_groups | to_json }}"
+  register: _pl_sync_result
+  changed_when: "'+0 -0' not in _pl_sync_result.stdout or 'created' in _pl_sync_result.stdout"
+
+- name: Group sync result
+  ansible.builtin.debug:
+    msg: "{{ _pl_sync_result.stdout_lines }}"

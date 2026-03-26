@@ -31,7 +31,9 @@ services:
       - GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET={{ grafana_oidc_client_secret }}
       - GF_AUTH_GENERIC_OAUTH_AUTH_URL={{ grafana_oidc_auth_url }}
       - GF_AUTH_GENERIC_OAUTH_TOKEN_URL={{ grafana_oidc_token_url }}
-      - GF_AUTH_GENERIC_OAUTH_SCOPES=openid profile email
+      - GF_AUTH_GENERIC_OAUTH_SCOPES=openid profile email groups
+      - GF_AUTH_GENERIC_OAUTH_GROUPS_ATTRIBUTE_PATH=groups
+      - GF_AUTH_GENERIC_OAUTH_ALLOW_ASSIGN_GRAFANA_ADMIN=false
 {% endif %}
     # NO watchtower label — infrastructure container
 
