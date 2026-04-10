@@ -134,9 +134,6 @@ backup:
 #     enabled: true                                  # Netzwerk-Threat-Detection (ersetzt Fail2ban)
 #   aide:
 #     enabled: true                                  # File Integrity Monitoring auf Host-Ebene
-#   watchtower:
-#     enabled: true                                  # Automatische Docker-Image-Updates + Cleanup
-#     schedule: "0 30 2 * * *"                       # Cron: taeglich 02:30
 
 # --- Netbird Server (optional, fuer Self-Hosting) ---
 # netbird_server:

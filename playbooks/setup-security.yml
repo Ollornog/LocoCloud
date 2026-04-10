@@ -23,18 +23,7 @@
       tags: [always]
 
   roles:
-    # --- 1. Watchtower — Automatic image updates + cleanup ---
-    - role: watchtower
-      vars:
-        watchtower_notifications_enabled: "{{ loco.smtp.host | default('') | length > 0 }}"
-        watchtower_smtp_host: "{{ loco.smtp.host | default('') }}"
-        watchtower_smtp_port: "{{ loco.smtp.port | default(587) }}"
-        watchtower_smtp_user: "{{ loco.smtp.user | default('') }}"
-        watchtower_smtp_from: "{{ loco.smtp.from | default('') }}"
-        watchtower_smtp_to: "{{ loco.grafana.alerting.email_to | default(loco.operator.email) }}"
-      tags: [watchtower, security]
-
-    # --- 2. ClamAV — Central virus scanner ---
+    # --- 1. ClamAV — Central virus scanner ---
     - role: clamav
       vars:
         clamav_nextcloud_enabled: "{{ 'nextcloud' in (apps_enabled | default([]) | map(attribute='name') | map('lower') | list) }}"
@@ -57,7 +46,7 @@
       tags: [clamav, security]
       when: security_clamav_enabled | default(true)
 
-    # --- 3. CrowdSec — Network threat detection (replaces Fail2ban) ---
+    # --- 2. CrowdSec — Network threat detection (replaces Fail2ban) ---
     - role: crowdsec
       vars:
         crowdsec_notifications_enabled: "{{ loco.smtp.host | default('') | length > 0 }}"
@@ -69,7 +58,7 @@
       tags: [crowdsec, security]
       when: security_crowdsec_enabled | default(true)
 
-    # --- 4. Falco — Container runtime security ---
+    # --- 3. Falco — Container runtime security ---
     - role: falco
       vars:
         falcosidekick_smtp_enabled: "{{ loco.smtp.host | default('') | length > 0 }}"
@@ -81,7 +70,7 @@
       tags: [falco, security]
       when: security_falco_enabled | default(true)
 
-    # --- 5. AIDE — File integrity monitoring (host-level) ---
+    # --- 4. AIDE — File integrity monitoring (host-level) ---
     - role: aide
       vars:
         aide_alert_enabled: "{{ loco.smtp.host | default('') | length > 0 }}"
@@ -99,7 +88,6 @@
 
           Prevention:
             - ClamAV: {{ 'enabled' if security_clamav_enabled | default(true) else 'disabled' }}
-            - Watchtower: enabled (daily 02:30)
 
           Detection:
             - Falco: {{ 'enabled' if security_falco_enabled | default(true) else 'disabled' }}

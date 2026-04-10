@@ -2716,7 +2716,7 @@ Identisch für alle Server (Master + Kunden):
 | Kernel-Hardening | sysctl (rp_filter, syncookies, etc.) — **LXC-kompatible Params beachten!** |
 | Fail2ban | SSH (10 Versuche, 3600s Ban) |
 | Unattended-upgrades | Automatische Sicherheitsupdates |
-| Docker-Updates | Watchtower für automatische Patch-Updates (nightly 02:30). Major-Updates manuell via `update-customer.yml` (Semaphore). Image-Tags auf Major-Version pinnen |
+| Docker-Updates | Manuell via `update-customer.yml` (Semaphore). Kein Watchtower — entfernt wegen Silent Breaking Changes (Netbird v0.65 Vorfall). Image-Tags auf Major-Version pinnen |
 | USB deaktiviert | Nur auf physischen Servern (`is_lxc`-Check!) |
 | .env chmod 600 | Alle Secrets-Files |
 | Docker Port-Bind | Entry-Point: `127.0.0.1:PORT` / App-LXCs: `0.0.0.0:PORT` + UFW auf wt0 |
@@ -2740,7 +2740,7 @@ Deployment via `playbooks/setup-security.yml`. Alle Komponenten optional, konfig
 | **Falco** | `falco` | Container Runtime Security. Syscall-Monitoring, erkennt Shell-Spawning, Crypto-Miner, unerwartete Netzwerkverbindungen. Custom Rules für LocoCloud-Apps |
 | **ClamAV** | `clamav` | Zentraler Virenscanner als Docker-Container. Socket-basiert, integriert in Nextcloud (files_antivirus), Paperless (pre-consume Hook), Datei-Watcher für weitere Apps |
 | **AIDE** | `aide` | Host-Level File Integrity Monitoring. Nächtliche Prüfung kritischer Pfade (/etc, /usr/bin, docker-compose, .env). JSON-Logs für Loki |
-| **Watchtower** | `watchtower` | Automatische Docker-Image-Updates + Image-Cleanup. Nightly 02:30, alle Container (kein Label-Filter) |
+| **Watchtower** | `watchtower` | DEPRECATED — entfernt bestehende Installationen. Updates nur über Ansible (`update-customer.yml`) |
 
 **Alerting:** Alle Komponenten loggen strukturiert (JSON) → Alloy → Loki. Optional E-Mail-Benachrichtigungen über SMTP-Config.
 
@@ -2766,28 +2766,30 @@ admin_user_nopasswd: true  # NOPASSWD für Ansible-Kompatibilität
 
 ## 19. Wartung & Updates
 
-### 19.1 Grundregel: Updates in zwei Stufen
+### 19.1 Grundregel: Alle Updates über Ansible
 
-Updates werden nach Risiko eingeteilt:
+**Kein automatisches Update darf Infrastruktur kaputt machen.** Erfahrung: Watchtower hat den Netbird-Server automatisch aktualisiert → neuer Relay-Endpoint `/relay` (ohne Slash) → Caddy-Route `handle /relay/*` hat nicht mehr gematcht → VPN-Tunnel weg → alle Dienste unerreichbar.
+
+**Konsequenz:** Updates werden in zwei Kategorien eingeteilt:
 
 | Kategorie | Automatisch? | Methode |
 |-----------|-------------|---------|
-| OS-Sicherheitspatches | Ja | `unattended-upgrades` (apt) |
-| Docker-Image Patch-Updates | Ja | Watchtower (nightly 02:30, alle Container) |
+| OS-Sicherheitspatches | Ja | `unattended-upgrades` (apt, niedrig-riskant) |
 | Backup | Ja | Restic Cron |
 | Health-Checks | Ja | Grafana Alerting |
 | SSL-Erneuerung | Ja | Caddy (ACME) |
-| **Docker Major-Updates** | **NEIN** | **Nur über Ansible** (`update-customer.yml` / `update-app.yml` via Semaphore) |
+| **Alle Docker-Container** (Infra + Apps) | **NEIN** | **Nur über Ansible** (`update-customer.yml` / `update-app.yml` via Semaphore) |
 
-### 19.2 Update-Strategie: Watchtower + Ansible
+### 19.2 Update-Strategie: Kein Watchtower, alles über Ansible
 
-**Watchtower** übernimmt automatische Patch-Updates für alle Docker-Container (nightly 02:30). Kein Label-Filter — alle Container werden aktualisiert. Alte Images werden automatisch aufgeräumt.
+**Watchtower wurde komplett entfernt.** Die `watchtower`-Rolle entfernt bestehende Installationen idempotent.
 
-**Ansible** bleibt für kontrollierte Major-Updates zuständig:
-- `update-customer.yml` — Image-Tag im Inventar auf neue Major-Version ändern, dann ausführen
-- `update-app.yml` — Einzelne App gezielt updaten
+**Grund:** Watchtower hat den Netbird-Server automatisch aktualisiert → neuer Relay-Endpoint `/relay` (ohne Slash) → Caddy-Route `handle /relay/*` hat nicht mehr gematcht → VPN-Tunnel weg → alle Dienste unerreichbar. Selbst Label-basiert ist das Risiko für Silent Breaking Changes bei Patch-Updates zu hoch.
 
-**Hintergrund:** Watchtower war ursprünglich wegen Silent Breaking Changes entfernt (Netbird v0.65 Vorfall: neuer Relay-Endpoint brach VPN-Tunnel). Mit gepinnten Major-Tags (`nextcloud:29`) zieht Watchtower nur Patch-Updates innerhalb der Major-Version — das Risiko ist akzeptabel, und automatische Security-Patches sind wichtiger.
+**Ersatz:**
+- `update-customer.yml` — Zieht alle Images und recreated Container. Manuell via Semaphore getriggert.
+- `update-app.yml` — Aktualisiert eine einzelne App gezielt.
+- OS-Sicherheitspatches bleiben automatisch via `unattended-upgrades`.
 
 **Image-Tag-Strategie:**
 - `nextcloud:29` → Patches (29.0.1, 29.0.2) werden beim nächsten `update-customer.yml` gezogen
@@ -2803,7 +2805,7 @@ Updates werden nach Risiko eingeteilt:
 | Backup-Test | `restore-test.yml` — monatlicher Restore-Verifikation |
 | Mitarbeiter anlegen/entfernen | `add-user.yml` / `remove-user.yml` |
 | Break-Glass Account | `setup-breakglass.yml` — Notfallzugang erstellen |
-| Security Stack | `setup-security.yml` — CrowdSec, Falco, ClamAV, AIDE, Watchtower |
+| Security Stack | `setup-security.yml` — CrowdSec, Falco, ClamAV, AIDE |
 
 ---
 
