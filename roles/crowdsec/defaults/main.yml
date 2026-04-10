@@ -1,0 +1,36 @@
+---
+# roles/crowdsec/defaults/main.yml
+# CrowdSec — Network Threat Detection + Community Intelligence
+
+crowdsec_stack_path: "/opt/stacks/crowdsec"
+crowdsec_image: "crowdsecurity/crowdsec:v1"
+crowdsec_bouncer_image: "crowdsecurity/crowdsec-firewall-bouncer-iptables:v0"
+
+# CrowdSec collections to install
+crowdsec_collections:
+  - crowdsecurity/linux
+  - crowdsecurity/sshd
+  - crowdsecurity/caddy
+  - crowdsecurity/http-cve
+  - crowdsecurity/whitelist-good-actors
+
+# Whitelisted IP ranges (Netbird VPN)
+crowdsec_whitelist_ranges:
+  - "100.64.0.0/10"
+  - "127.0.0.0/8"
+
+# SMTP notifications
+crowdsec_notifications_enabled: false
+crowdsec_smtp_host: ""
+crowdsec_smtp_port: 587
+crowdsec_smtp_user: ""
+crowdsec_smtp_from: ""
+crowdsec_smtp_to: ""
+
+# Log paths to monitor
+crowdsec_log_paths:
+  - "/var/log/auth.log"
+  - "/var/log/syslog"
+
+# Caddy log path (if Caddy is on this server)
+crowdsec_caddy_log_path: "/opt/stacks/caddy/logs/access.log"

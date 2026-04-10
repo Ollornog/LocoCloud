@@ -1,0 +1,7 @@
+---
+# roles/clamav/handlers/main.yml
+
+- name: restart clamav
+  community.docker.docker_compose_v2:
+    project_src: "{{ clamav_stack_path }}"
+    state: restarted

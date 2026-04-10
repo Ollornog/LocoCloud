@@ -1,0 +1,98 @@
+---
+# roles/crowdsec/tasks/deploy.yml
+
+- name: Create CrowdSec directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ crowdsec_stack_path }}"
+    - "{{ crowdsec_stack_path }}/config"
+    - "{{ crowdsec_stack_path }}/config/parsers"
+    - "{{ crowdsec_stack_path }}/config/notifications"
+    - "{{ crowdsec_stack_path }}/data"
+
+- name: Deploy CrowdSec acquisition config
+  ansible.builtin.template:
+    src: acquis.yaml.j2
+    dest: "{{ crowdsec_stack_path }}/acquis.yaml"
+    mode: "0644"
+  notify: restart crowdsec
+
+- name: Deploy CrowdSec whitelist
+  ansible.builtin.template:
+    src: whitelist.yaml.j2
+    dest: "{{ crowdsec_stack_path }}/config/parsers/whitelist.yaml"
+    mode: "0644"
+  notify: restart crowdsec
+
+- name: Deploy CrowdSec docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ crowdsec_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Start CrowdSec (without bouncer initially)
+  ansible.builtin.command: >
+    docker compose -f {{ crowdsec_stack_path }}/docker-compose.yml
+    up -d crowdsec
+  changed_when: true
+
+- name: Wait for CrowdSec API to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:8080/v1/heartbeat"
+    method: GET
+    status_code: [200]
+  register: _crowdsec_health
+  until: _crowdsec_health.status == 200
+  retries: 30
+  delay: 5
+
+- name: Register bouncer API key
+  ansible.builtin.command: >
+    docker exec crowdsec cscli bouncers add firewall-bouncer -o raw
+  register: _bouncer_key
+  changed_when: "'already exists' not in _bouncer_key.stderr"
+  failed_when: false
+
+- name: Set bouncer API key fact
+  ansible.builtin.set_fact:
+    crowdsec_bouncer_api_key: "{{ _bouncer_key.stdout | trim }}"
+  when: _bouncer_key.rc == 0 and _bouncer_key.stdout | trim | length > 0
+
+- name: Read existing bouncer key from config
+  ansible.builtin.slurp:
+    src: "{{ crowdsec_stack_path }}/bouncer.yaml"
+  register: _existing_bouncer_config
+  when: crowdsec_bouncer_api_key is not defined
+  failed_when: false
+
+- name: Extract existing bouncer key
+  ansible.builtin.set_fact:
+    crowdsec_bouncer_api_key: "{{ (_existing_bouncer_config.content | b64decode | regex_search('api_key:\\s*(.+)', '\\1'))[0] | trim }}"
+  when:
+    - crowdsec_bouncer_api_key is not defined
+    - _existing_bouncer_config is defined
+    - _existing_bouncer_config.content is defined
+
+- name: Deploy bouncer config
+  ansible.builtin.template:
+    src: bouncer.yaml.j2
+    dest: "{{ crowdsec_stack_path }}/bouncer.yaml"
+    mode: "0600"
+  when: crowdsec_bouncer_api_key is defined
+
+- name: Deploy notification email config
+  ansible.builtin.template:
+    src: notification-email.yaml.j2
+    dest: "{{ crowdsec_stack_path }}/config/notifications/email.yaml"
+    mode: "0600"
+  when: crowdsec_notifications_enabled
+  notify: restart crowdsec
+
+- name: Start full CrowdSec stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ crowdsec_stack_path }}"
+    state: present
+  when: crowdsec_bouncer_api_key is defined

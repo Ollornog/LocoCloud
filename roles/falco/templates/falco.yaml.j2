@@ -1,0 +1,35 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Falco Configuration
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+json_output: {{ falco_json_output | lower }}
+log_level: {{ falco_log_level }}
+
+# Stdout output (collected by Alloy via Docker log driver)
+stdout_output:
+  enabled: true
+
+# File output disabled (logs via stdout → Alloy → Loki)
+file_output:
+  enabled: false
+
+# Syslog output disabled
+syslog_output:
+  enabled: false
+
+{% if falcosidekick_enabled %}
+# HTTP output to Falcosidekick
+http_output:
+  enabled: true
+  url: "http://falcosidekick:2801/"
+{% endif %}
+
+# Rules files
+rules_file:
+  - /etc/falco/falco_rules.yaml
+  - /etc/falco/rules.d
+
+# Watch for new containers
+watch_config_files: true

@@ -1,0 +1,42 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# ClamAV — Central virus scanner
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  clamav:
+    image: {{ clamav_image }}
+    container_name: clamav
+    restart: unless-stopped
+    volumes:
+      - {{ clamav_socket_volume }}:/var/run/clamav
+      - {{ clamav_log_path }}:/var/log/clamav
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+{% if clamav_watch_apps | length > 0 %}
+  clamav-watcher:
+    image: {{ clamav_watcher_image }}
+    container_name: clamav-watcher
+    restart: unless-stopped
+    entrypoint: /opt/watcher/watch.sh
+    volumes:
+      - {{ clamav_socket_volume }}:/var/run/clamav:ro
+      - {{ clamav_stack_path }}/watcher:/opt/watcher:ro
+      - {{ clamav_quarantine_path }}:/quarantine
+{% for app in clamav_watch_apps %}
+      - {{ app.watch_path }}:/watch/{{ app.name }}
+{% endfor %}
+    depends_on:
+      clamav:
+        condition: service_healthy
+{% endif %}
+
+volumes:
+  {{ clamav_socket_volume }}:
+    name: {{ clamav_socket_volume }}

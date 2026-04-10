@@ -1,0 +1,7 @@
+---
+# roles/falco/handlers/main.yml
+
+- name: restart falco
+  community.docker.docker_compose_v2:
+    project_src: "{{ falco_stack_path }}"
+    state: restarted

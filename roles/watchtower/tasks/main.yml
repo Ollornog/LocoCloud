@@ -1,8 +1,7 @@
 ---
 # roles/watchtower/tasks/main.yml
-# Watchtower is DEPRECATED — replaced by Ansible updates via Semaphore.
-# This role now removes existing Watchtower installations idempotently.
+# Watchtower — Automatic Docker image updates + cleanup
 
-- name: Remove Watchtower (deprecated — updates via Ansible/Semaphore)
-  ansible.builtin.import_tasks: remove.yml
-  tags: [watchtower, remove]
+- name: Deploy Watchtower
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [watchtower, deploy]

@@ -1,0 +1,28 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# AIDE Configuration
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+database_in=file:{{ aide_db_path }}/aide.db
+database_out=file:{{ aide_db_path }}/aide.db.new
+database_new=file:{{ aide_db_path }}/aide.db.new
+
+# Report settings
+report_url=file:{{ aide_log_path }}/aide-check.log
+report_url=stdout
+
+# Rule definitions
+NORMAL = p+i+n+u+g+s+b+m+c+sha256
+DIR = p+i+n+u+g
+LOG = p+u+g
+
+# Monitored paths
+{% for path in aide_watch_paths %}
+{{ path }} NORMAL
+{% endfor %}
+
+# Excluded paths
+{% for path in aide_exclude_paths %}
+!{{ path }}
+{% endfor %}

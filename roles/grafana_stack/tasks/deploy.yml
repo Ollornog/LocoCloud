@@ -55,10 +55,44 @@
     mode: "0644"
   notify: restart loki
 
+- name: Create Grafana dashboard provisioning directory
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ grafana_stack_path }}/provisioning/dashboards"
+    - "{{ grafana_stack_path }}/dashboards"
+
 - name: Deploy Grafana datasources provisioning
   ansible.builtin.template:
     src: datasources.yml.j2
     dest: "{{ grafana_stack_path }}/provisioning/datasources/datasources.yml"
+    mode: "0644"
+  notify: restart grafana
+
+- name: Deploy Grafana dashboard provisioning config
+  ansible.builtin.copy:
+    dest: "{{ grafana_stack_path }}/provisioning/dashboards/dashboards.yml"
+    mode: "0644"
+    content: |
+      apiVersion: 1
+      providers:
+        - name: 'default'
+          orgId: 1
+          folder: 'LocoCloud'
+          type: file
+          disableDeletion: false
+          updateIntervalSeconds: 30
+          options:
+            path: /var/lib/grafana/dashboards
+            foldersFromFilesStructure: false
+  notify: restart grafana
+
+- name: Deploy Grafana dashboards
+  ansible.builtin.copy:
+    src: "dashboards/"
+    dest: "{{ grafana_stack_path }}/dashboards/"
     mode: "0644"
   notify: restart grafana
 

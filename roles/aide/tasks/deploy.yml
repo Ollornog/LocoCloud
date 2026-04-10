@@ -1,0 +1,68 @@
+---
+# roles/aide/tasks/deploy.yml
+
+- name: Install AIDE and msmtp
+  ansible.builtin.apt:
+    name:
+      - aide
+      - msmtp
+      - msmtp-mta
+    state: present
+    update_cache: true
+
+- name: Create AIDE directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - "{{ aide_config_path }}"
+    - "{{ aide_db_path }}"
+    - "{{ aide_log_path }}"
+
+- name: Deploy AIDE configuration
+  ansible.builtin.template:
+    src: aide.conf.j2
+    dest: "{{ aide_config_path }}/aide.conf"
+    mode: "0600"
+
+- name: Deploy AIDE check script
+  ansible.builtin.template:
+    src: aide-check.sh.j2
+    dest: /opt/scripts/aide-check.sh
+    mode: "0700"
+
+- name: Check if AIDE database exists
+  ansible.builtin.stat:
+    path: "{{ aide_db_path }}/aide.db"
+  register: _aide_db
+
+- name: Initialize AIDE database
+  ansible.builtin.command: >
+    /usr/bin/aide --init --config={{ aide_config_path }}/aide.conf
+  when: not _aide_db.stat.exists
+  changed_when: true
+
+- name: Copy initial AIDE database
+  ansible.builtin.copy:
+    src: "{{ aide_db_path }}/aide.db.new"
+    dest: "{{ aide_db_path }}/aide.db"
+    remote_src: true
+    mode: "0600"
+  when: not _aide_db.stat.exists
+
+- name: Create AIDE nightly check cron job
+  ansible.builtin.cron:
+    name: "aide-integrity-check"
+    hour: "{{ aide_check_hour }}"
+    minute: "{{ aide_check_minute }}"
+    job: "/opt/scripts/aide-check.sh"
+    user: root
+
+- name: Create AIDE events log file
+  ansible.builtin.file:
+    path: "{{ aide_log_path }}/aide-events.log"
+    state: touch
+    mode: "0644"
+    modification_time: preserve
+    access_time: preserve

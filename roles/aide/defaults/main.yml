@@ -1,0 +1,35 @@
+---
+# roles/aide/defaults/main.yml
+# AIDE — File Integrity Monitoring (runs on host, not in container)
+
+# AIDE configuration
+aide_config_path: "/etc/aide"
+aide_db_path: "/var/lib/aide"
+aide_log_path: "/var/log/aide"
+
+# Nightly check schedule (cron: hour minute)
+aide_check_hour: 3
+aide_check_minute: 0
+
+# Monitored paths
+aide_watch_paths:
+  - "/etc"
+  - "/usr/bin"
+  - "/usr/sbin"
+  - "/opt/stacks/*/docker-compose.yml"
+  - "/opt/stacks/*/.env"
+
+# Excluded paths
+aide_exclude_paths:
+  - "/var/log"
+  - "/tmp"
+  - "/var/tmp"
+  - "/var/lib/docker"
+  - "/etc/mtab"
+  - "/etc/resolv.conf"
+
+# E-Mail alerting on integrity violations
+aide_alert_enabled: false
+aide_alert_email: ""
+aide_alert_from: ""
+aide_smtp_host: ""

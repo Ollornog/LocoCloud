@@ -1,0 +1,16 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# CrowdSec E-Mail Notification Plugin
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+type: email
+name: email_default
+log_level: info
+smtp_host: {{ crowdsec_smtp_host }}
+smtp_port: {{ crowdsec_smtp_port }}
+smtp_username: {{ crowdsec_smtp_user }}
+sender_email: {{ crowdsec_smtp_from }}
+receiver_emails:
+  - {{ crowdsec_smtp_to }}
+email_subject: "[SECURITY] CrowdSec Alert — {{ '{{' }} .Alert.Scenario {{ '}}' }}"

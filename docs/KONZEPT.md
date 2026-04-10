@@ -2716,7 +2716,7 @@ Identisch für alle Server (Master + Kunden):
 | Kernel-Hardening | sysctl (rp_filter, syncookies, etc.) — **LXC-kompatible Params beachten!** |
 | Fail2ban | SSH (10 Versuche, 3600s Ban) |
 | Unattended-upgrades | Automatische Sicherheitsupdates |
-| Docker-Updates | Manuell via `update-customer.yml` (Semaphore). Kein Watchtower — entfernt wegen Silent Breaking Changes (Netbird v0.65 Vorfall). Image-Tags auf Major-Version pinnen |
+| Docker-Updates | Watchtower für automatische Patch-Updates (nightly 02:30). Major-Updates manuell via `update-customer.yml` (Semaphore). Image-Tags auf Major-Version pinnen |
 | USB deaktiviert | Nur auf physischen Servern (`is_lxc`-Check!) |
 | .env chmod 600 | Alle Secrets-Files |
 | Docker Port-Bind | Entry-Point: `127.0.0.1:PORT` / App-LXCs: `0.0.0.0:PORT` + UFW auf wt0 |
@@ -2730,7 +2730,32 @@ Variable `is_lxc: true/false` in der Rolle steuert:
 - USB: Nicht deaktivieren in LXC
 - TUN-Device: Für Netbird in LXC nötig (`lxc.cgroup2.devices.allow: c 10:200 rwm`)
 
-### 18.3 Admin-User pro Server
+### 18.3 Security Stack (optional)
+
+Deployment via `playbooks/setup-security.yml`. Alle Komponenten optional, konfigurierbar in `config/lococloudd.yml` unter `security:`.
+
+| Komponente | Rolle | Zweck |
+|------------|-------|-------|
+| **CrowdSec** | `crowdsec` | Netzwerk-IDS + Firewall-Bouncer. Ersetzt Fail2ban für erweiterte Threat-Detection. Community-Threat-Intelligence, automatisches IP-Blocking via iptables |
+| **Falco** | `falco` | Container Runtime Security. Syscall-Monitoring, erkennt Shell-Spawning, Crypto-Miner, unerwartete Netzwerkverbindungen. Custom Rules für LocoCloud-Apps |
+| **ClamAV** | `clamav` | Zentraler Virenscanner als Docker-Container. Socket-basiert, integriert in Nextcloud (files_antivirus), Paperless (pre-consume Hook), Datei-Watcher für weitere Apps |
+| **AIDE** | `aide` | Host-Level File Integrity Monitoring. Nächtliche Prüfung kritischer Pfade (/etc, /usr/bin, docker-compose, .env). JSON-Logs für Loki |
+| **Watchtower** | `watchtower` | Automatische Docker-Image-Updates + Image-Cleanup. Nightly 02:30, alle Container (kein Label-Filter) |
+
+**Alerting:** Alle Komponenten loggen strukturiert (JSON) → Alloy → Loki. Optional E-Mail-Benachrichtigungen über SMTP-Config.
+
+**Grafana Dashboard:** `security-overview.json` — zentrale Übersicht aller Security-Events (CrowdSec Blocks, Falco Alerts, ClamAV Scans, AIDE Violations, Watchtower Updates).
+
+**ClamAV App-Integration:**
+- **Nextcloud:** `files_antivirus` App, ClamAV-Socket als Volume
+- **Paperless:** Pre-Consume-Script scannt Dokumente vor Verarbeitung, Quarantäne bei Fund
+- **Watcher:** inotifywait-basierter Scanner für Upload-Verzeichnisse (Documenso, Vaultwarden, Pingvin Share)
+
+**CrowdSec Whitelist:** Netbird VPN (`100.64.0.0/10`) und localhost sind whitelisted.
+
+**Falco Custom Rules:** Shell-in-Container, unerwartete Outbound-Connections, System-Dir-Writes, Docker-Socket-Access, DB-Container-Anomalien.
+
+### 18.4 Admin-User pro Server
 
 ```yaml
 admin_user: "srvadmin"     # Konfigurierbar pro Kunde
@@ -2741,30 +2766,28 @@ admin_user_nopasswd: true  # NOPASSWD für Ansible-Kompatibilität
 
 ## 19. Wartung & Updates
 
-### 19.1 Grundregel: Alle Updates über Ansible
+### 19.1 Grundregel: Updates in zwei Stufen
 
-**Kein automatisches Update darf Infrastruktur kaputt machen.** Erfahrung: Watchtower hat den Netbird-Server automatisch aktualisiert → neuer Relay-Endpoint `/relay` (ohne Slash) → Caddy-Route `handle /relay/*` hat nicht mehr gematcht → VPN-Tunnel weg → alle Dienste unerreichbar.
-
-**Konsequenz:** Updates werden in zwei Kategorien eingeteilt:
+Updates werden nach Risiko eingeteilt:
 
 | Kategorie | Automatisch? | Methode |
 |-----------|-------------|---------|
-| OS-Sicherheitspatches | Ja | `unattended-upgrades` (apt, niedrig-riskant) |
+| OS-Sicherheitspatches | Ja | `unattended-upgrades` (apt) |
+| Docker-Image Patch-Updates | Ja | Watchtower (nightly 02:30, alle Container) |
 | Backup | Ja | Restic Cron |
 | Health-Checks | Ja | Grafana Alerting |
 | SSL-Erneuerung | Ja | Caddy (ACME) |
-| **Alle Docker-Container** (Infra + Apps) | **NEIN** | **Nur über Ansible** (`update-customer.yml` / `update-app.yml` via Semaphore) |
+| **Docker Major-Updates** | **NEIN** | **Nur über Ansible** (`update-customer.yml` / `update-app.yml` via Semaphore) |
 
-### 19.2 Update-Strategie: Kein Watchtower, alles über Ansible
+### 19.2 Update-Strategie: Watchtower + Ansible
 
-**Watchtower wurde komplett entfernt.** Die `watchtower`-Rolle entfernt bestehende Installationen idempotent.
+**Watchtower** übernimmt automatische Patch-Updates für alle Docker-Container (nightly 02:30). Kein Label-Filter — alle Container werden aktualisiert. Alte Images werden automatisch aufgeräumt.
 
-**Grund:** Watchtower hat den Netbird-Server automatisch aktualisiert → neuer Relay-Endpoint `/relay` (ohne Slash) → Caddy-Route `handle /relay/*` hat nicht mehr gematcht → VPN-Tunnel weg → alle Dienste unerreichbar. Selbst Label-basiert ist das Risiko für Silent Breaking Changes bei Patch-Updates zu hoch.
+**Ansible** bleibt für kontrollierte Major-Updates zuständig:
+- `update-customer.yml` — Image-Tag im Inventar auf neue Major-Version ändern, dann ausführen
+- `update-app.yml` — Einzelne App gezielt updaten
 
-**Ersatz:**
-- `update-customer.yml` — Zieht alle Images und recreated Container. Manuell via Semaphore getriggert.
-- `update-app.yml` — Aktualisiert eine einzelne App gezielt.
-- OS-Sicherheitspatches bleiben automatisch via `unattended-upgrades`.
+**Hintergrund:** Watchtower war ursprünglich wegen Silent Breaking Changes entfernt (Netbird v0.65 Vorfall: neuer Relay-Endpoint brach VPN-Tunnel). Mit gepinnten Major-Tags (`nextcloud:29`) zieht Watchtower nur Patch-Updates innerhalb der Major-Version — das Risiko ist akzeptabel, und automatische Security-Patches sind wichtiger.
 
 **Image-Tag-Strategie:**
 - `nextcloud:29` → Patches (29.0.1, 29.0.2) werden beim nächsten `update-customer.yml` gezogen
@@ -2780,6 +2803,7 @@ admin_user_nopasswd: true  # NOPASSWD für Ansible-Kompatibilität
 | Backup-Test | `restore-test.yml` — monatlicher Restore-Verifikation |
 | Mitarbeiter anlegen/entfernen | `add-user.yml` / `remove-user.yml` |
 | Break-Glass Account | `setup-breakglass.yml` — Notfallzugang erstellen |
+| Security Stack | `setup-security.yml` — CrowdSec, Falco, ClamAV, AIDE, Watchtower |
 
 ---
 

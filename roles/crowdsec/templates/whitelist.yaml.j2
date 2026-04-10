@@ -1,0 +1,14 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# CrowdSec Whitelist — Netbird VPN + local ranges
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+name: lococloudd/whitelist
+description: "Whitelist Netbird VPN and local ranges"
+whitelist:
+  reason: "Internal network / VPN traffic"
+  cidr:
+{% for range in crowdsec_whitelist_ranges %}
+    - "{{ range }}"
+{% endfor %}

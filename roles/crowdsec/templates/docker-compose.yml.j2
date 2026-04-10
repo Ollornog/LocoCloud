@@ -1,0 +1,36 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# CrowdSec — Network Threat Detection
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  crowdsec:
+    image: {{ crowdsec_image }}
+    container_name: crowdsec
+    restart: unless-stopped
+    volumes:
+      - {{ crowdsec_stack_path }}/config:/etc/crowdsec
+      - {{ crowdsec_stack_path }}/data:/var/lib/crowdsec/data
+      - {{ crowdsec_stack_path }}/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+{% for log_path in crowdsec_log_paths %}
+      - {{ log_path }}:{{ log_path }}:ro
+{% endfor %}
+{% if crowdsec_caddy_log_path is defined %}
+      - {{ crowdsec_caddy_log_path }}:{{ crowdsec_caddy_log_path }}:ro
+{% endif %}
+    environment:
+      COLLECTIONS: "{{ crowdsec_collections | join(' ') }}"
+
+  crowdsec-bouncer:
+    image: {{ crowdsec_bouncer_image }}
+    container_name: crowdsec-bouncer
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - {{ crowdsec_stack_path }}/bouncer.yaml:/etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml:ro
+    depends_on:
+      - crowdsec

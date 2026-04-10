@@ -1,0 +1,30 @@
+#!/bin/bash
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# AIDE Nightly Integrity Check
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+LOG="{{ aide_log_path }}/aide-check.log"
+TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+echo "=== AIDE Check: $TIMESTAMP ===" > "$LOG"
+
+/usr/bin/aide --check --config={{ aide_config_path }}/aide.conf >> "$LOG" 2>&1
+EXIT_CODE=$?
+
+if [ "$EXIT_CODE" -ne 0 ]; then
+    echo "{\"timestamp\":\"$TIMESTAMP\",\"level\":\"error\",\"component\":\"aide\",\"message\":\"Integrity violations detected (exit $EXIT_CODE)\"}" >> {{ aide_log_path }}/aide-events.log
+
+{% if aide_alert_enabled %}
+    # Send alert email
+    printf "Subject: [SECURITY] AIDE: Integrity violation on $(hostname)\nFrom: {{ aide_alert_from }}\nTo: {{ aide_alert_email }}\n\nFile integrity violation detected!\n\nServer: $(hostname)\nTimestamp: $TIMESTAMP\nExit Code: $EXIT_CODE\n\nDetails:\n$(cat $LOG)\n" | \
+        msmtp --host={{ aide_smtp_host }} --from={{ aide_alert_from }} {{ aide_alert_email }} 2>/dev/null || \
+        echo "{\"timestamp\":\"$TIMESTAMP\",\"level\":\"error\",\"component\":\"aide\",\"message\":\"Failed to send alert email\"}" >> {{ aide_log_path }}/aide-events.log
+{% endif %}
+else
+    echo "{\"timestamp\":\"$TIMESTAMP\",\"level\":\"info\",\"component\":\"aide\",\"message\":\"Integrity check passed\"}" >> {{ aide_log_path }}/aide-events.log
+fi
+
+# Update the database for next run
+cp {{ aide_db_path }}/aide.db.new {{ aide_db_path }}/aide.db 2>/dev/null || true

@@ -1,0 +1,90 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Falco Custom Rules for LocoCloud
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+# --- Shell spawn in app containers ---
+- rule: Shell Spawned in App Container
+  desc: Detect shell execution in application containers (should not happen in production)
+  condition: >
+    spawned_process and container and
+    proc.name in (bash, sh, dash, zsh, ash, csh, ksh) and
+    not container.name in (clamav-watcher, falco, crowdsec)
+  output: >
+    Shell spawned in app container
+    (container=%container.name command=%proc.cmdline user=%user.name
+    parent=%proc.pname evt.type=%evt.type)
+  priority: WARNING
+  tags: [container, shell, mitre_execution]
+
+# --- Outbound connections from containers that should not make them ---
+- rule: Unexpected Outbound Connection from App
+  desc: Detect outbound network connections from containers that normally do not need them
+  condition: >
+    outbound and container and fd.sport != 53 and
+    container.name in (paperless, vaultwarden, pingvin-share) and
+    not fd.sip in (rfc_1918_addresses)
+  output: >
+    Unexpected outbound connection from container
+    (container=%container.name command=%proc.cmdline connection=%fd.name
+    user=%user.name)
+  priority: WARNING
+  tags: [container, network, mitre_exfiltration]
+
+# --- Write to system directories in containers ---
+- rule: Write to System Dirs in Container
+  desc: Detect writes to /etc, /usr/bin, /usr/sbin inside containers
+  condition: >
+    write and container and
+    (fd.name startswith /etc/ or fd.name startswith /usr/bin/ or fd.name startswith /usr/sbin/) and
+    not proc.name in (dpkg, apt, apt-get, yum, dnf, apk)
+  output: >
+    Write to system directory in container
+    (container=%container.name file=%fd.name command=%proc.cmdline user=%user.name)
+  priority: ERROR
+  tags: [container, filesystem, mitre_persistence]
+
+# --- Crypto miner detection ---
+- rule: Crypto Miner Process Detected
+  desc: Detect known crypto miner processes in containers
+  condition: >
+    spawned_process and container and
+    (proc.name in (xmrig, minerd, cpuminer, ethminer, cgminer, bfgminer, nbminer, t-rex) or
+     proc.cmdline contains "stratum+tcp" or
+     proc.cmdline contains "pool.minexmr" or
+     proc.cmdline contains "nanopool.org" or
+     proc.cmdline contains "crypto-pool")
+  output: >
+    Crypto miner detected in container
+    (container=%container.name command=%proc.cmdline user=%user.name)
+  priority: CRITICAL
+  tags: [container, crypto, mitre_resource_hijacking]
+
+# --- Unexpected process in container ---
+- rule: Unexpected Process in Database Container
+  desc: Detect non-standard processes in database containers
+  condition: >
+    spawned_process and container and
+    container.name endswith "-db" and
+    not proc.name in (postgres, pg_isready, pg_dump, pg_dumpall, pg_restore,
+                      mysqld, mariadbd, healthcheck.sh, mongod, mongos,
+                      redis-server, sh, bash, initdb, pg_ctl)
+  output: >
+    Unexpected process in database container
+    (container=%container.name process=%proc.name command=%proc.cmdline
+    parent=%proc.pname user=%user.name)
+  priority: WARNING
+  tags: [container, process, mitre_execution]
+
+# --- Docker socket access from non-infrastructure containers ---
+- rule: Docker Socket Accessed by App Container
+  desc: Detect Docker socket access from application containers (should only be accessed by infrastructure)
+  condition: >
+    open_read and container and fd.name = /var/run/docker.sock and
+    not container.name in (watchtower, alloy, falco, crowdsec)
+  output: >
+    Docker socket accessed by non-infrastructure container
+    (container=%container.name command=%proc.cmdline user=%user.name)
+  priority: CRITICAL
+  tags: [container, docker, mitre_privilege_escalation]

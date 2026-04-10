@@ -1,0 +1,39 @@
+---
+# roles/clamav/tasks/deploy.yml
+
+- name: Create ClamAV directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ clamav_stack_path }}"
+    - "{{ clamav_stack_path }}/watcher"
+    - "{{ clamav_log_path }}"
+    - "{{ clamav_quarantine_path }}"
+
+- name: Deploy ClamAV watcher script
+  ansible.builtin.template:
+    src: watch.sh.j2
+    dest: "{{ clamav_stack_path }}/watcher/watch.sh"
+    mode: "0755"
+  when: clamav_watch_apps | length > 0
+
+- name: Deploy ClamAV docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ clamav_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Start ClamAV
+  community.docker.docker_compose_v2:
+    project_src: "{{ clamav_stack_path }}"
+    state: present
+
+- name: Wait for ClamAV to be ready
+  ansible.builtin.command: docker exec clamav clamdscan --ping
+  register: _clamav_ping
+  until: _clamav_ping.rc == 0
+  retries: 60
+  delay: 5
+  changed_when: false

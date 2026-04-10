@@ -19,6 +19,11 @@ services:
 {% if paperless_permission_groups | default([]) | length > 0 %}
       - {{ paperless_data_path }}/scripts:/scripts
 {% endif %}
+{% if clamav_paperless_enabled | default(false) %}
+      - clamav-socket:/var/run/clamav:ro
+      - {{ paperless_data_path }}/scripts/pre-consume-scan.sh:/scripts/pre-consume-scan.sh:ro
+      - /var/log/clamav-paperless.log:/var/log/clamav-paperless.log
+{% endif %}
     env_file:
       - .env
     depends_on:
@@ -63,3 +68,9 @@ services:
     image: {{ paperless_tika_image }}
     container_name: paperless-tika
     restart: unless-stopped
+
+{% if clamav_paperless_enabled | default(false) %}
+volumes:
+  clamav-socket:
+    external: true
+{% endif %}

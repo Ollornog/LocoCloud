@@ -1,0 +1,7 @@
+---
+# roles/aide/handlers/main.yml
+
+- name: reinitialize aide
+  ansible.builtin.command: >
+    /usr/bin/aide --init --config={{ aide_config_path }}/aide.conf
+  changed_when: true

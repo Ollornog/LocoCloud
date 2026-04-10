@@ -1,0 +1,17 @@
+---
+# roles/clamav/tasks/main.yml
+# ClamAV — Central virus scanner for all apps
+
+- name: Deploy ClamAV
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [clamav, security, deploy]
+
+- name: Configure Nextcloud antivirus
+  ansible.builtin.import_tasks: nextcloud.yml
+  when: clamav_nextcloud_enabled
+  tags: [clamav, security, nextcloud]
+
+- name: Configure Paperless pre-consume scan
+  ansible.builtin.import_tasks: paperless.yml
+  when: clamav_paperless_enabled
+  tags: [clamav, security, paperless]

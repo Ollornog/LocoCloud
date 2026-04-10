@@ -23,6 +23,9 @@ services:
       - {{ nc_paperless_sort_path | default('/mnt/data/paperless-sort') }}:{{ nc_paperless_inbox_container_path | default('/opt/paperless-sort') }}
       - {{ nc_paperless_documents_path | default('/mnt/data/paperless/media/documents') }}:{{ nc_paperless_docs_container_path | default('/opt/paperless-docs') }}:ro
 {% endif %}
+{% if clamav_nextcloud_enabled | default(false) %}
+      - clamav-socket:/var/run/clamav:ro
+{% endif %}
     env_file:
       - .env
     depends_on:
@@ -64,3 +67,9 @@ services:
     restart: unless-stopped
     cap_add:
       - SYS_NICE
+
+{% if clamav_nextcloud_enabled | default(false) %}
+volumes:
+  clamav-socket:
+    external: true
+{% endif %}

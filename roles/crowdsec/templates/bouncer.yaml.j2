@@ -1,0 +1,11 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# CrowdSec Firewall Bouncer Config
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+mode: iptables
+api_url: http://127.0.0.1:8080/
+api_key: {{ crowdsec_bouncer_api_key }}
+update_frequency: 10s
+deny_action: DROP

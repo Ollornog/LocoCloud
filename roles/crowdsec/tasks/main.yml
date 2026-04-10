@@ -1,0 +1,7 @@
+---
+# roles/crowdsec/tasks/main.yml
+# CrowdSec — Network Threat Detection + Community Intelligence
+
+- name: Deploy CrowdSec
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [crowdsec, security, deploy]

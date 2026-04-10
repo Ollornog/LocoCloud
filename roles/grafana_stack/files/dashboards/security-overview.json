@@ -1,0 +1,187 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "title": "Security Events Timeline",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "refId": "A",
+          "expr": "{component=~\"clamav.*|falco|aide|crowdsec\"} |= ``"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "title": "ClamAV — Virus Detections",
+      "type": "logs",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "refId": "A",
+          "expr": "{container=~\"clamav.*\"} |= \"FOUND\" or {component=\"clamav-watcher\"} | json | level=\"error\""
+        }
+      ]
+    },
+    {
+      "title": "ClamAV — Scans by App",
+      "type": "bargauge",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "instant",
+          "refId": "A",
+          "expr": "sum by (app) (count_over_time({component=\"clamav-watcher\"} | json | level=\"error\" [24h]))"
+        }
+      ]
+    },
+    {
+      "title": "Falco — Alerts by Severity",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "instant",
+          "refId": "A",
+          "expr": "sum by (priority) (count_over_time({container=\"falco\"} | json | __error__=\"\" [24h]))"
+        }
+      ]
+    },
+    {
+      "title": "Falco — Alerts by Container",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "instant",
+          "refId": "A",
+          "expr": "sum by (container_name) (count_over_time({container=\"falco\"} | json | priority=~\"Warning|Error|Critical\" | __error__=\"\" [24h]))"
+        }
+      ]
+    },
+    {
+      "title": "Falco — Top Rules",
+      "type": "bargauge",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "instant",
+          "refId": "A",
+          "expr": "topk(10, sum by (rule) (count_over_time({container=\"falco\"} | json | __error__=\"\" [24h])))"
+        }
+      ]
+    },
+    {
+      "title": "CrowdSec — Blocked IPs",
+      "type": "logs",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "refId": "A",
+          "expr": "{container=\"crowdsec\"} |= \"ban\""
+        }
+      ]
+    },
+    {
+      "title": "CrowdSec — Attack Types",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "instant",
+          "refId": "A",
+          "expr": "sum by (scenario) (count_over_time({container=\"crowdsec\"} | json | type=\"ban\" | __error__=\"\" [24h]))"
+        }
+      ]
+    },
+    {
+      "title": "AIDE — Integrity Violations",
+      "type": "logs",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "refId": "A",
+          "expr": "{component=\"aide\"} | json | level=\"error\""
+        }
+      ]
+    },
+    {
+      "title": "Watchtower — Update Events",
+      "type": "logs",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "refId": "A",
+          "expr": "{container=\"watchtower\"}"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["security", "lococloudd"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "All", "value": "$__all" },
+        "datasource": { "type": "loki", "uid": "loki" },
+        "definition": "label_values(kunde)",
+        "name": "kunde",
+        "type": "query",
+        "includeAll": true,
+        "multi": true
+      },
+      {
+        "current": { "selected": false, "text": "All", "value": "$__all" },
+        "datasource": { "type": "loki", "uid": "loki" },
+        "definition": "label_values(instance)",
+        "name": "instance",
+        "type": "query",
+        "includeAll": true,
+        "multi": true
+      }
+    ]
+  },
+  "time": { "from": "now-24h", "to": "now" },
+  "title": "Security Overview",
+  "uid": "security-overview"
+}

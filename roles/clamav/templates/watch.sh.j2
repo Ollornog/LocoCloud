@@ -1,0 +1,70 @@
+#!/bin/sh
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# ClamAV Watcher — inotifywait-based file scanner
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+set -e
+
+# Install dependencies
+apk add --no-cache inotify-tools clamav-clamdscan msmtp > /dev/null 2>&1
+
+QUARANTINE="/quarantine"
+SOCKET="/var/run/clamav/clamd.sock"
+LOG="/proc/1/fd/1"
+
+log() {
+    echo "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"level\":\"$1\",\"component\":\"clamav-watcher\",\"app\":\"$2\",\"message\":\"$3\",\"file\":\"$4\"}"
+}
+
+# Wait for ClamAV socket
+while [ ! -S "$SOCKET" ]; do
+    echo "Waiting for ClamAV socket..." | tee "$LOG"
+    sleep 5
+done
+
+log "info" "watcher" "ClamAV watcher started" "" | tee "$LOG"
+
+# Monitor all watch directories
+inotifywait -m -r -e create,moved_to,close_write \
+{% for app in clamav_watch_apps %}
+    /watch/{{ app.name }} \
+{% endfor %}
+    --format '%w%f %e' 2>/dev/null | while read FILE EVENT; do
+
+    # Skip temporary files
+    case "$FILE" in
+        *.part|*.tmp|*.swp|*.lock|*~) continue ;;
+    esac
+
+    # Determine which app this file belongs to
+    APP=$(echo "$FILE" | sed 's|^/watch/||' | cut -d/ -f1)
+
+    # Scan the file
+    if clamdscan --no-summary --config-file=/dev/null --fdpass "$FILE" > /dev/null 2>&1; then
+        log "info" "$APP" "File clean" "$FILE" | tee "$LOG"
+    else
+        EXIT_CODE=$?
+        if [ "$EXIT_CODE" -eq 1 ]; then
+            VIRUS=$(clamdscan --no-summary --fdpass "$FILE" 2>/dev/null | grep FOUND | head -1)
+            log "error" "$APP" "VIRUS FOUND: $VIRUS" "$FILE" | tee "$LOG"
+
+            # Move to quarantine
+            QUARANTINE_DIR="$QUARANTINE/$APP/$(date +%Y-%m-%d)"
+            mkdir -p "$QUARANTINE_DIR"
+            BASENAME=$(basename "$FILE")
+            mv "$FILE" "$QUARANTINE_DIR/${BASENAME}.infected" 2>/dev/null || true
+            log "warn" "$APP" "File quarantined" "$QUARANTINE_DIR/${BASENAME}.infected" | tee "$LOG"
+
+{% if clamav_alert_enabled %}
+            # Send alert email
+            printf "Subject: [SECURITY] ClamAV: Virus found on $(hostname)\nFrom: {{ clamav_alert_from }}\nTo: {{ clamav_alert_email }}\n\nVirus detected!\n\nServer: $(hostname)\nApp: $APP\nFile: $FILE\nResult: $VIRUS\nAction: File moved to quarantine\nTimestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)\n" | \
+                msmtp --host={{ clamav_alert_smtp_host }} --from={{ clamav_alert_from }} {{ clamav_alert_email }} 2>/dev/null || \
+                log "error" "$APP" "Failed to send alert email" "" | tee "$LOG"
+{% endif %}
+        else
+            log "error" "$APP" "Scan error (exit $EXIT_CODE)" "$FILE" | tee "$LOG"
+        fi
+    fi
+done

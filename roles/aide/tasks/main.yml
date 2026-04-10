@@ -1,0 +1,7 @@
+---
+# roles/aide/tasks/main.yml
+# AIDE — File Integrity Monitoring on host
+
+- name: Deploy AIDE
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [aide, security, deploy]

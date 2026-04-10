@@ -1,0 +1,26 @@
+---
+# roles/falco/defaults/main.yml
+# Falco — Container Runtime Security
+
+falco_stack_path: "/opt/stacks/falco"
+falco_image: "falcosecurity/falco-no-driver:0.40"
+falcosidekick_image: "falcosecurity/falcosidekick:2"
+
+# Falco output format
+falco_json_output: true
+falco_log_level: "info"
+
+# Falcosidekick — alert routing
+falcosidekick_enabled: true
+
+# E-Mail alerts via Falcosidekick SMTP
+falcosidekick_smtp_enabled: false
+falcosidekick_smtp_host: ""
+falcosidekick_smtp_port: 587
+falcosidekick_smtp_user: ""
+falcosidekick_smtp_from: ""
+falcosidekick_smtp_to: ""
+falcosidekick_smtp_minimumpriority: "warning"
+
+# Custom rules directory
+falco_rules_path: "{{ falco_stack_path }}/rules"

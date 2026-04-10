@@ -1,0 +1,41 @@
+#!/bin/bash
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Paperless Pre-Consume ClamAV Scan
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+#
+# Scans incoming documents before Paperless processes them.
+# Exit 0 = clean, Exit 1 = infected (Paperless rejects the document).
+
+DOCUMENT_PATH="$DOCUMENT_WORKING_PATH"
+SOCKET="/var/run/clamav/clamd.sock"
+LOG="/var/log/clamav-paperless.log"
+
+log() {
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) [$1] $2" >> "$LOG"
+}
+
+if [ -z "$DOCUMENT_PATH" ]; then
+    log "ERROR" "No document path provided"
+    exit 1
+fi
+
+if [ ! -S "$SOCKET" ]; then
+    log "ERROR" "ClamAV socket not found at $SOCKET — allowing document (fail-open)"
+    exit 0
+fi
+
+SCAN_RESULT=$(clamdscan --no-summary --fdpass "$DOCUMENT_PATH" 2>&1)
+EXIT_CODE=$?
+
+if [ "$EXIT_CODE" -eq 0 ]; then
+    log "INFO" "CLEAN: $DOCUMENT_PATH"
+    exit 0
+elif [ "$EXIT_CODE" -eq 1 ]; then
+    log "ALERT" "VIRUS FOUND: $SCAN_RESULT — File: $DOCUMENT_PATH"
+    exit 1
+else
+    log "ERROR" "Scan failed (exit $EXIT_CODE): $SCAN_RESULT — File: $DOCUMENT_PATH — allowing document (fail-open)"
+    exit 0
+fi

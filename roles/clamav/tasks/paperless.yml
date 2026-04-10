@@ -1,0 +1,23 @@
+---
+# roles/clamav/tasks/paperless.yml
+# Configure Paperless-NGX pre-consume ClamAV scan
+
+- name: Create Paperless scripts directory
+  ansible.builtin.file:
+    path: "{{ paperless_data_path }}/scripts"
+    state: directory
+    mode: "0755"
+
+- name: Deploy Paperless pre-consume scan script
+  ansible.builtin.template:
+    src: pre-consume-scan.sh.j2
+    dest: "{{ paperless_data_path }}/scripts/pre-consume-scan.sh"
+    mode: "0755"
+
+- name: Create ClamAV log file for Paperless
+  ansible.builtin.file:
+    path: /var/log/clamav-paperless.log
+    state: touch
+    mode: "0666"
+    modification_time: preserve
+    access_time: preserve

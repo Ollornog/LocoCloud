@@ -1,0 +1,23 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# CrowdSec Acquisition Config
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+# SSH / system logs
+filenames:
+{% for log_path in crowdsec_log_paths %}
+  - {{ log_path }}
+{% endfor %}
+labels:
+  type: syslog
+
+---
+
+# Caddy access logs (JSON format)
+{% if crowdsec_caddy_log_path is defined %}
+filenames:
+  - {{ crowdsec_caddy_log_path }}
+labels:
+  type: caddy
+{% endif %}

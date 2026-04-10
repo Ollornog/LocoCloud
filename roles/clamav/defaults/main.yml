@@ -1,0 +1,41 @@
+---
+# roles/clamav/defaults/main.yml
+# ClamAV — Central virus scanner for all apps
+
+clamav_stack_path: "/opt/stacks/clamav"
+clamav_image: "clamav/clamav:1"
+clamav_watcher_image: "alpine:3"
+
+# Socket path (shared via named volume with app containers)
+clamav_socket_volume: "clamav-socket"
+clamav_socket_path: "/var/run/clamav/clamd.sock"
+
+# Quarantine directory for infected files
+clamav_quarantine_path: "/mnt/data/clamav-quarantine"
+
+# Log path for scan results
+clamav_log_path: "/var/log/clamav"
+
+# Apps to watch via inotifywait (apps without native AV hooks)
+# Each entry: { name, container_volume_path, watch_path_on_host }
+clamav_watch_apps: []
+# Example:
+# - name: "documenso"
+#   watch_path: "/mnt/data/documenso/uploads"
+# - name: "vaultwarden"
+#   watch_path: "/mnt/data/vaultwarden/attachments"
+# - name: "pingvin-share"
+#   watch_path: "/mnt/data/pingvin-share/uploads"
+
+# E-Mail alerting on virus detection
+clamav_alert_enabled: false
+clamav_alert_email: ""
+clamav_alert_from: ""
+clamav_alert_smtp_host: ""
+
+# Nextcloud integration (files_antivirus app)
+clamav_nextcloud_enabled: false
+
+# Paperless integration (pre-consume script)
+clamav_paperless_enabled: false
+paperless_data_path: "/mnt/data/paperless"

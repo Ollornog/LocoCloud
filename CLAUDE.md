@@ -16,7 +16,8 @@ One master server manages multiple customer environments via inventories.
 - **Encryption**: gocryptfs on `/mnt/data`, keyfile only on master
 - **Networking**: Netbird VPN (optional) or direct IP connectivity
 - **TLS modes**: `acme` (public LE), `cert_sync` (rsync certs from public server), `dns` (DNS-01 challenge), `internal` (Caddy CA)
-- **Updates**: Ansible via Semaphore (NO Watchtower — removed due to silent breaking changes)
+- **Updates**: Ansible via Semaphore for app updates. Watchtower for automatic Docker security patches (label-free, 02:30 nightly)
+- **Security stack**: CrowdSec (network IDS, replaces Fail2ban), Falco (container runtime), ClamAV (antivirus), AIDE (file integrity). All optional, alerts → Loki + email
 - **Audit logging**: Docker events + admin actions → Loki via Alloy, customer-visible
 - **Self-healing**: Automatic container restart on health failure (systemd timer)
 - **Break-glass**: Per-customer emergency admin account (sealed, independent of provider)
@@ -54,7 +55,11 @@ roles/
   compliance/            # AVV, TOM, VVT, Löschkonzept templates
   audit_log/             # Docker events + admin action logging → Loki
   customer_panel/        # Customer dashboard (status, LLDAP, contact, self-healing)
-  watchtower/            # DEPRECATED — now removes Watchtower (updates via Ansible)
+  crowdsec/              # Network IDS + firewall bouncer (replaces Fail2ban)
+  falco/                 # Container runtime security (syscall monitoring)
+  clamav/                # Central antivirus (daemon + app integrations)
+  aide/                  # File integrity monitoring (nightly checks)
+  watchtower/            # Automatic Docker image updates + cleanup (nightly 02:30)
   monitoring/            # DEPRECATED wrapper → use alloy directly
   lxc_create/            # Proxmox LXC creation
   apps/
@@ -113,6 +118,7 @@ playbooks/
   setup-breakglass.yml   # Create break-glass emergency admin account
   offboard-customer.yml  # Full offboarding (backup, stop, cleanup)
   disable-user.yml       # Offboarding: disable user across non-LDAP apps
+  setup-security.yml     # Security stack (CrowdSec, Falco, ClamAV, AIDE, Watchtower)
 scripts/
   setup.sh               # Interactive master setup
   vw-credentials.py      # Vaultwarden API (Bitwarden protocol)
@@ -136,7 +142,7 @@ docs/
 - **PostgreSQL 18**: Mount on `/var/lib/postgresql`, NOT `/var/lib/postgresql/data`
 - **Port binding**: `127.0.0.1:PORT` on gateways, `0.0.0.0:PORT` + UFW on app servers
 - **PocketID API**: `X-API-Key` header, NOT `Authorization: Bearer`
-- **NO Watchtower**: Removed — updates via `update-customer.yml` (Semaphore trigger). OS patches via unattended-upgrades
+- **Watchtower re-enabled**: Automatic Docker image updates (nightly 02:30). App version control still via `update-customer.yml` for major upgrades
 - **SSO-only**: All apps disable email/password login when OIDC is enabled. Caddy blocks signup/register paths as defense-in-depth
 - **Break-glass**: Every customer gets a sealed emergency admin account via `setup-breakglass.yml`
 - **AVV required**: Every customer must have an AVV (auto-generated via compliance role)

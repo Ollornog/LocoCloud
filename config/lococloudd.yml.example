@@ -124,6 +124,20 @@ backup:
     pull_schedule: "0 6 * * *"                       # Pull von Storage Box, taeglich 06:00
     pull_source: "storagebox-nbg"                    # Von welchem Target pullen (name aus Inventar)
 
+# --- Security Stack (optional, per Kundenserver aktivierbar) ---
+# security:
+#   clamav:
+#     enabled: true                                  # ClamAV Virenscanner fuer alle Apps
+#   falco:
+#     enabled: true                                  # Container Runtime Security (Syscall-Monitoring)
+#   crowdsec:
+#     enabled: true                                  # Netzwerk-Threat-Detection (ersetzt Fail2ban)
+#   aide:
+#     enabled: true                                  # File Integrity Monitoring auf Host-Ebene
+#   watchtower:
+#     enabled: true                                  # Automatische Docker-Image-Updates + Cleanup
+#     schedule: "0 30 2 * * *"                       # Cron: taeglich 02:30
+
 # --- Netbird Server (optional, fuer Self-Hosting) ---
 # netbird_server:
 #   self_hosted: false                              # true wenn eigener Netbird-Server

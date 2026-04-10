@@ -1,0 +1,36 @@
+---
+# roles/falco/tasks/deploy.yml
+
+- name: Create Falco directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ falco_stack_path }}"
+    - "{{ falco_rules_path }}"
+
+- name: Deploy Falco configuration
+  ansible.builtin.template:
+    src: falco.yaml.j2
+    dest: "{{ falco_stack_path }}/falco.yaml"
+    mode: "0644"
+  notify: restart falco
+
+- name: Deploy custom Falco rules
+  ansible.builtin.template:
+    src: lococloudd-rules.yaml.j2
+    dest: "{{ falco_rules_path }}/lococloudd.yaml"
+    mode: "0644"
+  notify: restart falco
+
+- name: Deploy Falco docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ falco_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Start Falco
+  community.docker.docker_compose_v2:
+    project_src: "{{ falco_stack_path }}"
+    state: present

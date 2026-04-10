@@ -1,0 +1,112 @@
+---
+# playbooks/setup-security.yml
+# Deploy security stack on customer servers.
+# Three layers: Prevention (ClamAV), Detection (Falco, CrowdSec, AIDE), Response (Alerting).
+# All events feed into Loki via Alloy for central dashboards.
+#
+# Usage: ansible-playbook playbooks/setup-security.yml -i inventories/kunde-abc/
+#
+# Prerequisites:
+#   - Base role deployed (Docker, UFW)
+#   - Alloy agent configured (for log shipping)
+#   - Apps deployed (for ClamAV integration)
+
+- name: "Security Stack — Prevention + Detection + Response"
+  hosts: all:!localhost:!*proxmox*
+  become: true
+
+  pre_tasks:
+    - name: Load global config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../config/lococloudd.yml"
+        name: loco
+      tags: [always]
+
+  roles:
+    # --- 1. Watchtower — Automatic image updates + cleanup ---
+    - role: watchtower
+      vars:
+        watchtower_notifications_enabled: "{{ loco.smtp.host | default('') | length > 0 }}"
+        watchtower_smtp_host: "{{ loco.smtp.host | default('') }}"
+        watchtower_smtp_port: "{{ loco.smtp.port | default(587) }}"
+        watchtower_smtp_user: "{{ loco.smtp.user | default('') }}"
+        watchtower_smtp_from: "{{ loco.smtp.from | default('') }}"
+        watchtower_smtp_to: "{{ loco.grafana.alerting.email_to | default(loco.operator.email) }}"
+      tags: [watchtower, security]
+
+    # --- 2. ClamAV — Central virus scanner ---
+    - role: clamav
+      vars:
+        clamav_nextcloud_enabled: "{{ 'nextcloud' in (apps_enabled | default([]) | map(attribute='name') | map('lower') | list) }}"
+        clamav_paperless_enabled: "{{ 'paperless' in (apps_enabled | default([]) | map(attribute='name') | map('lower') | list) }}"
+        clamav_watch_apps: >-
+          {{
+            (('documenso' in (apps_enabled | default([]) | map(attribute='name') | map('lower') | list))
+              | ternary([{'name': 'documenso', 'watch_path': '/mnt/data/documenso/uploads'}], []))
+            +
+            (('vaultwarden' in (apps_enabled | default([]) | map(attribute='name') | map('lower') | list))
+              | ternary([{'name': 'vaultwarden', 'watch_path': '/mnt/data/vaultwarden/attachments'}], []))
+            +
+            (('pingvin_share' in (apps_enabled | default([]) | map(attribute='name') | map('lower') | list))
+              | ternary([{'name': 'pingvin-share', 'watch_path': '/mnt/data/pingvin-share/uploads'}], []))
+          }}
+        clamav_alert_enabled: "{{ loco.smtp.host | default('') | length > 0 }}"
+        clamav_alert_email: "{{ loco.grafana.alerting.email_to | default(loco.operator.email) }}"
+        clamav_alert_from: "{{ loco.smtp.from | default('') }}"
+        clamav_alert_smtp_host: "{{ loco.smtp.host | default('') }}"
+      tags: [clamav, security]
+      when: security_clamav_enabled | default(true)
+
+    # --- 3. CrowdSec — Network threat detection (replaces Fail2ban) ---
+    - role: crowdsec
+      vars:
+        crowdsec_notifications_enabled: "{{ loco.smtp.host | default('') | length > 0 }}"
+        crowdsec_smtp_host: "{{ loco.smtp.host | default('') }}"
+        crowdsec_smtp_port: "{{ loco.smtp.port | default(587) }}"
+        crowdsec_smtp_user: "{{ loco.smtp.user | default('') }}"
+        crowdsec_smtp_from: "{{ loco.smtp.from | default('') }}"
+        crowdsec_smtp_to: "{{ loco.grafana.alerting.email_to | default(loco.operator.email) }}"
+      tags: [crowdsec, security]
+      when: security_crowdsec_enabled | default(true)
+
+    # --- 4. Falco — Container runtime security ---
+    - role: falco
+      vars:
+        falcosidekick_smtp_enabled: "{{ loco.smtp.host | default('') | length > 0 }}"
+        falcosidekick_smtp_host: "{{ loco.smtp.host | default('') }}"
+        falcosidekick_smtp_port: "{{ loco.smtp.port | default(587) }}"
+        falcosidekick_smtp_user: "{{ loco.smtp.user | default('') }}"
+        falcosidekick_smtp_from: "{{ loco.smtp.from | default('') }}"
+        falcosidekick_smtp_to: "{{ loco.grafana.alerting.email_to | default(loco.operator.email) }}"
+      tags: [falco, security]
+      when: security_falco_enabled | default(true)
+
+    # --- 5. AIDE — File integrity monitoring (host-level) ---
+    - role: aide
+      vars:
+        aide_alert_enabled: "{{ loco.smtp.host | default('') | length > 0 }}"
+        aide_alert_email: "{{ loco.grafana.alerting.email_to | default(loco.operator.email) }}"
+        aide_alert_from: "{{ loco.smtp.from | default('') }}"
+        aide_smtp_host: "{{ loco.smtp.host | default('') }}"
+      tags: [aide, security]
+      when: security_aide_enabled | default(true)
+
+  post_tasks:
+    - name: Security stack deployment complete
+      ansible.builtin.debug:
+        msg: |
+          Security stack deployed!
+
+          Prevention:
+            - ClamAV: {{ 'enabled' if security_clamav_enabled | default(true) else 'disabled' }}
+            - Watchtower: enabled (daily 02:30)
+
+          Detection:
+            - Falco: {{ 'enabled' if security_falco_enabled | default(true) else 'disabled' }}
+            - CrowdSec: {{ 'enabled' if security_crowdsec_enabled | default(true) else 'disabled' }}
+            - AIDE: {{ 'enabled' if security_aide_enabled | default(true) else 'disabled' }}
+
+          Response:
+            - E-Mail Alerting: {{ 'configured' if loco.smtp.host | default('') | length > 0 else 'not configured (no SMTP)' }}
+
+          Dashboards: Grafana → Security Overview

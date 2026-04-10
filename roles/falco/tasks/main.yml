@@ -1,0 +1,7 @@
+---
+# roles/falco/tasks/main.yml
+# Falco — Container Runtime Security
+
+- name: Deploy Falco
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [falco, security, deploy]

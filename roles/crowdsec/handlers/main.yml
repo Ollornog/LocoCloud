@@ -1,0 +1,7 @@
+---
+# roles/crowdsec/handlers/main.yml
+
+- name: restart crowdsec
+  community.docker.docker_compose_v2:
+    project_src: "{{ crowdsec_stack_path }}"
+    state: restarted

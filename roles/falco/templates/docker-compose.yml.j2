@@ -1,0 +1,36 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# Falco — Container Runtime Security
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  falco:
+    image: {{ falco_image }}
+    container_name: falco
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /dev:/host/dev:ro
+      - /proc:/host/proc:ro
+      - /var/run/docker.sock:/host/var/run/docker.sock:ro
+      - {{ falco_stack_path }}/falco.yaml:/etc/falco/falco.yaml:ro
+      - {{ falco_rules_path }}:/etc/falco/rules.d:ro
+
+{% if falcosidekick_enabled %}
+  falcosidekick:
+    image: {{ falcosidekick_image }}
+    container_name: falcosidekick
+    restart: unless-stopped
+    environment:
+{% if falcosidekick_smtp_enabled %}
+      SMTP_HOSTPORT: "{{ falcosidekick_smtp_host }}:{{ falcosidekick_smtp_port }}"
+      SMTP_USER: "{{ falcosidekick_smtp_user }}"
+      SMTP_FROM: "{{ falcosidekick_smtp_from }}"
+      SMTP_TO: "{{ falcosidekick_smtp_to }}"
+      SMTP_MINIMUMPRIORITY: "{{ falcosidekick_smtp_minimumpriority }}"
+      SMTP_TLS: "true"
+{% endif %}
+    depends_on:
+      - falco
+{% endif %}
