@@ -1,0 +1,14 @@
+---
+# roles/apps/appflowy/handlers/main.yml
+
+- name: restart caddy
+  ansible.builtin.command: docker restart caddy
+  changed_when: true
+
+- name: restart appflowy-nginx
+  ansible.builtin.command: docker restart appflowy-nginx
+  changed_when: true
+
+- name: restart appflowy-gotrue
+  ansible.builtin.command: docker restart appflowy-gotrue
+  changed_when: true

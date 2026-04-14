@@ -1,0 +1,143 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# AppFlowy internal nginx — routes to sub-services.
+# Caddy (external) proxies to this on {{ appflowy_port }}.
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log warn;
+pid /var/run/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    sendfile on;
+    keepalive_timeout 65;
+
+    # Docker's internal DNS resolver — lets nginx re-resolve upstream hostnames
+    resolver 127.0.0.11 valid=30s;
+
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        '' close;
+    }
+
+    # Trust proxy headers from Caddy (TLS terminates at Caddy)
+    underscores_in_headers on;
+
+    server {
+        listen 80;
+        server_name _;
+        client_max_body_size 10M;
+
+        # --- GoTrue auth service ---
+        location /gotrue/ {
+            proxy_pass http://appflowy-gotrue:9999/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+            proxy_pass_request_headers on;
+        }
+
+        # --- AppFlowy Cloud WebSocket (real-time collaboration) ---
+        location /ws {
+            proxy_pass http://appflowy-cloud:8000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+            proxy_read_timeout 86400s;
+            proxy_send_timeout 86400s;
+        }
+
+        # --- AppFlowy Cloud REST API ---
+        location /api {
+            proxy_pass http://appflowy-cloud:8000;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        }
+
+        # --- Large file upload (publish endpoint) ---
+        location ~ ^/api/workspace/([a-zA-Z0-9_-]+)/publish {
+            proxy_pass http://appflowy-cloud:8000;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+            client_max_body_size 256M;
+        }
+
+        # --- Import endpoint (huge files) ---
+        location /api/import {
+            proxy_pass http://appflowy-cloud:8000;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+            client_max_body_size 2G;
+            proxy_request_buffering off;
+            proxy_buffering off;
+            proxy_read_timeout 600s;
+            proxy_send_timeout 600s;
+        }
+
+        # --- MinIO web console ---
+        location /minio/ {
+            proxy_pass http://appflowy-minio:9001/;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+            rewrite ^/minio/(.*) /$1 break;
+        }
+
+        # --- MinIO S3 API (for presigned URLs from clients) ---
+        location /minio-api/ {
+            proxy_pass http://appflowy-minio:9000/;
+            proxy_http_version 1.1;
+            proxy_set_header Host appflowy-minio:9000;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+            proxy_read_timeout 600s;
+            proxy_send_timeout 600s;
+            client_max_body_size 1G;
+        }
+
+        # --- Admin frontend ---
+        location /console {
+            proxy_pass http://appflowy-admin-frontend:3000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        }
+
+        # --- AppFlowy Web UI (catch-all) ---
+        location / {
+            proxy_pass http://appflowy-web:80;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        }
+    }
+}

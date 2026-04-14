@@ -1,0 +1,11 @@
+---
+# roles/apps/appflowy/tasks/main.yml
+
+- name: Deploy AppFlowy
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [appflowy, deploy]
+
+- name: Configure OIDC for AppFlowy
+  ansible.builtin.import_tasks: oidc.yml
+  tags: [appflowy, oidc]
+  when: appflowy_oidc_enabled | default(false)

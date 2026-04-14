@@ -1,0 +1,76 @@
+---
+# roles/apps/appflowy/defaults/main.yml
+# AppFlowy-Cloud — Self-hosted Notion alternative
+# Stack: PostgreSQL (pgvector) + Redis + MinIO + GoTrue + AppFlowy Cloud + Worker + Web + Admin + internal nginx
+
+appflowy_stack_path: "/opt/stacks/appflowy"
+appflowy_data_path: "/mnt/data/appflowy"
+appflowy_port: 8247  # Internal nginx entrypoint (Caddy proxies here)
+
+# --- Domain ---
+appflowy_domain: ""  # e.g. "appflowy.firma-abc.de"
+
+# --- Images (pinned to major versions where available) ---
+appflowy_nginx_image: "nginx:1.27-alpine"
+appflowy_db_image: "pgvector/pgvector:pg16"
+appflowy_redis_image: "redis:7-alpine"
+appflowy_minio_image: "minio/minio:latest"
+appflowy_gotrue_image: "appflowyinc/gotrue:latest"
+appflowy_cloud_image: "appflowyinc/appflowy_cloud:latest"
+appflowy_worker_image: "appflowyinc/appflowy_worker:latest"
+appflowy_admin_frontend_image: "appflowyinc/admin_frontend:latest"
+appflowy_web_image: "appflowyinc/appflowy_web:latest"
+
+# --- PostgreSQL ---
+appflowy_db_name: "appflowy"
+appflowy_db_user: "appflowy"
+appflowy_db_password: ""  # Generated if empty
+
+# --- MinIO (S3-compatible object storage) ---
+appflowy_minio_access_key: ""  # Generated if empty
+appflowy_minio_secret_key: ""  # Generated if empty
+appflowy_minio_bucket: "appflowy"
+
+# --- GoTrue auth service ---
+appflowy_gotrue_admin_email: ""  # Defaults to operator email
+appflowy_gotrue_admin_password: ""  # Generated if empty
+appflowy_gotrue_jwt_secret: ""  # Generated if empty
+appflowy_gotrue_jwt_exp: 7200
+# Disable local signup when OIDC is enabled (SSO-only)
+appflowy_gotrue_disable_signup: true
+
+# --- OIDC via PocketID (external provider through GoTrue) ---
+# GoTrue's "keycloak" external provider is generic OIDC and works with PocketID.
+appflowy_oidc_enabled: false
+appflowy_oidc_client_id: ""
+appflowy_oidc_client_secret: ""
+appflowy_oidc_provider_url: ""  # e.g. "https://id.firma-abc.de"
+
+# --- SMTP (for magic-link auth + notifications) ---
+appflowy_smtp_host: ""
+appflowy_smtp_port: 587
+appflowy_smtp_user: ""
+appflowy_smtp_password: ""
+appflowy_smtp_from: ""  # e.g. "appflowy@firma-abc.de"
+
+# --- Public paths ---
+# GoTrue OAuth callback must be reachable without auth.
+appflowy_public_paths:
+  - "/gotrue/*"
+
+# --- Blocked paths (defense-in-depth) ---
+# Block direct admin frontend access unless you explicitly want it.
+appflowy_blocked_paths: []
+
+# --- Backup paths ---
+appflowy_backup_paths:
+  - "/opt/stacks/appflowy"
+  - "/mnt/data/appflowy"
+
+# --- Pre-backup: dump PostgreSQL ---
+appflowy_pre_backup_cmd: >
+  docker exec appflowy-db pg_dump -U {{ appflowy_db_user }} {{ appflowy_db_name }}
+  > {{ appflowy_stack_path }}/backup-pre.sql
+
+# --- Health check (hits internal nginx) ---
+appflowy_health_path: "/api/health"

@@ -1,0 +1,40 @@
+---
+# roles/apps/appflowy/tasks/remove.yml
+# Archive AppFlowy data, stop containers — do NOT delete data.
+
+- name: Dump AppFlowy database before removal
+  ansible.builtin.command: >
+    docker exec appflowy-db pg_dump -U {{ appflowy_db_user }} {{ appflowy_db_name }}
+  register: appflowy_db_dump
+  ignore_errors: true
+  changed_when: false
+
+- name: Save AppFlowy database dump
+  ansible.builtin.copy:
+    content: "{{ appflowy_db_dump.stdout }}"
+    dest: "{{ appflowy_stack_path }}/backup-pre-remove.sql"
+    mode: "0600"
+  when: appflowy_db_dump is succeeded
+
+- name: Stop AppFlowy
+  community.docker.docker_compose_v2:
+    project_src: "{{ appflowy_stack_path }}"
+    state: absent
+  ignore_errors: true
+
+- name: Ensure archive directory exists
+  ansible.builtin.file:
+    path: /opt/archives
+    state: directory
+    mode: "0700"
+
+- name: Archive AppFlowy stack
+  ansible.builtin.command: >
+    tar czf /opt/archives/appflowy-{{ ansible_facts.date_time.date }}.tar.gz
+    -C {{ appflowy_stack_path }} .
+  args:
+    creates: "/opt/archives/appflowy-{{ ansible_facts.date_time.date }}.tar.gz"
+
+- name: Archive complete
+  ansible.builtin.debug:
+    msg: "AppFlowy stopped. Data archived to /opt/archives/appflowy-{{ ansible_facts.date_time.date }}.tar.gz. MinIO data remains at {{ appflowy_data_path }}/minio."

@@ -1,0 +1,98 @@
+---
+# roles/apps/appflowy/tasks/deploy.yml
+
+- name: Generate AppFlowy DB password if empty
+  ansible.builtin.set_fact:
+    appflowy_db_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: appflowy_db_password | length == 0
+
+- name: Generate AppFlowy MinIO access key if empty
+  ansible.builtin.set_fact:
+    appflowy_minio_access_key: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=20') }}"
+  when: appflowy_minio_access_key | length == 0
+
+- name: Generate AppFlowy MinIO secret key if empty
+  ansible.builtin.set_fact:
+    appflowy_minio_secret_key: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=40') }}"
+  when: appflowy_minio_secret_key | length == 0
+
+- name: Generate AppFlowy GoTrue JWT secret if empty
+  ansible.builtin.set_fact:
+    appflowy_gotrue_jwt_secret: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=64') }}"
+  when: appflowy_gotrue_jwt_secret | length == 0
+
+- name: Generate AppFlowy GoTrue admin password if empty
+  ansible.builtin.set_fact:
+    appflowy_gotrue_admin_password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+  when: appflowy_gotrue_admin_password | length == 0
+
+- name: Default GoTrue admin email to operator email if empty
+  ansible.builtin.set_fact:
+    appflowy_gotrue_admin_email: "{{ loco.operator.email }}"
+  when: appflowy_gotrue_admin_email | length == 0
+
+- name: Create AppFlowy directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ appflowy_stack_path }}"
+    - "{{ appflowy_stack_path }}/db"
+    - "{{ appflowy_stack_path }}/redis"
+    - "{{ appflowy_data_path }}"
+    - "{{ appflowy_data_path }}/minio"
+
+- name: Deploy AppFlowy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ appflowy_stack_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Deploy AppFlowy internal nginx config
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: "{{ appflowy_stack_path }}/nginx.conf"
+    mode: "0644"
+  notify: restart appflowy-nginx
+
+- name: Deploy AppFlowy .env
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ appflowy_stack_path }}/.env"
+    mode: "0600"
+
+- name: Start AppFlowy stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ appflowy_stack_path }}"
+    state: present
+
+- name: Store AppFlowy admin credentials in Vaultwarden
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — AppFlowy Admin"
+    credential_username: "{{ appflowy_gotrue_admin_email }}"
+    credential_password: "{{ appflowy_gotrue_admin_password }}"
+    credential_uri: "https://{{ appflowy_domain }}/console"
+    credential_notes: |
+      AppFlowy GoTrue admin account.
+      DB user: {{ appflowy_db_user }}
+      DB password: {{ appflowy_db_password }}
+      MinIO access key: {{ appflowy_minio_access_key }}
+      MinIO secret key: {{ appflowy_minio_secret_key }}
+      JWT secret: {{ appflowy_gotrue_jwt_secret }}
+      Deployed: {{ ansible_facts.date_time.iso8601 }}
+  when: loco is defined
+
+- name: Wait for AppFlowy to be ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ appflowy_port }}{{ appflowy_health_path }}"
+    method: GET
+    status_code: [200, 301, 302]
+  register: appflowy_health
+  until: appflowy_health.status in [200, 301, 302]
+  retries: 60
+  delay: 5

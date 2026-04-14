@@ -1,0 +1,67 @@
+---
+# roles/apps/appflowy/tasks/oidc.yml
+# Register OIDC client in PocketID for AppFlowy.
+# AppFlowy uses GoTrue as auth layer — GoTrue's "keycloak" external provider
+# is generic OIDC and compatible with PocketID.
+
+- name: Create OIDC client in PocketID
+  ansible.builtin.uri:
+    url: "https://{{ appflowy_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    body_format: json
+    body:
+      name: "AppFlowy ({{ kunde_name }})"
+      callbackURLs:
+        - "https://{{ appflowy_domain }}/gotrue/callback"
+    status_code: [200, 201]
+  register: appflowy_oidc_client
+  when:
+    - appflowy_oidc_client_id | length == 0
+    - loco.pocketid.api_token | default('') | length > 0
+
+- name: Set OIDC client ID from API response
+  ansible.builtin.set_fact:
+    appflowy_oidc_client_id: "{{ appflowy_oidc_client.json.id }}"
+  when: appflowy_oidc_client is not skipped and appflowy_oidc_client is changed
+
+- name: Generate OIDC client secret
+  ansible.builtin.uri:
+    url: "https://{{ appflowy_oidc_provider_url | regex_replace('^https?://', '') }}/api/oidc/clients/{{ appflowy_oidc_client_id }}/secret"
+    method: POST
+    headers:
+      X-API-Key: "{{ loco.pocketid.api_token }}"
+    status_code: 200
+  register: appflowy_secret_result
+  when: appflowy_oidc_client_id | default('') | length > 0
+
+- name: Set OIDC client secret
+  ansible.builtin.set_fact:
+    appflowy_oidc_client_secret: "{{ appflowy_secret_result.json.secret }}"
+  when: appflowy_secret_result is defined and appflowy_secret_result is not skipped
+
+- name: Store AppFlowy OIDC credentials
+  ansible.builtin.include_role:
+    name: credentials
+    tasks_from: store.yml
+  vars:
+    vw_api_url: "{{ loco.vaultwarden.url }}"
+    credential_name: "{{ kunde_name }} — AppFlowy OIDC Client"
+    credential_username: "{{ appflowy_oidc_client_id }}"
+    credential_password: "{{ appflowy_oidc_client_secret }}"
+    credential_uri: "https://{{ appflowy_domain }}"
+    credential_notes: "PocketID OIDC client for AppFlowy (via GoTrue). Deployed: {{ ansible_facts.date_time.iso8601 }}"
+  when:
+    - loco is defined
+    - appflowy_oidc_client_id | length > 0
+
+- name: Redeploy AppFlowy docker-compose with OIDC credentials
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ appflowy_stack_path }}/docker-compose.yml"
+    mode: "0644"
+  notify: restart appflowy-gotrue
+
+- name: Apply OIDC config immediately
+  ansible.builtin.meta: flush_handlers

@@ -1,0 +1,218 @@
+# ============================================
+# GENERIERT DURCH ANSIBLE — NICHT MANUELL EDITIEREN
+# AppFlowy-Cloud
+# Generiert: {{ ansible_facts.date_time.iso8601 }}
+# ============================================
+
+services:
+  # --- Internal nginx: routes /api, /ws, /gotrue, /console to sub-services ---
+  appflowy-nginx:
+    image: {{ appflowy_nginx_image }}
+    container_name: appflowy-nginx
+    restart: unless-stopped
+    ports:
+      - "{{ '127.0.0.1' if 'gateway' in server_roles else '0.0.0.0' }}:{{ appflowy_port }}:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - appflowy-cloud
+      - appflowy-gotrue
+      - appflowy-web
+      - appflowy-admin-frontend
+
+  # --- PostgreSQL with pgvector (required for AI/embeddings features) ---
+  appflowy-db:
+    image: {{ appflowy_db_image }}
+    container_name: appflowy-db
+    restart: unless-stopped
+    volumes:
+      - {{ appflowy_stack_path }}/db:/var/lib/postgresql
+    environment:
+      POSTGRES_DB: {{ appflowy_db_name }}
+      POSTGRES_USER: {{ appflowy_db_user }}
+      POSTGRES_PASSWORD: {{ appflowy_db_password }}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ appflowy_db_user }} -d {{ appflowy_db_name }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- Redis ---
+  appflowy-redis:
+    image: {{ appflowy_redis_image }}
+    container_name: appflowy-redis
+    restart: unless-stopped
+    volumes:
+      - {{ appflowy_stack_path }}/redis:/data
+
+  # --- MinIO (S3-compatible object storage) ---
+  appflowy-minio:
+    image: {{ appflowy_minio_image }}
+    container_name: appflowy-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    volumes:
+      - {{ appflowy_data_path }}/minio:/data
+    environment:
+      MINIO_ROOT_USER: {{ appflowy_minio_access_key }}
+      MINIO_ROOT_PASSWORD: {{ appflowy_minio_secret_key }}
+      MINIO_BROWSER_REDIRECT_URL: https://{{ appflowy_domain }}/minio
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # --- GoTrue (Supabase auth fork, supports generic OIDC) ---
+  appflowy-gotrue:
+    image: {{ appflowy_gotrue_image }}
+    container_name: appflowy-gotrue
+    restart: unless-stopped
+    depends_on:
+      appflowy-db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      API_EXTERNAL_URL: https://{{ appflowy_domain }}/gotrue
+      GOTRUE_SITE_URL: appflowy-flutter://
+      GOTRUE_URI_ALLOW_LIST: "**"
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DATABASE_URL: "postgres://supabase_auth_admin:{{ appflowy_db_password }}@appflowy-db:5432/{{ appflowy_db_name }}"
+      GOTRUE_JWT_ADMIN_ROLES: supabase_admin
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: "{{ appflowy_gotrue_jwt_exp }}"
+      GOTRUE_JWT_SECRET: "{{ appflowy_gotrue_jwt_secret }}"
+      GOTRUE_DISABLE_SIGNUP: "{{ appflowy_gotrue_disable_signup | string | lower }}"
+      GOTRUE_MAILER_AUTOCONFIRM: "false"
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_ADMIN_EMAIL: "{{ appflowy_gotrue_admin_email }}"
+      GOTRUE_ADMIN_PASSWORD: "{{ appflowy_gotrue_admin_password }}"
+      PORT: "9999"
+{% if appflowy_smtp_host | length > 0 %}
+      GOTRUE_SMTP_HOST: "{{ appflowy_smtp_host }}"
+      GOTRUE_SMTP_PORT: "{{ appflowy_smtp_port }}"
+      GOTRUE_SMTP_USER: "{{ appflowy_smtp_user }}"
+      GOTRUE_SMTP_PASS: "{{ appflowy_smtp_password }}"
+      GOTRUE_SMTP_ADMIN_EMAIL: "{{ appflowy_smtp_from }}"
+      GOTRUE_SMTP_SENDER_NAME: "AppFlowy"
+{% endif %}
+{% if appflowy_oidc_enabled and appflowy_oidc_client_id | length > 0 %}
+      # --- OIDC via PocketID (generic OIDC through GoTrue's keycloak provider) ---
+      GOTRUE_EXTERNAL_KEYCLOAK_ENABLED: "true"
+      GOTRUE_EXTERNAL_KEYCLOAK_CLIENT_ID: "{{ appflowy_oidc_client_id }}"
+      GOTRUE_EXTERNAL_KEYCLOAK_SECRET: "{{ appflowy_oidc_client_secret }}"
+      GOTRUE_EXTERNAL_KEYCLOAK_REDIRECT_URI: "https://{{ appflowy_domain }}/gotrue/callback"
+      GOTRUE_EXTERNAL_KEYCLOAK_URL: "{{ appflowy_oidc_provider_url }}"
+{% endif %}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9999/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # --- AppFlowy Cloud (main API) ---
+  appflowy-cloud:
+    image: {{ appflowy_cloud_image }}
+    container_name: appflowy-cloud
+    restart: unless-stopped
+    depends_on:
+      appflowy-db:
+        condition: service_healthy
+      appflowy-gotrue:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      APPFLOWY_ENVIRONMENT: production
+      APPFLOWY_DATABASE_URL: "postgres://{{ appflowy_db_user }}:{{ appflowy_db_password }}@appflowy-db:5432/{{ appflowy_db_name }}"
+      APPFLOWY_REDIS_URI: "redis://appflowy-redis:6379"
+      APPFLOWY_GOTRUE_BASE_URL: "http://appflowy-gotrue:9999"
+      APPFLOWY_GOTRUE_JWT_SECRET: "{{ appflowy_gotrue_jwt_secret }}"
+      APPFLOWY_GOTRUE_JWT_EXP: "{{ appflowy_gotrue_jwt_exp }}"
+      APPFLOWY_ACCESS_CONTROL: "true"
+      APPFLOWY_DATABASE_MAX_CONNECTIONS: "40"
+      APPFLOWY_S3_CREATE_BUCKET: "true"
+      APPFLOWY_S3_USE_MINIO: "true"
+      APPFLOWY_S3_MINIO_URL: "http://appflowy-minio:9000"
+      APPFLOWY_S3_ACCESS_KEY: "{{ appflowy_minio_access_key }}"
+      APPFLOWY_S3_SECRET_KEY: "{{ appflowy_minio_secret_key }}"
+      APPFLOWY_S3_BUCKET: "{{ appflowy_minio_bucket }}"
+      APPFLOWY_S3_REGION: ""
+      APPFLOWY_S3_PRESIGNED_URL_ENDPOINT: "https://{{ appflowy_domain }}/minio-api"
+      APPFLOWY_WEBSOCKET_MAILBOX_SIZE: "6000"
+{% if appflowy_smtp_host | length > 0 %}
+      APPFLOWY_MAILER_SMTP_HOST: "{{ appflowy_smtp_host }}"
+      APPFLOWY_MAILER_SMTP_PORT: "{{ appflowy_smtp_port }}"
+      APPFLOWY_MAILER_SMTP_USERNAME: "{{ appflowy_smtp_user }}"
+      APPFLOWY_MAILER_SMTP_PASSWORD: "{{ appflowy_smtp_password }}"
+      APPFLOWY_MAILER_SMTP_EMAIL: "{{ appflowy_smtp_from }}"
+      APPFLOWY_MAILER_SMTP_TLS_KIND: "wrapper"
+{% endif %}
+      RUST_LOG: "info"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # --- AppFlowy background worker (indexer, collaboration GC, mailer) ---
+  appflowy-worker:
+    image: {{ appflowy_worker_image }}
+    container_name: appflowy-worker
+    restart: unless-stopped
+    depends_on:
+      appflowy-db:
+        condition: service_healthy
+      appflowy-cloud:
+        condition: service_started
+    env_file:
+      - .env
+    environment:
+      RUST_LOG: "info"
+      APPFLOWY_WORKER_REDIS_URL: "redis://appflowy-redis:6379"
+      APPFLOWY_WORKER_DATABASE_URL: "postgres://{{ appflowy_db_user }}:{{ appflowy_db_password }}@appflowy-db:5432/{{ appflowy_db_name }}"
+      APPFLOWY_WORKER_DATABASE_NAME: "{{ appflowy_db_name }}"
+      APPFLOWY_S3_USE_MINIO: "true"
+      APPFLOWY_S3_MINIO_URL: "http://appflowy-minio:9000"
+      APPFLOWY_S3_ACCESS_KEY: "{{ appflowy_minio_access_key }}"
+      APPFLOWY_S3_SECRET_KEY: "{{ appflowy_minio_secret_key }}"
+      APPFLOWY_S3_BUCKET: "{{ appflowy_minio_bucket }}"
+{% if appflowy_smtp_host | length > 0 %}
+      APPFLOWY_MAILER_SMTP_HOST: "{{ appflowy_smtp_host }}"
+      APPFLOWY_MAILER_SMTP_PORT: "{{ appflowy_smtp_port }}"
+      APPFLOWY_MAILER_SMTP_USERNAME: "{{ appflowy_smtp_user }}"
+      APPFLOWY_MAILER_SMTP_PASSWORD: "{{ appflowy_smtp_password }}"
+      APPFLOWY_MAILER_SMTP_EMAIL: "{{ appflowy_smtp_from }}"
+      APPFLOWY_MAILER_SMTP_TLS_KIND: "wrapper"
+{% endif %}
+
+  # --- Admin frontend (GoTrue user management UI, served at /console) ---
+  appflowy-admin-frontend:
+    image: {{ appflowy_admin_frontend_image }}
+    container_name: appflowy-admin-frontend
+    restart: unless-stopped
+    depends_on:
+      appflowy-gotrue:
+        condition: service_healthy
+      appflowy-cloud:
+        condition: service_started
+    environment:
+      ADMIN_FRONTEND_REDIS_URL: "redis://appflowy-redis:6379"
+      ADMIN_FRONTEND_GOTRUE_URL: "http://appflowy-gotrue:9999"
+      ADMIN_FRONTEND_APPFLOWY_CLOUD_URL: "http://appflowy-cloud:8000"
+      ADMIN_FRONTEND_PATH_PREFIX: "/console"
+
+  # --- AppFlowy Web (main user-facing UI, served at /) ---
+  appflowy-web:
+    image: {{ appflowy_web_image }}
+    container_name: appflowy-web
+    restart: unless-stopped
+    depends_on:
+      appflowy-cloud:
+        condition: service_started
+    environment:
+      AF_BASE_URL: "https://{{ appflowy_domain }}"
+      AF_GOTRUE_URL: "https://{{ appflowy_domain }}/gotrue"
+      AF_WS_URL: "wss://{{ appflowy_domain }}/ws/v1"

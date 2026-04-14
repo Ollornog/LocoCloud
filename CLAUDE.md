@@ -96,6 +96,7 @@ roles/
     huly/                # MongoDB + MinIO + Elasticsearch, Tinyauth
     limesurvey/          # PostgreSQL, Tinyauth + LDAP
     authentik/           # PostgreSQL + Redis, all-in-one IdP (customer alt)
+    appflowy/            # PG (pgvector) + Redis + MinIO + GoTrue, OIDC via PocketID (Notion alt)
     backrest/            # No DB, Tinyauth (Restic Web UI)
 playbooks/
   setup-master.yml       # Master setup (run first)
